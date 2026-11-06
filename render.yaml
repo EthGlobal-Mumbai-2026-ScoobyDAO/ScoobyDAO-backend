@@ -54,6 +54,18 @@ services:
       # Output of `python -m publication.cli export-reviewer --name <label>`; set in the dashboard.
       - key: SCOOBY_REVIEWERS
         sync: false
+      # No persistent disk on the free plan: run the worker in this container and reapply the verified report seed
+      # at every start (DEPLOYMENT.md, "seed at start"). Upload the archive's base64 as Secret File report-seed.zip.b64.
+      - key: SCOOBY_EMBEDDED_WORKER
+        value: "true"
+      - key: SCOOBY_SEED_ARCHIVE
+        value: /etc/secrets/report-seed.zip.b64
+      - key: SCOOBY_SEED_ARCHIVE_SHA256
+        sync: false
+      - key: SCOOBY_SEED_MANIFEST_SHA256
+        sync: false
+      - key: SCOOBY_SEED_REPORT_IDS
+        sync: false
       # Set when the frontend is deployed (step 4); exact origin, no trailing slash.
       - key: SCOOBY_WEB_ORIGIN
         sync: false
