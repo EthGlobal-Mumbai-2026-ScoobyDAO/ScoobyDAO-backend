@@ -431,6 +431,14 @@ app.add_middleware(publication_admin.AdminRouteGuard)
 # Subject-matter-expert view of the full rendered report before release (any installed version). Needs an admin
 # session with report_review. Bytes come only from the newest completed render of exactly the installed report bytes.
 from publication.deps import require_admin as _require_admin
+
+@app.get('/scouting/cases/{case_id}/reference-reports')
+def case_reference_reports(case_id: str, principal=Depends(_require_admin('report_review'))):
+ with db() as c:
+  case=c.execute('SELECT candidate_id FROM cases WHERE id=?',(case_id,)).fetchone()
+  if not case: err(404,'Case not found')
+  reports=c.execute('SELECT r.* FROM case_reference_reports l JOIN reports r ON r.id=l.report_id AND r.version=l.version JOIN investigations i ON i.id=r.run_id WHERE l.case_id=? AND i.candidate_id=? AND i.status=? ORDER BY r.created DESC',(case_id,case['candidate_id'],'reference_only')).fetchall()
+  return {'case_id':case_id,'candidate_id':case['candidate_id'],'association':'local_reference_only','gate_effect':'none','reports':[report_metadata(c,r) for r in reports]}
 SME_FILES=('index.html','report.json','report.md','report.pdf','manifest.json')
 def sme_render_job(report_id,version):
  with db() as c:
