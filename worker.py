@@ -146,8 +146,11 @@ def work_one():
     c.execute("UPDATE case_sources SET status='unavailable',detail=?,updated=? WHERE id='discovery'",('Configured discovery store is unavailable; no case was qualified from this failure.',now()))
    if j['kind']=='case_start':
     c.execute("UPDATE cases SET state='unavailable',updated=? WHERE id=(SELECT case_id FROM case_decisions WHERE id=?) AND current_snapshot=(SELECT snapshot_id FROM case_decisions WHERE id=?) AND NOT EXISTS (SELECT 1 FROM case_decisions WHERE id=? AND run_id IS NOT NULL)",(now(),j['ref'],j['ref'],j['ref']))
-   if j['kind']=='investigate' and attempts>=3:
-    c.execute("UPDATE investigations SET status='failed' WHERE id=? AND status NOT IN ('cancelled','partial','complete')",(j['ref'],))
+   if j['kind']=='investigate':
+    from case_model import ModelStageBlocked
+    if isinstance(e,ModelStageBlocked):
+     attempts=3;c.execute("UPDATE investigations SET status='blocked' WHERE id=? AND status NOT IN ('cancelled','partial','complete')",(j['ref'],));event(c,j['ref'],'model_stage_blocked',dumps({'stage':'reasoning','state':'blocked','reason':'attempt_consumed_or_authorization_changed'}))
+    elif attempts>=3:c.execute("UPDATE investigations SET status='failed' WHERE id=? AND status NOT IN ('cancelled','partial','complete')",(j['ref'],))
    if j['kind']=='reason':
     attempts=3 # never retry a possibly billed provider call automatically
     c.execute("UPDATE reasoning_inputs SET status='failed' WHERE id=?",(j['ref'],))

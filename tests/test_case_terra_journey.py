@@ -89,3 +89,17 @@ def test_cancel_during_model_call_consumes_attempt_and_installs_no_report(tmp_pa
   with db() as c:c.execute("UPDATE investigations SET status='cancelled' WHERE id=?",(run,))
  fake=FakeClient(after=cancel);assert case_jobs.run_case(run,model_client=fake)=='cancelled' and len(fake.calls)==1
  with db() as c:assert c.execute('SELECT state FROM case_model_stages').fetchone()[0]=='cancelled' and c.execute('SELECT count(*) FROM reports').fetchone()[0]==0
+
+
+def test_worker_blocks_ambiguous_prior_reservation_without_retry(tmp_path,monkeypatch):
+ import case_model
+ from test_case_model import start_event
+ case,_=seed(tmp_path,monkeypatch,'automatic')
+ with db() as c:decision=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone()
+ run=case_engine.start_decision(decision['id']);case_model.Ledger(run,decision['id'],decision['snapshot_id'])(start_event())
+ for _ in range(4):
+  if not worker.work_one():break
+ with db() as c:
+  assert c.execute('SELECT status FROM investigations WHERE id=?',(run,)).fetchone()[0]=='blocked'
+  assert c.execute("SELECT state FROM jobs WHERE kind='investigate' AND ref=?",(run,)).fetchone()[0]=='failed'
+  data=[json.loads(x[0]) for x in c.execute("SELECT detail FROM events WHERE run_id=? AND kind='model_stage_blocked'",(run,))];assert data[-1]['reason']=='attempt_consumed_or_authorization_changed'
