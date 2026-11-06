@@ -10,7 +10,7 @@ from app import app
 
 client = TestClient(app)
 TOKEN = 'test-operator-token'
-OPERATOR_ROUTES = ['/status', '/candidates', '/reports', '/schemas', '/docs', '/openapi.json', '/readiness/honeypot']
+OPERATOR_ROUTES = ['/status', '/candidates', '/schemas', '/docs', '/openapi.json', '/readiness/honeypot']
 
 
 @pytest.fixture
@@ -27,6 +27,8 @@ def test_gate_off_by_default(monkeypatch):
 def test_public_paths_open(gate):
     assert client.get('/health').status_code == 200
     assert client.get('/web/v1/health').status_code == 200
+    assert client.get('/reports').status_code == 200            # public library list (release policy applies)
+    assert client.post('/reports/import', json={}).status_code == 404   # library writes stay private
 
 
 @pytest.mark.parametrize('path', OPERATOR_ROUTES)
