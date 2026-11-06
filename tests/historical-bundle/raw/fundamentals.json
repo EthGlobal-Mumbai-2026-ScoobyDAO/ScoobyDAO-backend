@@ -1,0 +1,34 @@
+{
+  "coin": "SHIB",
+  "github_activity": {
+    "forks": 0,
+    "open_issues": 0,
+    "repos": [],
+    "stars": 0
+  },
+  "market_data": {
+    "24h_price_change_pct": 2.434950751331977,
+    "24h_volume_change_pct": -27.574333806143404,
+    "daily_returns": [
+      0.004167791740443683,
+      -0.012699633682917044,
+      -0.049213150430333696,
+      -0.002608380392762011,
+      0.0026211732580856406,
+      -0.041610095018673854,
+      0.024349507513319768
+    ],
+    "latest_price": 1.1911031638896355e-05
+  },
+  "reddit_sentiment": {
+    "categories": {
+      "Adoption": "Mixed signals—exchanges like Crypto.com and Coinbase listing SHIB boosted visibility and trading volume, but adoption is largely speculative. Some institutional moves (e.g., Crypto.com holding ~20% reserves in SHIB) are noted, but concerns about liquidity and whale manipulation persist.",
+      "Community": "Highly polarized: 'Shib Army' supporters are vocal, often hostile to critics, and driven by belief in the coin's potential, while skeptics view them as delusional or inexperienced. Community engagement includes organized campaigns (e.g., targeting YouTubers) and spammy airdrop scams.",
+      "Market": "Extreme volatility—SHIB is seen as a hype-driven bubble, with pumps often followed by sharp dumps. Market cap comparisons (e.g., SHIB at $0.01 would exceed Apple's valuation) underscore irrational exuberance. Meme coins like SHIB are viewed as indicators of market frothiness and incoming corrections.",
+      "Regulatory": "Indirect concerns: whale movements (e.g., Voyager, US government) and exchange scrutiny (e.g., Crypto.com's ShIB holdings) hint at regulatory risks. Scams and fraudulent projects (e.g., fake airdrops) are rampant, highlighting poor oversight.",
+      "Technical": "Widely criticized for lacking innovation—ShibaSwap deemed unsafe (3% security score), with code copied from Uniswap and vulnerabilities. No unique utility; reliance on Ethereum's network (ERC-20) is its only technical aspect, with trades contributing to ETH burns."
+    },
+    "summary": "The sentiment around SHIB is overwhelmingly skeptical and bearish, with most Reddit users viewing it as a speculative, fundamentally worthless 'shitcoin' driven by hype, psychological biases, and FOMO rather than utility or innovation. Critics highlight its unrealistic price targets (e.g., $1) due to insane market cap requirements, the risk of rug pulls, and the likelihood of bagholders post-bull run. However, some acknowledge its short-term profit potential for early entrants and its role in burning Ethereum gas fees. The community is divided—enthusiasts ('Shib Army') are optimistic and aggressive, while skeptics warn of inevitable crashes and parallels to past failed projects like BitConnect."
+  },
+  "status": "success"
+}

@@ -1,0 +1,70 @@
+{
+  "token": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+  "chainId": 1,
+  "blockNumber": 23455002,
+  "summary": {
+    "fundamentals_score": 85,
+    "label": "Green"
+  },
+  "flags": [
+    {
+      "code": "LP_NOT_LOCKED",
+      "severity": "med",
+      "evidence": {
+        "pair": "0x811beEd0119b4AfCE20D2583EB608C6F7AF1954f",
+        "locker": null
+      }
+    }
+  ],
+  "facts": {
+    "owner": null,
+    "controlOwner": null,
+    "ownershipModel": "AccessControl",
+    "roles": [
+      "DEFAULT_ADMIN_ROLE"
+    ],
+    "renounced": false,
+    "pauseStatus": "unknown",
+    "blacklistPrimitives": [],
+    "taxPrimitives": [],
+    "maxTxPrimitives": [],
+    "tradingPrimitives": [],
+    "mintBurnPrimitives": [],
+    "proxy": {
+      "type": "None",
+      "implementation": null,
+      "admin": null
+    },
+    "multisig": {
+      "isSafe": false
+    },
+    "supply": {
+      "totalSupply": "999982338526316511947999622632193",
+      "topHolders": []
+    },
+    "liquidity": {
+      "dex": "UniswapV2Like",
+      "pair": "0x811beEd0119b4AfCE20D2583EB608C6F7AF1954f",
+      "lpLocked": false,
+      "lockEvidence": {
+        "lockerBalance": "0",
+        "deadAddressBalance": "1000",
+        "pctLocked": 0.0
+      },
+      "token0": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+      "token1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "reserves": {
+        "r0": "48564515213896973554796138070",
+        "r1": "142720766384044171653"
+      }
+    },
+    "honeypot": {
+      "risk": "low",
+      "methods": [
+        "heuristics"
+      ],
+      "notes": "transferRevertHeuristic"
+    },
+    "bytecodeHash": "5c813da8be193a1a33a7533edc758e3ad29f1fa1730cbf2d8c9fc8a7f31c78f3"
+  }
+}

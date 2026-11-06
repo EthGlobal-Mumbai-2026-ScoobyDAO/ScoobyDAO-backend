@@ -1,0 +1,121 @@
+{
+    "pair": {
+      "base": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+      "quote": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "chainId": 1
+    },
+    "blockNumber": 23455284,
+    "venues": [
+      {
+        "name": "UniswapV3",
+        "pool": "0xFFC048FB0d686d5dF9563441aaF3cAcDD3374E6c",
+        "feeBps": 500,
+        "tick": -387405,
+        "sqrtPriceX96": "306849353968360525628",
+        "liquidity": "0",
+        "tickSpacing": 10,
+        "depth": {
+          "up": {
+            "pct2": {
+              "notionalQuote": 0.0,
+              "route": "direct"
+            },
+            "pct5": {
+              "notionalQuote": 0.0,
+              "route": "direct"
+            },
+            "pct10": {
+              "notionalQuote": 0.0,
+              "route": "direct"
+            }
+          },
+          "down": {
+            "pct2": {
+              "notionalQuote": 0.0,
+              "route": "direct"
+            },
+            "pct5": {
+              "notionalQuote": 0.0,
+              "route": "direct"
+            },
+            "pct10": {
+              "notionalQuote": 0.0,
+              "route": "direct"
+            }
+          }
+        },
+        "slippageCurve": [
+          {
+            "notionalQuote": 1000.0,
+            "slippagePct": 2.0000001655807422e-08
+          },
+          {
+            "notionalQuote": 5000.0,
+            "slippagePct": 2.0000001655807422e-08
+          },
+          {
+            "notionalQuote": 10000.0,
+            "slippagePct": 2.0000001655807422e-08
+          },
+          {
+            "notionalQuote": 25000.0,
+            "slippagePct": 2.0000001655807422e-08
+          },
+          {
+            "notionalQuote": 50000.0,
+            "slippagePct": 2.0000001655807422e-08
+          },
+          {
+            "notionalQuote": 100000.0,
+            "slippagePct": 2.0000001655807422e-08
+          }
+        ],
+        "cliffs": [
+          {
+            "tick": -387405.0,
+            "deltaLRatio": 0.0
+          }
+        ],
+        "activeLiquidityRatio": 1.0,
+        "lpConcentration": {
+          "top1Share": 0.0,
+          "top5Share": 0.0,
+          "hhi": 0.0,
+          "sampledPositions": 0.0
+        }
+      }
+    ],
+    "crossVenueSpreadBps": 0.0,
+    "mevExposure": {
+      "score": 68,
+      "evidence": {
+        "sandwichDensity": "elevated",
+        "depthThin": true
+      }
+    },
+    "microstructure_score": 7,
+    "reasons": [
+      "Market microstructure health is poor (score: 7/100).",
+      "Depth concerns: Very thin depth for 5% upward moves ($0); Very thin depth for 5% downward moves ($0).",
+      "Excellent price execution with minimal slippage (0.00% for $25k trades).",
+      "Well-concentrated liquidity (100.0% active) provides stable pricing.",
+      "Healthy LP diversity (HHI: 0.000) reduces manipulation risk.",
+      "Elevated MEV exposure detected - consider using private mempools or MEV protection.",
+      "⚠️ Consider alternative venues or waiting for improved conditions before large trades."
+    ],
+    "tokenMeta": {
+      "base": {
+        "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+        "name": "SHIBA INU",
+        "symbol": "SHIB",
+        "decimals": 18
+      },
+      "quote": {
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "name": "USD Coin",
+        "symbol": "USDC",
+        "decimals": 6
+      }
+    },
+    "market_microstructure_thesis": "Analysis of the SHIB/USDC liquidity pool on UniswapV3 (chain 1) reveals a complex microstructure scenario with notable anomalies and risks. Despite the reported zero liquidity in the pool, the slippage curve demonstrates exceptionally low slippage (2.0 × 10⁻⁸%) for trades up to $100,000, suggesting highly efficient price execution for small-to-medium-sized transactions. However, depth metrics for 2%, 5%, and 10% price movements in both directions uniformly show zero notional quote value, indicating no liquidity available to absorb trades within these thresholds. This contradiction implies that traditional depth calculations might not capture the concentrated liquidity distribution at the current tick or highlights potential data reporting inconsistencies.  \n\nLiquidity cliff analysis identifies a single interval at tick -387405 with deltaLRatio 0.0, confirming the absence of abrupt liquidity changes. Active liquidity ratio stands at 1.0, implying all provided liquidity is operational. Yet, the absolute liquidity value is listed as zero, which raises questions about the data source’s accuracy or the specific parametrization of the pool—potentially a misrepresentation of concentrated liquidity positions. This could mislead users expecting standard liquidity tables.  \n\nLP concentration metrics reveal zero values for top 1 and top 5 share percentages, along with a HHI of 0.0. While typically indicating perfect distribution of LP stakes, the zero results here likely reflect no active positions or insufficient data to compute concentration, complicating conclusions about market manipulation risks. MEV exposure scores 68 out of 100, with elevated sandwich attack density and confirmed liquidity thinness (depthThin), underscoring significant vulnerability to front-running or exploitation attempts, particularly for larger trades despite the low slippage curve. Cross-venue spread is zero basis points, suggesting perfect price alignment across venues in the dataset, though this is uncommon for assets like SHIB/USDC and may indicate limited multi-venue presence or data aggregation issues.  \n\nThe overall microstructure score of 7/100 underscores systemic weaknesses. Principal concerns include the zero-depth thresholds—rendering the pool unable to handle price movements within standard thresholds—even as slippage remains negligible for small trades. While active liquidity appears optimally deployed, the zero liquidity value and implausible depth-slip-page mismatch highlight critical data integrity questions. MEV risks remain a pressing concern requiring mitigation through private transactions or MEV protection tools. Although LP diversity appears strong (if applicable), the lack of measurable liquidity fundamentally undermines the pool’s utility for meaningful transactions beyond incidental swaps. Agents operating in this environment should avoid large orders entirely, monitor for MEV opportunities, and consider alternative liquidity sources until deeper, more reliable data clarifies these anomalies. The current microstructure is among the weakest observed, with structural inefficiencies posing significant operational risks for sophisticated market participants."
+  }

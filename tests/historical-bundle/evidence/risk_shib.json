@@ -1,0 +1,36 @@
+{
+    "risk_assessment":{
+      "additional_risk_metrics":{
+        "average_daily_volatility":1.8505,
+        "expected_shortfall_95":-3.4631,
+        "max_drawdown":-42.7684,
+        "portfolio_volatility_annualized":29.3758
+      },
+      "risk_assessment":{
+        "interpretation":"1.08% maximum loss expected with 95.0% confidence over 4 day(s)",
+        "risk_level":"Low",
+        "risk_score":10.85
+      },
+      "ticker":"SHIB",
+      "vae_specific_metrics":{
+        "data_points":390,
+        "number_of_recreations":50,
+        "recreation_volatility_range":{
+          "max":12.6834,
+          "mean":1.8505,
+          "min":1.1174
+        }
+      },
+      "var_metrics":{
+        "confidence_level":0.95,
+        "time_horizon_days":4,
+        "var_90":0.845,
+        "var_95":1.0845,
+        "var_99":1.5338,
+        "var_custom":1.0845
+      }
+    },
+    "status":"success",
+    "ticker":"SHIB",
+    "thesis":"The SHIB risk assessment reports a Low risk level with a risk score of 10.85, signifying that current market behavior aligns with a relatively stable and predictable volatility profile. The Value-at-Risk (VaR) metrics across multiple confidence levels and a 4-day horizon provide nuanced insights: at 90% confidence, the expected maximum loss is 0.845%, meaning 90% of the time losses won't surpass this threshold over four days. At 95% confidence, the VaR rises to 1.0845%, indicating a 5% probability of larger losses, while the 99% confidence level shows a VaR of 1.5338%, representing a 1% chance of exceeding this loss within the period. These thresholds collectively highlight that while SHIB experiences regular volatility, extreme drawdowns exceeding these levels are statistically infrequent over short timeframes, reinforcing the \"Low\" risk classification under normal market conditions.  \n\nExpected Shortfall (ES), also known as Conditional VaR (CVaR), further quantifies tail risk beyond the VaR threshold. At the 95% confidence level, the ES reads -3.4631%, meaning that in the worst 5% of scenarios, the average loss across those extreme events would be approximately 3.46%. This value significantly exceeds the 95% VaR figure (1.0845%), underscoring how tail losses can intensify during market stress. The gap between VaR and ES emphasizes the importance of stress-testing portfolios for scenarios where losses surpass typical thresholds, as actual downside exposure may be deeper than VaR alone suggests.  \n\nDaily volatility for SHIB measures 1.8505%, reflecting short-term price fluctuations from day to day. When annualized, this equates to 29.3758% volatility, illustrating the potential for substantial price swings over a full year. This metric contextualizes the asset's long-term risk exposure, as higher annualized volatility increases the likelihood of significant gains or losses during extended holding periods. Historically, the maximum drawdown observed was -42.7684%, representing the largest peak-to-trough decline in SHIB's price history. This figure, though severe, underscores the asset’s vulnerability during systemic shocks, such as abrupt market corrections or liquidity crises, even if such events are rare.  \n\nThe Variational Autoencoder (VAE) diagnostics processed 390 data points and generated 50 recreation samples to analyze volatility behavior. The recreation_volatility_range spans from a minimum of 1.1174% to a maximum of 12.6834%, with a mean of 1.8505% that matches the observed average daily volatility precisely. This consistency confirms the VAE model's ability to replicate both typical daily fluctuations and extreme outliers from historical data, ensuring the risk metrics are grounded in empirical patterns rather than theoretical assumptions. The 50 recreations provide robust validation of volatility dynamics, reinforcing that the observed metrics accurately capture SHIB's historical risk profile across diverse scenarios.  \n\nTaken together, these metrics reveal a layered risk landscape for SHIB. While VaR-based parameters and the Low risk score suggest stability for routine trading, the elevated Expected Shortfall, high annualized volatility, and substantial historical drawdown highlight latent risks during extreme market events. The VAE diagnostics further confirm the reliability of the dataset, ensuring all conclusions stem from observable data. For investors, this means recognizing that SHIB’s day-to-day behavior may appear predictable, but preparedness for sharp, unpredictable downturns remains critical—particularly given the asset’s history of large drawdowns. Balancing confidence in short-term stability with awareness of tail risks forms the foundation of prudent risk management for SHIB exposure."
+  }

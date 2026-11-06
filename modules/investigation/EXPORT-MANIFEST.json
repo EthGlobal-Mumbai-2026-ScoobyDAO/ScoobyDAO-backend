@@ -1,0 +1,83 @@
+{
+  "format": "scooby-investigation-export/1",
+  "status": "ready_for_backend_integration",
+  "files": {
+    "build_report.py": {
+      "sha256": "5f049ad66f2022ed3f6c41619686a3c5822c180a3c2acac596ce5cb87ae1ac24",
+      "bytes": 12797
+    },
+    "capture.py": {
+      "sha256": "2e9719fdde38d6e1d24d3d462bc56442dc4e4641d6e8fd928212a28eb3c0dea8",
+      "bytes": 1311
+    },
+    "contract_validate.py": {
+      "sha256": "17c0575af70e685dbb8e3aedd92c7545b5fefd8d8b80f14745ed1e56db300551",
+      "bytes": 3890
+    },
+    "HANDOFF.md": {
+      "sha256": "bd6c955c548d9b2ed3ae5147f0c81e2ce1d9bfbef2df7508fd011b21a5bdfafc",
+      "bytes": 2110
+    },
+    "history.py": {
+      "sha256": "53fc147becf1a1f3f7169fe2e46dfdf1fe670b7e6add36e2e0cd728c89437809",
+      "bytes": 5660
+    },
+    "legacy_vae.py": {
+      "sha256": "4be098e46bd2d562bc39a8443e1d59bdfda54a40a7a6ace6693b11c644545d98",
+      "bytes": 5588
+    },
+    "pillars.py": {
+      "sha256": "634bcaafd7281d3429ae4c2178d36cbed3ddead00dfdc3d6700ee2a36f8df3b0",
+      "bytes": 1126
+    },
+    "README.md": {
+      "sha256": "b4e768c434d8078d752f80b98962f120c8a395ccdbe389dea7b8dcb3d545f476",
+      "bytes": 7623
+    },
+    "requirements-vae.txt": {
+      "sha256": "fe88a8dfdb548d452c733b9f9ff580d7416e7a103c5555684dd14c10586e6893",
+      "bytes": 56
+    },
+    "requirements.txt": {
+      "sha256": "8975ae80e48946e40dc754c631ecc1107bb570832937b0c969e5185ba9076977",
+      "bytes": 21
+    },
+    "schemas/candidate.schema.json": {
+      "sha256": "9a45955834e66c9a86f8f0e8cd7eb915e03517ee6e601d1c24570bc687ed530b",
+      "bytes": 5168
+    },
+    "schemas/CONTRACT.md": {
+      "sha256": "364c952c9420655dec45d20e25a296a6d73169ba4d901c5b58f6e0738623027a",
+      "bytes": 4952
+    },
+    "schemas/report.schema.json": {
+      "sha256": "8a5f793dce8c75c18c3ee8ade4c26e76fe51ee489173ff59299ad85b5963bf55",
+      "bytes": 51551
+    },
+    "test_boundaries.py": {
+      "sha256": "bb011415b3acfcd4b6fedb487d04b31a144fdc735a7f8755bc8c4bc00f07c855",
+      "bytes": 2919
+    }
+  },
+  "implemented": [
+    "identity-bound daily history and three public provider snapshots",
+    "original 50-reconstruction VAE bridge from separately supplied legacy checkout",
+    "partial v0.2 report, source evidence and TLDR",
+    "safe paths, hashes and schema validator",
+    "optional independent five-pillar callable boundary"
+  ],
+  "not_implemented": [
+    "complete live five-pillar research and Terra synthesis",
+    "authenticated review or discovery selection gate",
+    "complete PDF and production backend integration"
+  ],
+  "evidence": {
+    "portable_offline_tests": "7 passed",
+    "local_data_tests": "5 passed",
+    "legacy_parity_tests": "3 passed",
+    "legacy_shib_run": "182 consecutive daily returns, 50 reconstructions, explicit 4-day test horizon",
+    "bliss": "zero closed-day candles; pending before model execution",
+    "frontend_builder": "SHIB prototype bundle packaged; no visual or PDF acceptance"
+  },
+  "sample_data": "No BLISS or SHIB bundles included; optional examples omitted to keep export small and avoid unintended content."
+}

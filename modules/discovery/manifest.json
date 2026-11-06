@@ -1,0 +1,133 @@
+{
+  "purpose": "portable discovery code export for backend integration",
+  "shared_candidate_schema_sha256": "9a45955834e66c9a86f8f0e8cd7eb915e03517ee6e601d1c24570bc687ed530b",
+  "shared_report_schema_sha256": "8a5f793dce8c75c18c3ee8ade4c26e76fe51ee489173ff59299ad85b5963bf55",
+  "verification": {
+    "command": "python -m unittest discover -s . -v",
+    "tests_passed": 21,
+    "skipped": 0,
+    "live_calls_in_test": 0,
+    "dependencies": [
+      "jsonschema",
+      "pycryptodome"
+    ],
+    "schema": "external frozen candidate v0.1"
+  },
+  "files": [
+    {
+      "path": "candidate_validation.py",
+      "bytes": 2905,
+      "sha256": "dd4601be71ac69dec50cde038dfed5abae02b97fdf37488e6bb314b9b9379c9f"
+    },
+    {
+      "path": "chainlink_probe.py",
+      "bytes": 3485,
+      "sha256": "0d3ff94fc853a6a9141f66fe4094925c92b82bad860d8a6b7ff3bd95459bbbd0"
+    },
+    {
+      "path": "collect_market_activity.py",
+      "bytes": 5590,
+      "sha256": "81cf0079e9e7cf0dfb8f9e2b7f247ab1d1a4595df1be94c2277bd69ef8972ced"
+    },
+    {
+      "path": "discovery.py",
+      "bytes": 11354,
+      "sha256": "bda58adb66204433698a42c669c69671f39e69f2aa2e2e8727ed3f4e96a0722a"
+    },
+    {
+      "path": "fixtures.json",
+      "bytes": 7617,
+      "sha256": "292ef864081e558ea71d310ccb96c3d73030f0ed35cea6493bfc1baf3659309c"
+    },
+    {
+      "path": "HANDOFF.md",
+      "bytes": 1476,
+      "sha256": "50f3b48946a67133b90c01a5715ed57a3d47fccd6f919a7d4798e54bcdaca592"
+    },
+    {
+      "path": "live_pilot.py",
+      "bytes": 11553,
+      "sha256": "89d68ecfc7ea32b11ba27458c962671837b7f96cd7d65ea214e1b74e744d0219"
+    },
+    {
+      "path": "live_source_probe.py",
+      "bytes": 3199,
+      "sha256": "ec89862b6ca21d4150d1af9049dc96d015ecd63a6cc62cdc268cbf29b09bb26a"
+    },
+    {
+      "path": "market_activity.py",
+      "bytes": 5289,
+      "sha256": "edafa10721d7d874c863e9794f998bcb13f634c73c090b2ae8f4ed7a3e63d4b2"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8062,
+      "sha256": "1a25d7c56bee96bb946ad5551de4a08a22a7951552e75ebd382e3518be80899e"
+    },
+    {
+      "path": "requirements-test.txt",
+      "bytes": 44,
+      "sha256": "1381d862f808c8bc4f4f8269e77436d695a02e3b23e80f967ef127a954aa0a4c"
+    },
+    {
+      "path": "review_queue.py",
+      "bytes": 10608,
+      "sha256": "15039d23ea93e2c9ac3c1af0550832accad7eaa423960a296480b54e5faaea62"
+    },
+    {
+      "path": "rpc_snapshot.py",
+      "bytes": 4478,
+      "sha256": "09b8c4c7c67cae1865986c9b4253972c6bbcfef3cf6c729f3e8f811a57c661ab"
+    },
+    {
+      "path": "source_snapshot.py",
+      "bytes": 1834,
+      "sha256": "75b1bab22859638ab317a8d77c2a3cb102f7eb37c3e90ae30c77d21135154461"
+    },
+    {
+      "path": "test_candidate_validation.py",
+      "bytes": 1003,
+      "sha256": "5490ecac99c4065bbedfb3575866f788a32c57fb34d7056d358f880db1706ebb"
+    },
+    {
+      "path": "test_chainlink_probe.py",
+      "bytes": 1511,
+      "sha256": "e61cb04878dbfc50e5cf95a7cc19a44bdcddebab1baf36e0c310431dabd01f5d"
+    },
+    {
+      "path": "test_discovery.py",
+      "bytes": 3921,
+      "sha256": "11cce3e51cabc47155ff45aaf86bada711e65b4dc57fbf79f5e594919eb7125e"
+    },
+    {
+      "path": "test_live_pilot.py",
+      "bytes": 2853,
+      "sha256": "ff2d35c0ffa028a8f7665a04ae3e72c63b1251ca92e55638bca832cb66874bfe"
+    },
+    {
+      "path": "test_live_selection.py",
+      "bytes": 1010,
+      "sha256": "495f3309265750c08e76d2894a16aca1fd8c5dbd5dd289a7d97a578f96594e45"
+    },
+    {
+      "path": "test_market_activity.py",
+      "bytes": 3102,
+      "sha256": "c583fd5827a0520e619283a1e82d8546622b24eb675b17e6b894365acf979a3c"
+    },
+    {
+      "path": "test_queue_cli.py",
+      "bytes": 1313,
+      "sha256": "a0bf4f4e798f5bc31a631ba07f77cccd16e8f404ab608edd3ba90bd22137a210"
+    },
+    {
+      "path": "test_review_queue.py",
+      "bytes": 3622,
+      "sha256": "38203bedbad64cf83e8adb762442443e827e3f98cefa3c4ce80c69428b3be446"
+    },
+    {
+      "path": "test_rpc_snapshot.py",
+      "bytes": 1610,
+      "sha256": "ae2094894558da65619ed3aac6887cedec5e475dc8eeec1111dc82254fbe10e8"
+    }
+  ]
+}

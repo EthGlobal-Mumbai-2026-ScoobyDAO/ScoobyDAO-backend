@@ -1,0 +1,120 @@
+{
+  "pair": {
+    "base": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+    "quote": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "chainId": 1
+  },
+  "blockNumber": 23455284,
+  "venues": [
+    {
+      "name": "UniswapV3",
+      "pool": "0xFFC048FB0d686d5dF9563441aaF3cAcDD3374E6c",
+      "feeBps": 500,
+      "tick": -387405,
+      "sqrtPriceX96": "306849353968360525628",
+      "liquidity": "0",
+      "tickSpacing": 10,
+      "depth": {
+        "up": {
+          "pct2": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct5": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct10": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          }
+        },
+        "down": {
+          "pct2": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct5": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct10": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          }
+        }
+      },
+      "slippageCurve": [
+        {
+          "notionalQuote": 1000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 5000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 10000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 25000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 50000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 100000.0,
+          "slippagePct": 2.0000001655807422e-08
+        }
+      ],
+      "cliffs": [
+        {
+          "tick": -387405.0,
+          "deltaLRatio": 0.0
+        }
+      ],
+      "activeLiquidityRatio": 1.0,
+      "lpConcentration": {
+        "top1Share": 0.0,
+        "top5Share": 0.0,
+        "hhi": 0.0,
+        "sampledPositions": 0.0
+      }
+    }
+  ],
+  "crossVenueSpreadBps": 0.0,
+  "mevExposure": {
+    "score": 68,
+    "evidence": {
+      "sandwichDensity": "elevated",
+      "depthThin": true
+    }
+  },
+  "microstructure_score": 7,
+  "reasons": [
+    "Market microstructure health is poor (score: 7/100).",
+    "Depth concerns: Very thin depth for 5% upward moves ($0); Very thin depth for 5% downward moves ($0).",
+    "Excellent price execution with minimal slippage (0.00% for $25k trades).",
+    "Well-concentrated liquidity (100.0% active) provides stable pricing.",
+    "Healthy LP diversity (HHI: 0.000) reduces manipulation risk.",
+    "Elevated MEV exposure detected - consider using private mempools or MEV protection.",
+    "⚠️ Consider alternative venues or waiting for improved conditions before large trades."
+  ],
+  "tokenMeta": {
+    "base": {
+      "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+      "name": "SHIBA INU",
+      "symbol": "SHIB",
+      "decimals": 18
+    },
+    "quote": {
+      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "decimals": 6
+    }
+  }
+}

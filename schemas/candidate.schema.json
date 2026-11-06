@@ -1,0 +1,251 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "candidate_id": {
+      "type": "string"
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "chain_id": {
+          "enum": [
+            1,
+            8453
+          ]
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "symbol": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chain_id",
+        "address",
+        "symbol"
+      ],
+      "additionalProperties": false
+    },
+    "mode": {
+      "enum": [
+        "historical_replay",
+        "live",
+        "synthetic_demo"
+      ]
+    },
+    "state": {
+      "enum": [
+        "monitoring",
+        "awaiting_selection",
+        "selected",
+        "investigating",
+        "review_pending",
+        "closed"
+      ]
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reason_code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "reason_code",
+          "description",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "screening": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "not_scored",
+            "scored",
+            "insufficient_data"
+          ]
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "score_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threshold_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quality_issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "score",
+        "score_version",
+        "threshold_version",
+        "quality_issues"
+      ],
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "not_selected",
+            "selected",
+            "deferred"
+          ]
+        },
+        "selected_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selected_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "selected_by",
+        "selected_at",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fetched_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "block_number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "kind": {
+            "enum": [
+              "historical_fixture",
+              "live_observation",
+              "derived",
+              "synthetic"
+            ]
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "sha256",
+          "observed_at",
+          "fetched_at",
+          "block_number",
+          "kind",
+          "limitations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "last_observed_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "next_check_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "identity",
+    "mode",
+    "state",
+    "triggers",
+    "screening",
+    "selection",
+    "evidence",
+    "last_observed_at",
+    "next_check_at"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scooby DAO candidate v0.1 \u00e2\u20ac\u201d orchestration starter contract"
+}

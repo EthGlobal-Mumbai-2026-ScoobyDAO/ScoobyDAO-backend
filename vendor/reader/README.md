@@ -1,0 +1,5 @@
+# Portable research reader adapter
+
+Python 3.11; install `python -m pip install -r requirements.txt`. Build a frozen v0.2 report with `python build.py /path/to/bundle/report.json /path/to/new-output`. The output must not already exist. Required sibling digest.json and referenced assets are verified and copied. Open output/index.html locally. A version-bound `pillar_tldr` artifact follows profile `scooby.pillar-tldr/1` (see PROFILE.md); selection/selection_context artifact supports diagnostic labeling. No fixture, live report or research data is included. Missing TL;DR renders an explicit empty state. This is an adapter, not a report producer or review service.
+
+Run `python -m unittest -v test_export` for portable isolated tests. Backend prototype uses `SCOOBY_FRONTEND_DIR` pointing to this directory; integration should package this source in the eventual repo rather than reference another workspace. `report.schema.json` is the frozen v0.2 report schema; upstream remains authoritative. This package does not authenticate reviewers, publish, deploy or perform model calls.

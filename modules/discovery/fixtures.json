@@ -1,0 +1,252 @@
+{
+  "source_kind": "fixture",
+  "description": "Synthetic-only replay; addresses, event times and actions are test inputs, not observations.",
+  "events": [
+    {
+      "event_id": "historical-reference",
+      "candidate": {
+        "schema_version": "0.1",
+        "candidate_id": "1:0x2222222222222222222222222222222222222222",
+        "identity": {
+          "chain_id": 1,
+          "address": "0x2222222222222222222222222222222222222222",
+          "symbol": "TEST"
+        },
+        "mode": "synthetic_demo",
+        "state": "awaiting_selection",
+        "triggers": [
+          {
+            "reason_code": "synthetic_test",
+            "description": "Synthetic test only; no actual token identified.",
+            "evidence_ids": []
+          }
+        ],
+        "screening": {
+          "status": "not_scored",
+          "score": null,
+          "score_version": null,
+          "threshold_version": null,
+          "quality_issues": [
+            "Synthetic fixture; no live data."
+          ]
+        },
+        "selection": {
+          "status": "not_selected",
+          "selected_by": null,
+          "selected_at": null,
+          "reason": null
+        },
+        "evidence": [],
+        "last_observed_at": null,
+        "next_check_at": null
+      },
+      "observed_at": "2025-09-27T00:00:00Z",
+      "material_change": false
+    },
+    {
+      "event_id": "historical-reference",
+      "candidate": {
+        "schema_version": "0.1",
+        "candidate_id": "1:0x2222222222222222222222222222222222222222",
+        "identity": {
+          "chain_id": 1,
+          "address": "0x2222222222222222222222222222222222222222",
+          "symbol": "TEST"
+        },
+        "mode": "synthetic_demo",
+        "state": "awaiting_selection",
+        "triggers": [
+          {
+            "reason_code": "synthetic_test",
+            "description": "Synthetic test only; no actual token identified.",
+            "evidence_ids": []
+          }
+        ],
+        "screening": {
+          "status": "not_scored",
+          "score": null,
+          "score_version": null,
+          "threshold_version": null,
+          "quality_issues": [
+            "Synthetic fixture; no live data."
+          ]
+        },
+        "selection": {
+          "status": "not_selected",
+          "selected_by": null,
+          "selected_at": null,
+          "reason": null
+        },
+        "evidence": [],
+        "last_observed_at": null,
+        "next_check_at": null
+      },
+      "observed_at": "2025-09-27T00:00:00Z",
+      "material_change": false
+    },
+    {
+      "event_id": "synthetic-base",
+      "candidate": {
+        "schema_version": "0.1",
+        "candidate_id": "8453:0x1111111111111111111111111111111111111111",
+        "identity": {
+          "chain_id": 8453,
+          "address": "0x1111111111111111111111111111111111111111",
+          "symbol": "TEST"
+        },
+        "mode": "synthetic_demo",
+        "state": "awaiting_selection",
+        "triggers": [
+          {
+            "reason_code": "synthetic_test",
+            "description": "Synthetic test only; no actual token identified.",
+            "evidence_ids": []
+          }
+        ],
+        "screening": {
+          "status": "not_scored",
+          "score": null,
+          "score_version": null,
+          "threshold_version": null,
+          "quality_issues": [
+            "Synthetic fixture; no live data."
+          ]
+        },
+        "selection": {
+          "status": "not_selected",
+          "selected_by": null,
+          "selected_at": null,
+          "reason": null
+        },
+        "evidence": [],
+        "last_observed_at": null,
+        "next_check_at": null
+      },
+      "observed_at": "2025-09-27T00:00:00Z",
+      "material_change": false
+    },
+    {
+      "event_id": "change-one",
+      "candidate": {
+        "schema_version": "0.1",
+        "candidate_id": "8453:0x1111111111111111111111111111111111111111",
+        "identity": {
+          "chain_id": 8453,
+          "address": "0x1111111111111111111111111111111111111111",
+          "symbol": "TEST"
+        },
+        "mode": "synthetic_demo",
+        "state": "awaiting_selection",
+        "triggers": [
+          {
+            "reason_code": "synthetic_test",
+            "description": "Synthetic test only; no actual token identified.",
+            "evidence_ids": []
+          }
+        ],
+        "screening": {
+          "status": "not_scored",
+          "score": null,
+          "score_version": null,
+          "threshold_version": null,
+          "quality_issues": [
+            "Synthetic fixture; no live data."
+          ]
+        },
+        "selection": {
+          "status": "not_selected",
+          "selected_by": null,
+          "selected_at": null,
+          "reason": null
+        },
+        "evidence": [],
+        "last_observed_at": null,
+        "next_check_at": null
+      },
+      "observed_at": "2025-09-27T01:00:00Z",
+      "material_change": true
+    },
+    {
+      "event_id": "change-suppressed",
+      "candidate": {
+        "schema_version": "0.1",
+        "candidate_id": "8453:0x1111111111111111111111111111111111111111",
+        "identity": {
+          "chain_id": 8453,
+          "address": "0x1111111111111111111111111111111111111111",
+          "symbol": "TEST"
+        },
+        "mode": "synthetic_demo",
+        "state": "awaiting_selection",
+        "triggers": [
+          {
+            "reason_code": "synthetic_test",
+            "description": "Synthetic test only; no actual token identified.",
+            "evidence_ids": []
+          }
+        ],
+        "screening": {
+          "status": "not_scored",
+          "score": null,
+          "score_version": null,
+          "threshold_version": null,
+          "quality_issues": [
+            "Synthetic fixture; no live data."
+          ]
+        },
+        "selection": {
+          "status": "not_selected",
+          "selected_by": null,
+          "selected_at": null,
+          "reason": null
+        },
+        "evidence": [],
+        "last_observed_at": null,
+        "next_check_at": null
+      },
+      "observed_at": "2025-09-27T01:30:00Z",
+      "material_change": true
+    },
+    {
+      "event_id": "change-after-cooldown",
+      "candidate": {
+        "schema_version": "0.1",
+        "candidate_id": "8453:0x1111111111111111111111111111111111111111",
+        "identity": {
+          "chain_id": 8453,
+          "address": "0x1111111111111111111111111111111111111111",
+          "symbol": "TEST"
+        },
+        "mode": "synthetic_demo",
+        "state": "awaiting_selection",
+        "triggers": [
+          {
+            "reason_code": "synthetic_test",
+            "description": "Synthetic test only; no actual token identified.",
+            "evidence_ids": []
+          }
+        ],
+        "screening": {
+          "status": "not_scored",
+          "score": null,
+          "score_version": null,
+          "threshold_version": null,
+          "quality_issues": [
+            "Synthetic fixture; no live data."
+          ]
+        },
+        "selection": {
+          "status": "not_selected",
+          "selected_by": null,
+          "selected_at": null,
+          "reason": null
+        },
+        "evidence": [],
+        "last_observed_at": null,
+        "next_check_at": null
+      },
+      "observed_at": "2025-09-27T02:01:00Z",
+      "material_change": true
+    }
+  ]
+}

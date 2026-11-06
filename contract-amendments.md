@@ -1,0 +1,5 @@
+# Contract amendments proposed, not accepted
+
+The copied candidate 0.1/report 0.2 schemas remain unchanged. The operator API is separately versioned 0.1 and cannot be substituted for the shared contracts. Propose a future agreed selection/admission sidecar containing source-linked concern-group statuses (triggered, not-triggered, unknown, held, missing), evidence freshness and verifier version; explicit diagnostic exception identity/scope; and a separately authenticated human receipt. Do not label four alleged flags as verified without the actual accepted check implementations.
+
+Continue the proposed `scooby.pillar-tldr/1` hash-bound sidecar: same report ID/version, five pillar keys, 0–5 source/claim-linked bullets, known roles. Reconcile with all workstreams before changing frozen schemas. A rendering manifest should bind HTML/PDF bytes to exact report digest and review receipt, with authenticated revision/revocation semantics and graph/source provenance. Add producer/consumer acceptance tests and migrate explicitly before adopting a shared version.

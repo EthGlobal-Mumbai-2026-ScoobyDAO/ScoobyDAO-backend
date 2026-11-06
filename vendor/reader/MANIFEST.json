@@ -1,0 +1,61 @@
+{
+  "purpose": "Portable local Scooby DAO frontend report reader; no live report or runtime data",
+  "files": [
+    {
+      "path": "app.js",
+      "sha256": "3018188abb0c36f937d01f050cf65175072ba25446687d7f4f943e96a8f584a4",
+      "bytes": 19329
+    },
+    {
+      "path": "build.py",
+      "sha256": "b3435ea29d6eed4a9b1f522b1f7b90fc0de8d377aa4a0a0782fef080f51f1055",
+      "bytes": 9008
+    },
+    {
+      "path": "HANDOFF.md",
+      "sha256": "8052c5eaa328851f4cadd5bf913d62ab9f5882bc0121014e87718e3576e0006b",
+      "bytes": 696
+    },
+    {
+      "path": "PROFILE.md",
+      "sha256": "39c9110e753e8eb89e1dc076723c87cd0e3592d56773cc753af39cea9238ac2d",
+      "bytes": 3868
+    },
+    {
+      "path": "reader.html",
+      "sha256": "06d942c32e775267b0f6db92456208a8aed0ad9dafd386b8758646340f474270",
+      "bytes": 974
+    },
+    {
+      "path": "README.md",
+      "sha256": "b6bb707e0490913f6dc749f97e02451762b9b521935e1d7ce87d3a7bb3c667e4",
+      "bytes": 1087
+    },
+    {
+      "path": "report.schema.json",
+      "sha256": "8a5f793dce8c75c18c3ee8ade4c26e76fe51ee489173ff59299ad85b5963bf55",
+      "bytes": 51551
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "48ee7d1db1cfddbb445bdff4adca44ee15724e2d52b531d9d5bb7c77e2f1455f",
+      "bytes": 20
+    },
+    {
+      "path": "style.css",
+      "sha256": "45746830b4d8abddab885a2c7af63c30bb0347ff07e951d7144a4d4849709e88",
+      "bytes": 8451
+    },
+    {
+      "path": "test_export.py",
+      "sha256": "2ecbbe70baa6cd8fc29c8d3ed4846a1e9e449e46358ff99c712633ee3f49a369",
+      "bytes": 2891
+    }
+  ],
+  "requires": [
+    "Python 3.11",
+    "jsonschema 4.26.0",
+    "Node.js only for optional browser/DOM testing"
+  ],
+  "scope": "Reader adapter only; no publication, deployment or authenticated review"
+}

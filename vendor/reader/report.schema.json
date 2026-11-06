@@ -1,0 +1,1808 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scooby DAO report checkpoint proposal v0.2",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "0.2"
+    },
+    "report_id": {
+      "type": "string"
+    },
+    "report_version": {
+      "type": "string"
+    },
+    "candidate_id": {
+      "type": "string"
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "chain_id": {
+          "enum": [
+            1,
+            8453
+          ]
+        },
+        "address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$"
+        },
+        "symbol": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chain_id",
+        "address",
+        "symbol"
+      ],
+      "additionalProperties": false
+    },
+    "mode": {
+      "enum": [
+        "historical_replay",
+        "synthetic_demo",
+        "live"
+      ]
+    },
+    "assessment": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "not_assessed",
+            "proposed"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "supporting_claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "counterevidence_claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "label",
+        "summary",
+        "unknowns",
+        "supporting_claim_ids",
+        "counterevidence_claim_ids"
+      ],
+      "additionalProperties": false
+    },
+    "pillars": {
+      "type": "object",
+      "properties": {
+        "microstructure": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "not_started",
+                "running",
+                "complete",
+                "partial",
+                "failed",
+                "unavailable"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "measurements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "value",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "unknown_reason",
+                  "window"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "window",
+                  "points",
+                  "unknown_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "claims": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "statement": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "observation",
+                      "calculation",
+                      "interpretation"
+                    ]
+                  },
+                  "supporting_evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "counterevidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contradiction_claim_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "statement",
+                  "kind",
+                  "supporting_evidence_ids",
+                  "counterevidence_ids",
+                  "contradiction_claim_ids",
+                  "uncertainties"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "quality_issues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "raw_payload_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "summary",
+            "evidence_ids",
+            "measurements",
+            "series",
+            "claims",
+            "quality_issues",
+            "raw_payload_path"
+          ],
+          "additionalProperties": false
+        },
+        "onchain": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "not_started",
+                "running",
+                "complete",
+                "partial",
+                "failed",
+                "unavailable"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "measurements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "value",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "unknown_reason",
+                  "window"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "window",
+                  "points",
+                  "unknown_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "claims": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "statement": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "observation",
+                      "calculation",
+                      "interpretation"
+                    ]
+                  },
+                  "supporting_evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "counterevidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contradiction_claim_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "statement",
+                  "kind",
+                  "supporting_evidence_ids",
+                  "counterevidence_ids",
+                  "contradiction_claim_ids",
+                  "uncertainties"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "quality_issues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "raw_payload_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "summary",
+            "evidence_ids",
+            "measurements",
+            "series",
+            "claims",
+            "quality_issues",
+            "raw_payload_path"
+          ],
+          "additionalProperties": false
+        },
+        "fundamentals": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "not_started",
+                "running",
+                "complete",
+                "partial",
+                "failed",
+                "unavailable"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "measurements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "value",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "unknown_reason",
+                  "window"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "window",
+                  "points",
+                  "unknown_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "claims": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "statement": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "observation",
+                      "calculation",
+                      "interpretation"
+                    ]
+                  },
+                  "supporting_evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "counterevidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contradiction_claim_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "statement",
+                  "kind",
+                  "supporting_evidence_ids",
+                  "counterevidence_ids",
+                  "contradiction_claim_ids",
+                  "uncertainties"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "quality_issues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "raw_payload_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "summary",
+            "evidence_ids",
+            "measurements",
+            "series",
+            "claims",
+            "quality_issues",
+            "raw_payload_path"
+          ],
+          "additionalProperties": false
+        },
+        "statistical_risk": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "not_started",
+                "running",
+                "complete",
+                "partial",
+                "failed",
+                "unavailable"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "measurements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "value",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "unknown_reason",
+                  "window"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "window",
+                  "points",
+                  "unknown_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "claims": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "statement": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "observation",
+                      "calculation",
+                      "interpretation"
+                    ]
+                  },
+                  "supporting_evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "counterevidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contradiction_claim_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "statement",
+                  "kind",
+                  "supporting_evidence_ids",
+                  "counterevidence_ids",
+                  "contradiction_claim_ids",
+                  "uncertainties"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "quality_issues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "raw_payload_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "summary",
+            "evidence_ids",
+            "measurements",
+            "series",
+            "claims",
+            "quality_issues",
+            "raw_payload_path"
+          ],
+          "additionalProperties": false
+        },
+        "technical_health": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "not_started",
+                "running",
+                "complete",
+                "partial",
+                "failed",
+                "unavailable"
+              ]
+            },
+            "summary": {
+              "type": "string"
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "measurements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "value",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "unknown_reason",
+                  "window"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "method": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quality": {
+                    "enum": [
+                      "unvalidated",
+                      "validated",
+                      "unknown"
+                    ]
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "window": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "end": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "precision": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "points": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "value": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "time",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknown_reason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "unit",
+                  "method",
+                  "quality",
+                  "evidence_ids",
+                  "window",
+                  "points",
+                  "unknown_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "claims": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "statement": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "observation",
+                      "calculation",
+                      "interpretation"
+                    ]
+                  },
+                  "supporting_evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "counterevidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contradiction_claim_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "statement",
+                  "kind",
+                  "supporting_evidence_ids",
+                  "counterevidence_ids",
+                  "contradiction_claim_ids",
+                  "uncertainties"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "quality_issues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "raw_payload_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "summary",
+            "evidence_ids",
+            "measurements",
+            "series",
+            "claims",
+            "quality_issues",
+            "raw_payload_path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "microstructure",
+        "onchain",
+        "fundamentals",
+        "statistical_risk",
+        "technical_health"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fetched_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "block_number": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "window": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "end": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "precision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "start",
+              "end",
+              "precision"
+            ],
+            "additionalProperties": false
+          },
+          "coverage": {
+            "type": "string"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "sha256",
+          "kind",
+          "observed_at",
+          "fetched_at",
+          "block_number",
+          "window",
+          "coverage",
+          "limitations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "unavailable"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "report_id": {
+            "type": "string"
+          },
+          "report_version": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "availability",
+          "path",
+          "sha256",
+          "report_id",
+          "report_version",
+          "media_type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "approved_unverified",
+            "revision_requested",
+            "rejected"
+          ]
+        },
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authentication": {
+          "enum": [
+            "none",
+            "unverified"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "reviewer",
+        "reviewed_at",
+        "reviewed_version",
+        "content_sha256",
+        "authentication"
+      ],
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "report_id",
+    "report_version",
+    "candidate_id",
+    "identity",
+    "mode",
+    "assessment",
+    "pillars",
+    "evidence",
+    "artifacts",
+    "review",
+    "limitations"
+  ],
+  "additionalProperties": false
+}

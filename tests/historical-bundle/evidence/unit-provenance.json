@@ -1,0 +1,27 @@
+{
+  "purpose": "Unit evidence for presenting existing historical outputs, not endorsement of mathematical methods or calibration",
+  "source_path": "[local path removed from portable test fixture]",
+  "source_sha256": "ac9ee47d794134110ade4a32ce5b4eb3a2872eed497bf8e81b8d2780d0208d80",
+  "source_revision_from_baseline": "4770c06b7b41d5dd88b2caac30b6c9efbec5140c",
+  "excerpts": {
+    "statistical_output": {
+      "start_line": 286,
+      "end_line": 314,
+      "code": "        var_95 = var_cov_var(returns_df, alpha=0.95, days=days) * 100\n        var_99 = var_cov_var(returns_df, alpha=0.99, days=days) * 100\n        var_90 = var_cov_var(returns_df, alpha=0.90, days=days) * 100\n        var_custom = var_cov_var(returns_df, alpha=alpha, days=days) * 100\n        \n        # Calculate additional risk metrics\n        portfolio_volatility = returns_df.std().mean() * 100 * sqrt(252)  # Annualized volatility %\n        max_drawdown = (returns_df.min().min()) * 100  # Worst-case drawdown across recreations\n        expected_shortfall_95 = returns_df[returns_df <= returns_df.quantile(0.05)].mean().mean() * 100\n        \n        # Risk scores based on VaR\n        risk_score_95 = min(100, max(0, (abs(var_95) / 10) * 100))  # Scale to 0-100\n        risk_level = \"High\" if abs(var_95) > 8 else \"Medium\" if abs(var_95) > 4 else \"Low\"\n        \n        return {\n            \"ticker\": ticker,\n            \"var_metrics\": {\n                \"var_90\": round(var_90, 4),\n                \"var_95\": round(var_95, 4),\n                \"var_99\": round(var_99, 4),\n                \"var_custom\": round(var_custom, 4),\n                \"confidence_level\": alpha,\n                \"time_horizon_days\": days\n            },\n            \"additional_risk_metrics\": {\n                \"portfolio_volatility_annualized\": round(portfolio_volatility, 4),\n                \"max_drawdown\": round(max_drawdown, 4),\n                \"expected_shortfall_95\": round(expected_shortfall_95, 4),\n                \"average_daily_volatility\": round(returns_df.std().mean() * 100, 4)"
+    },
+    "fundamental_output": {
+      "start_line": 656,
+      "end_line": 669,
+      "code": "def analyze_market_data_from_csv(csv_path: str, coin: str):\n    df = pd.read_csv(csv_path)\n    df = df[df[\"coin\"].str.upper() == coin.upper()]\n    df[\"date\"] = pd.to_datetime(df[\"date\"], unit=\"s\", errors=\"ignore\")\n    df[[\"priceUSD\",\"dailyVolumeUSD\",\"totalLiquidityUSD\"]] = df[[\"priceUSD\",\"dailyVolumeUSD\",\"totalLiquidityUSD\"]].astype(float)\n    df = df.sort_values(\"date\")\n    df[\"return\"] = df[\"priceUSD\"].pct_change()\n    price_change_24h = ((df.iloc[-1][\"priceUSD\"]/df.iloc[-2][\"priceUSD\"])-1)*100\n    volume_change_24h = ((df.iloc[-1][\"dailyVolumeUSD\"]/df.iloc[-2][\"dailyVolumeUSD\"])-1)*100\n    return {\n        \"latest_price\": df.iloc[-1][\"priceUSD\"],\n        \"24h_price_change_pct\": price_change_24h,\n        \"24h_volume_change_pct\": volume_change_24h,\n        \"daily_returns\": df[\"return\"].dropna().tolist(),"
+    }
+  },
+  "findings": {
+    "fundamental_latest_price": "USD field explicitly read from priceUSD",
+    "fundamental_daily_returns": "pct_change yields fractional returns; display percentage conversion is value times 100, documented in mapping manifest",
+    "fundamental_price_volume_change": "source explicitly multiplies ratios by 100; already percentage values, do not multiply again",
+    "statistical_var": "source multiplies VaR by 100 before JSON output; percentage loss magnitude under legacy method",
+    "statistical_expected_shortfall": "source multiplies ES by 100; signed percentage under legacy method; not rescaled to VaR horizon",
+    "statistical_volatility": "source multiplies daily std by 100, and annual value additionally by sqrt252; percentage units under legacy method",
+    "statistical_legacy_max_drawdown": "minimum single return times100, not peak-to-trough drawdown"
+  }
+}

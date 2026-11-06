@@ -1,0 +1,3 @@
+# Import handoff
+
+Import this directory as a distinct reader adapter, pin dependencies and preserve report.schema.json bytes; call build.py with a verified report input and new isolated output path. Do not commit runtime reports, evidence, local preview outputs, credentials or machine-specific workspace paths. The backend currently invokes an external `SCOOBY_FRONTEND_DIR`; replace its machine-local test path with a relative configurable path and rerun integration. This package does not change the frozen report schema. Real report publication and authenticated review need the separate post-report package and security integration; current backend reviews are local unverified assertions.

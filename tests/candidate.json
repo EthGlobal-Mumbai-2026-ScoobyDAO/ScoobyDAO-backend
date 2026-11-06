@@ -1,0 +1,36 @@
+{
+  "schema_version": "0.1",
+  "candidate_id": "1:0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce",
+  "identity": {
+    "chain_id": 1,
+    "address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+    "symbol": "SHIB"
+  },
+  "mode": "historical_replay",
+  "state": "selected",
+  "triggers": [
+    {
+      "reason_code": "user_reference_case",
+      "description": "SHIB suggested by the user as the starting reference case; no numeric sniff score implied.",
+      "evidence_ids": []
+    }
+  ],
+  "screening": {
+    "status": "not_scored",
+    "score": null,
+    "score_version": null,
+    "threshold_version": null,
+    "quality_issues": [
+      "Historical reference; no current screening performed."
+    ]
+  },
+  "selection": {
+    "status": "selected",
+    "selected_by": "SIMULATED TEST OPERATOR - NOT A HUMAN",
+    "selected_at": "2026-11-06T05:20:28.505621+00:00",
+    "reason": "Interface checkpoint only; no live investigation authorization"
+  },
+  "evidence": [],
+  "last_observed_at": null,
+  "next_check_at": null
+}

@@ -1,0 +1,35 @@
+{
+  "risk_assessment": {
+    "additional_risk_metrics": {
+      "average_daily_volatility": 1.8505,
+      "expected_shortfall_95": -3.4631,
+      "max_drawdown": -42.7684,
+      "portfolio_volatility_annualized": 29.3758
+    },
+    "risk_assessment": {
+      "interpretation": "1.08% maximum loss expected with 95.0% confidence over 4 day(s)",
+      "risk_level": "Low",
+      "risk_score": 10.85
+    },
+    "ticker": "SHIB",
+    "vae_specific_metrics": {
+      "data_points": 390,
+      "number_of_recreations": 50,
+      "recreation_volatility_range": {
+        "max": 12.6834,
+        "mean": 1.8505,
+        "min": 1.1174
+      }
+    },
+    "var_metrics": {
+      "confidence_level": 0.95,
+      "time_horizon_days": 4,
+      "var_90": 0.845,
+      "var_95": 1.0845,
+      "var_99": 1.5338,
+      "var_custom": 1.0845
+    }
+  },
+  "status": "success",
+  "ticker": "SHIB"
+}
