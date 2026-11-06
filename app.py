@@ -402,6 +402,9 @@ def sme_file(report_id:str,version:str,name:str,principal=Depends(_require_admin
 # disk still knows who they are. Invalid configuration loads nobody.
 from publication import reviewers as publication_reviewers
 publication_reviewers.load_from_env()
+# SCOOBY_OPEN_REVIEW=true lets any validated World ID review and sign off publication; when it is off, reviewers
+# that open review added are disabled so no check still accepts them.
+publication_admin.apply_open_review_mode()
 if web_origin:
  app.add_middleware(publication_admin_routes.AdminWebCORS, allow_origins=[web_origin], allow_credentials=False,
                     allow_methods=['GET','POST','DELETE'], allow_headers=['Content-Type','Authorization','Idempotency-Key'])

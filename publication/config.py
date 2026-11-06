@@ -135,6 +135,12 @@ class AdminConfig:
     publication_requires_review: bool  # a publication target needs a current World-confirmed report approval
 
 
+def open_review() -> bool:
+    """SCOOBY_OPEN_REVIEW=true: any World ID that passes login validation (WORLD_ACCEPTED_ACR, Orb by default) becomes a
+    reviewer with report_review and publication on its first admin login. Off by default; see publication.admin."""
+    return _bool(os.getenv('SCOOBY_OPEN_REVIEW'))
+
+
 def admin_config() -> AdminConfig:
     release = os.getenv('SCOOBY_REPORT_RELEASE', 'all').strip().lower()
     if release not in ('all', 'approved'):

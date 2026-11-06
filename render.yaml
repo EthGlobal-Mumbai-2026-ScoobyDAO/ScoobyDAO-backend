@@ -51,9 +51,10 @@ services:
         value: approved
       - key: SCOOBY_ADMIN_AUDIENCE
         value: https://scoobydao-backend.onrender.com
-      # Output of `python -m publication.cli export-reviewer --name <label>`; set in the dashboard.
-      - key: SCOOBY_REVIEWERS
-        sync: false
+      # Any Orb-verified World ID may review reports and sign off publication (no reviewer list yet).
+      # Set to false and use SCOOBY_REVIEWERS (export-reviewer) to restrict it to named SMEs later.
+      - key: SCOOBY_OPEN_REVIEW
+        value: "true"
       # Set when the frontend is deployed (step 4); exact origin, no trailing slash.
       - key: SCOOBY_WEB_ORIGIN
         sync: false
