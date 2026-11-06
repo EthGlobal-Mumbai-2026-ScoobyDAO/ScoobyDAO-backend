@@ -12,6 +12,8 @@ The completed Scooby DAO source branches are merged into `main`. This is a **pri
 
 Source checkpoint: backend `96880e7` (includes the teammate's separate PR #6 after our report checkpoint `5893caa`), web `fa0b1f0743e18841424ed467bcf8dbf7e374d157`. Later documentation commits may advance `main` without changing this source baseline.
 
+Open, not merged: backend PR #10 adds the admin World ID checkpoints runtime (admin sessions, report sign-off, the case-bridge hook). It is synthetic-tested only, with no live World run. See [docs/admin-world-checkpoints.md](docs/admin-world-checkpoints.md).
+
 ## Verification
 
 - Exact PR #4 head passed Python checks and a Linux Compose image build/API/worker-heartbeat smoke.

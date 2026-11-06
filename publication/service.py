@@ -108,6 +108,21 @@ def _check_target_integrity(c, t) -> dict:
     return target
 
 
+def _require_report_approval(c, report_id: str, version: str) -> None:
+    """Release policy: publication follows a current World-confirmed admin approval of the exact report
+    version (checkpoint 2, publication/review.py). That approval is a precondition only; publication still
+    needs its own chain-bound sign-off and an explicit publish request."""
+    from . import review
+    from .config import ConfigError, admin_config
+    try:
+        required = admin_config().publication_requires_review
+    except ConfigError as e:
+        raise Unavailable(str(e)) from None
+    if required and not review.approved(c, report_id, version):
+        raise Conflict('this report version has no current World-confirmed admin approval (checkpoint 2); '
+                       'approve it in the admin review queue before publication')
+
+
 def public_target(t) -> dict:
     target = json.loads(t['target_json'])
     return {'id': t['id'], 'report_id': t['report_id'], 'report_version': t['report_version'],
@@ -133,6 +148,7 @@ def prepare_target(report_id: str, version: str, params: dict, *, idem: str, act
             report = json.loads(raw)
         except ValueError:
             raise Unprocessable('report.json is not valid JSON') from None
+        _require_report_approval(c, report_id, version)
         if not chain_cfg.registry:
             raise Unavailable('SCOOBY_REPORT_REGISTRY is not configured')
         p = dict(params)
@@ -198,7 +214,10 @@ def _expire_stale(c, target_id: str | None = None, attempt_id: str | None = None
         _forget(r['id'])
 
 
-def create_attempt(target_id: str, decision: str, reason: str, *, idem: str, actor: str, world: WorldClient) -> dict:
+def create_attempt(target_id: str, decision: str, reason: str, *, idem: str, actor: str, world: WorldClient,
+                   initiator: tuple[str, str] | None = None) -> dict:
+    """initiator: (iss, sub) of the admin session that asked for this sign-off. When set, only that
+    admin, still holding the publication scope, can complete it. Operator-started attempts pass None."""
     if decision not in ('approve', 'reject', 'revise'):
         raise Unprocessable('decision must be approve, reject or revise')
     rh = request_hash({'target_id': target_id, 'decision': decision, 'reason': reason})
@@ -228,11 +247,11 @@ def create_attempt(target_id: str, decision: str, reason: str, *, idem: str, act
             raise Conflict('a sign-off attempt is already pending for this target')
         c.execute('''INSERT INTO pub_attempts(id,target_id,decision_intent,reason,policy_version,accepted_acr,device_code_hash,
                      user_code,verification_uri,verification_uri_complete,interval,next_poll_at,started_at,expires_at,status,
-                     idem,request_hash,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                     idem,request_hash,created,initiator_iss,initiator_sub) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                   (aid, target_id, decision, reason, cn.POLICY_VERSION, json.dumps(list(accepted)),
                    digest(dev.device_code.encode()), dev.user_code, dev.verification_uri, dev.verification_uri_complete,
                    dev.interval, started_at + dev.interval, started_at, started_at + dev.expires_in, 'pending',
-                   idem, rh, now()))
+                   idem, rh, now(), *(initiator or (None, None))))
         audit(c, target_id, 'attempt_started', actor, {'attempt_id': aid, 'decision_intent': decision})
         _remember(aid, dev.device_code)
         return public_attempt(c.execute('SELECT * FROM pub_attempts WHERE id=?', (aid,)).fetchone())
@@ -333,6 +352,13 @@ def _finish_tokens(attempt_id: str, id_token: str, world: WorldClient) -> dict:
             c.execute("UPDATE pub_attempts SET status='rejected_not_reviewer' WHERE id=?", (attempt_id,))
             audit(c, a['target_id'], 'rejected_not_reviewer', 'world', {'attempt_id': attempt_id, 'sub_sha256': digest(ident_.sub.encode())})
             return public_attempt(c.execute('SELECT * FROM pub_attempts WHERE id=?', (attempt_id,)).fetchone())
+        if a['initiator_iss'] is not None:
+            from .admin import permitted
+            if (ident_.iss, ident_.sub) != (a['initiator_iss'], a['initiator_sub']) or not permitted(c, ident_.iss, ident_.sub, 'publication'):
+                c.execute("UPDATE pub_attempts SET status='rejected_not_reviewer', error=? WHERE id=?",
+                          ('confirmed by a different World ID than the requesting admin, or the admin lost the publication scope', attempt_id))
+                audit(c, a['target_id'], 'rejected_not_initiator', 'world', {'attempt_id': attempt_id, 'sub_sha256': digest(ident_.sub.encode())})
+                return public_attempt(c.execute('SELECT * FROM pub_attempts WHERE id=?', (attempt_id,)).fetchone())
         t = c.execute('SELECT target_digest FROM pub_targets WHERE id=?', (a['target_id'],)).fetchone()
         rid = ident()
         c.execute('''INSERT INTO pub_receipts(id,attempt_id,target_id,target_digest,decision,reason,reviewer_iss,reviewer_sub,acr,
@@ -392,6 +418,7 @@ def request_publication(target_id: str, *, idem: str, actor: str, gate: PublishG
         if not t:
             raise NotFound('target not found')
         target = _check_target_integrity(c, t)
+        _require_report_approval(c, t['report_id'], t['report_version'])
         if target['chainId'] != chain_cfg.chain_id or target['registry'].lower() != (chain_cfg.registry or '').lower():
             raise Conflict('target chain/registry differs from the configured publisher')
         latest = c.execute('SELECT * FROM pub_receipts WHERE target_id=? ORDER BY verified_at DESC, rowid DESC LIMIT 1',

@@ -4,6 +4,9 @@ Point the web app's NEXT_PUBLIC_API_URL at http://<host>/web/v1. Only health, re
 report approval requests and approvals live here; /claims, /deployments and /demo/scan
 belong to other workstreams (see docs/publication-decisions.md).
 
+Report reads are public. Requesting a publication sign-off and reading its approval (which
+carries the World user code) are admin actions: they need an admin session holding the
+`publication` scope, and only the requesting admin can see or complete the attempt.
 Responses never include device codes, tokens or key material.
 """
 from __future__ import annotations
@@ -16,7 +19,7 @@ from fastapi.responses import Response
 
 from store import db, digest
 from . import service
-from .deps import get_chain_cfg, get_gate, get_settings, get_world, get_world_optional
+from .deps import get_chain_cfg, get_gate, get_settings, get_world, get_world_optional, require_admin
 
 log = logging.getLogger('publication.web')
 router = APIRouter(prefix='/web/v1', tags=['web'])
@@ -146,7 +149,7 @@ def report_raw(web_id: str):
 
 
 @router.post('/reports/{web_id}/approve')
-def request_approval(web_id: str, world=Depends(get_world)):
+def request_approval(web_id: str, principal=Depends(require_admin('publication')), world=Depends(get_world)):
     rid, ver = _split(web_id)
     with db() as c:
         t = _latest_target(c, rid, ver)
@@ -156,10 +159,13 @@ def request_approval(web_id: str, world=Depends(get_world)):
         pending = c.execute("SELECT * FROM pub_attempts WHERE target_id=? AND status='pending' ORDER BY created DESC LIMIT 1",
                             (t['id'],)).fetchone()
         if pending:
+            if (pending['initiator_iss'], pending['initiator_sub']) != (principal.iss, principal.sub):
+                raise HTTPException(409, 'another sign-off is already pending for this target')
             return _web_approval(c, dict(pending))
     try:
         a = service.create_attempt(t['id'], 'approve', 'Requested from the web sign-off page',
-                                   idem=f'web:{t["id"]}:{uuid.uuid4().hex}', actor='web', world=world)
+                                   idem=f'web:{t["id"]}:{uuid.uuid4().hex}', actor=f'admin:{principal.label}', world=world,
+                                   initiator=(principal.iss, principal.sub))
     except service.PubError as e:
         raise HTTPException(e.status, str(e)) from None
     with db() as c:
@@ -167,8 +173,12 @@ def request_approval(web_id: str, world=Depends(get_world)):
 
 
 @router.get('/approvals/{attempt_id}')
-def approval(attempt_id: str, world=Depends(get_world_optional), settings=Depends(get_settings),
-             chain_cfg=Depends(get_chain_cfg), gate=Depends(get_gate)):
+def approval(attempt_id: str, principal=Depends(require_admin('publication')), world=Depends(get_world_optional),
+             settings=Depends(get_settings), chain_cfg=Depends(get_chain_cfg), gate=Depends(get_gate)):
+    with db() as c:
+        own = c.execute('SELECT initiator_iss, initiator_sub FROM pub_attempts WHERE id=?', (attempt_id,)).fetchone()
+    if not own or (own['initiator_iss'], own['initiator_sub']) != (principal.iss, principal.sub):
+        raise HTTPException(404, 'approval not found')  # only the requesting admin sees its user code
     try:
         a = service.poll_attempt(attempt_id, world)
     except service.PubError as e:

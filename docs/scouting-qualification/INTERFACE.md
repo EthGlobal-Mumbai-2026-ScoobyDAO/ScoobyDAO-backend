@@ -28,6 +28,7 @@ The scouting transport uses an explicitly configured HTTPS origin or loopback HT
 | Cases read model | `scouting-case-list/1`, lane/priority, freshness, reasons, disabled verified continuation | Accepted for local read-only prototype at the exact tested snapshot below; consumer PR #6 commit73f4c02b5f7eb268e238ea861af05b7198d5c493 recorded; dependency merge remains |
 | Research authorization | Root build charter: separate scoped candidate action/principal result | Await backend verifier seam and teammate implementation acceptance |
 | Social provider | Investigation transport; discovery consumes lead results | Await callable/result contract and consumer acceptance |
+| Admin checkpoints | Backend #10: `schemas/runtime/admin-checkpoints-v1.schema.json` (admin session, review queue/detail/attempt, consumer `scooby.report-review-status/1`) and the [handoff](../admin-world-checkpoints.md) | Backend producer tests pass against the schema; await web consumer acceptance |
 
 Implementation PRs must include positive and negative producer/consumer fixtures, version identifiers, source byte/digest rules and failure semantics. Record acceptance and exact commits here or link the adopted repository contract; do not silently replace field names across workstreams.
 
@@ -54,5 +55,7 @@ The canonical producer v1 schema constrains continuation to unavailable/null and
 ## Admin-only World checkpoints (current authority)
 
 See [WORLD-AGENT-BUILD-CHARTER.md](WORLD-AGENT-BUILD-CHARTER.md). Case authorization and generated-report sign-off are distinct admin actions. World identity must be combined with server-side admin/reviewer permission. Case targets bind evidence/policy/budget; report targets bind exact report/version/digest, covered manifest and decision. Separate receipts, nonce/expiry/idempotency and cross-action rejection are required. Automatic research skips case human consent only; its report still enters admin review. Neither approval automatically publishes.
+
+Backend #10 implements both on the server: see [admin-world-checkpoints.md](../admin-world-checkpoints.md) for routes, DTO names and states.
 
 The consumer read model contains only release-permitted reports and safe review/provenance status, without admin actions, drafts, proof material or user codes. Admin target/attempt/status APIs require an accepted private authorization boundary; hiding buttons does not provide it. Existing v1 read-only acceptance and local v2 synthetic journeys do not establish production permission separation. Backend/web must map existing case and publication seams to versioned profiles and record acceptance; do not silently change frozen research schemas.

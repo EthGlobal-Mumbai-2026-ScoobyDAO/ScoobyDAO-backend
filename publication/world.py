@@ -270,6 +270,10 @@ class WorldClient:
             raise TokenInvalid('amr missing or malformed')
         if not isinstance(claims['sub'], str) or not claims['sub']:
             raise TokenInvalid('sub missing')
+        # World documents no delegation claim for ID tokens. An RFC 8693 actor claim would mean someone other
+        # than the authenticated person is acting, and no human checkpoint accepts that.
+        if 'act' in claims or 'may_act' in claims:
+            raise TokenInvalid('delegated (actor) token cannot confirm a human checkpoint')
         return Identity(iss=claims['iss'], sub=claims['sub'], acr=claims['acr'], amr=tuple(amr), auth_time=auth_time)
 
     # ------------------------------------------------------------------ helpers

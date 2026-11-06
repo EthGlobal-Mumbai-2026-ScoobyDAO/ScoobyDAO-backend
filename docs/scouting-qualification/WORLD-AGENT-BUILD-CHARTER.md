@@ -81,3 +81,7 @@ Case orchestration is in backend PR #12, bounded producer in #11, web integratio
 The teammate supplies real verifier/delegation integration and security review; backend supplies durable targets, receipts and authorization; web supplies the two admin journeys and consumer separation. Pin AgentKit SDK/network/deployment and delegated permissions before use. Model-enabled research remains separately bounded and cannot approve either human checkpoint.
 
 Existing committed work and exact inspected PR heads: [World ID PR inventory and teammate continuation](WORLD-ID-PR-INVENTORY.md). Start there to reuse the case bridge and publication primitives without duplicating them.
+
+## Backend implementation in this PR
+
+This PR now also carries the backend runtime for both checkpoints: [admin-world-checkpoints.md](../admin-world-checkpoints.md) maps each requirement above to code and tests, and gives the API, states, configuration, setup, judge demo, security limits and merge steps. The evidence is synthetic (fake World issuer). Live World acceptance, the web admin journeys and the merge with `main` and backend #12 remain open.

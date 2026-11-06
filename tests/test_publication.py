@@ -19,10 +19,11 @@ from fastapi.testclient import TestClient
 
 from app import app
 from store import DATA, db, now as real_now
-from publication import chain, deps, publisher, service
+from publication import admin, chain, deps, publisher, review, service
 from publication.config import chain_config, world_config
 from publication.world import WorldClient, ASSERTION_TYPE
 from fake_world import CLIENT_ID, ISSUER, Clock, FakeWorld, new_rsa, pem
+from admin_support import login
 
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLE = Path(__file__).parent / 'historical-bundle'
@@ -86,6 +87,8 @@ def env(monkeypatch, tmp_path):
     clock = Clock(real_now())
     monkeypatch.setattr(service, 'now', clock)
     monkeypatch.setattr(publisher, 'now', clock)
+    monkeypatch.setattr(admin, 'now', clock)
+    monkeypatch.setattr(review, 'now', clock)
     client_key = new_rsa()
     key_path = tmp_path / 'world_client_key.pem'
     key_path.write_bytes(pem(client_key))
@@ -96,6 +99,8 @@ def env(monkeypatch, tmp_path):
         'SCOOBY_RESOLVER': RESOLVER, 'SCOOBY_ADJUDICATOR': ADJUDICATOR, 'SCOOBY_PUBLISHER_KEY': PUBLISHER_KEY,
         'SCOOBY_ATTESTOR_KEY': ATTESTOR_KEY, 'SCOOBY_OPERATOR_TOKEN': 'op-token', 'SCOOBY_APPROVAL_TTL': '600',
         'SCOOBY_DEMO_AUTOPUBLISH': 'false', 'SCOOBY_RPC_URL': 'http://127.0.0.1:1',
+        # These tests cover publication mechanics; the checkpoint-2 precondition has its own tests.
+        'SCOOBY_PUBLICATION_REQUIRES_REVIEW': 'false',
     }.items():
         monkeypatch.setenv(k, v)
     fw = FakeWorld(clock, client_key)
@@ -106,6 +111,7 @@ def env(monkeypatch, tmp_path):
     with db() as c:
         c.execute('INSERT OR REPLACE INTO pub_reviewers(iss,sub,label,enabled,created) VALUES(?,?,?,?,?)',
                   (ISSUER, fw.default_sub, 'reviewer-1', 1, clock()))
+        admin.grant(c, ISSUER, fw.default_sub, 'publication', 'test')  # web sign-off is an admin action
         # Tests share one SQLite file; park other tests' unfinished outbox rows so publishers only see ours.
         c.execute("UPDATE pub_outbox SET state='failed', error='test isolation' WHERE state NOT IN ('confirmed','failed')")
 
@@ -168,9 +174,9 @@ def start(ns, target_id, decision='approve', *steps, key=None):
 def poll(ns, attempt_id, times=1, advance=None):
     out = None
     for _ in range(times):
-        a = client.get(f'/publication/v1/attempts/{attempt_id}').json()
+        a = client.get(f'/publication/v1/attempts/{attempt_id}', headers=OP).json()
         ns.clock.advance(advance if advance is not None else max(a['interval'], 1))
-        out = client.get(f'/publication/v1/attempts/{attempt_id}').json()
+        out = client.get(f'/publication/v1/attempts/{attempt_id}', headers=OP).json()
     return out
 
 
@@ -227,7 +233,7 @@ def test_happy_path_approve_then_publish_signature_recovers(env):
     sender = FakeSender()
     assert publisher.run_once(sender) == 'confirmed'
     assert len(sender.broadcasts) == 1
-    assert client.get(f"/publication/v1/targets/{t['id']}").json()['status']['state'] == 'published'
+    assert client.get(f"/publication/v1/targets/{t['id']}", headers=OP).json()['status']['state'] == 'published'
 
 
 def test_access_denied_no_receipt_publish_409(env):
@@ -356,9 +362,12 @@ def test_reject_and_revise_never_publish_newer_reject_overrides(env):
 
 def test_proof_success_alone_creates_no_outbox(env):
     t, a = approved_target(env)
+    admin_h = login(client, env.fw, env.clock)
     for _ in range(3):
-        client.get(f"/publication/v1/attempts/{a['id']}")
-        client.get(f"/web/v1/approvals/{a['id']}")
+        client.get(f"/publication/v1/attempts/{a['id']}", headers=OP)
+        # An operator-started attempt is not this admin's: the web route neither shows nor advances it.
+        assert client.get(f"/web/v1/approvals/{a['id']}", headers=admin_h).status_code == 404
+        assert client.get(f"/web/v1/approvals/{a['id']}").status_code == 401
     assert outbox_rows(t['id']) == []
 
 
@@ -429,7 +438,7 @@ def test_revoke_before_and_after_confirm(env):
     assert publisher.run_once(sender) == 'confirmed'
     r2 = client.post(f"/publication/v1/targets/{t2['id']}/revoke", json={'reason': 'later doubt'}, headers=OP).json()
     assert r2['phase'] == 'after_confirmation'
-    st = client.get(f"/publication/v1/targets/{t2['id']}").json()['status']
+    st = client.get(f"/publication/v1/targets/{t2['id']}", headers=OP).json()['status']
     assert st['state'] == 'revoked' and st['published_onchain'] is True
 
 
@@ -459,12 +468,13 @@ def test_frozen_schemas_match_handoff_digests():
 def test_web_approval_never_leaks_secrets(env):
     t = make_target(env)
     web_id = f"{t['report_id']}@{t['report_version']}"
-    a = client.post(f'/web/v1/reports/{web_id}/approve')
+    admin_h = login(client, env.fw, env.clock)
+    a = client.post(f'/web/v1/reports/{web_id}/approve', headers=admin_h)
     assert a.status_code == 200, a.text
     bodies = [a.text]
     for _ in range(5):
         env.clock.advance(6)
-        bodies.append(client.get(f"/web/v1/approvals/{a.json()['id']}").text)
+        bodies.append(client.get(f"/web/v1/approvals/{a.json()['id']}", headers=admin_h).text)
     bodies.append(client.get(f'/web/v1/reports/{web_id}').text)
     blob = '\n'.join(bodies)
     assert '"status":"approved"' in bodies[-2].replace(' ', '')
@@ -571,8 +581,10 @@ def test_web_adapter_shapes(env):
     assert client.get('/web/v1/health').json() == {'ok': True}
     raw = client.get(f'/web/v1/reports/{web_id}/raw')
     assert hashlib.sha256(raw.content).hexdigest() == t['report_sha256']
-    appr = client.post(f'/web/v1/reports/{web_id}/approve').json()
+    assert client.post(f'/web/v1/reports/{web_id}/approve').status_code == 401   # admin action
+    admin_h = login(client, env.fw, env.clock)
+    appr = client.post(f'/web/v1/reports/{web_id}/approve', headers=admin_h).json()
     for k in ('id', 'reportId', 'manifestHash', 'status', 'expiresAt', 'userCode', 'verificationUri'):
         assert k in appr
-    assert client.post(f'/web/v1/reports/{web_id}/approve').json()['id'] == appr['id']   # reuse pending
+    assert client.post(f'/web/v1/reports/{web_id}/approve', headers=admin_h).json()['id'] == appr['id']   # reuse pending
     assert client.get(f'/web/v1/reports/{web_id}').json()['status'] == 'awaiting_approval'
