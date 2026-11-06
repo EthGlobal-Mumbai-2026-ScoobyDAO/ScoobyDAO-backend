@@ -10,7 +10,7 @@ The user's words: “the cases is a pane where the live scouts exists ranked in 
 
 1. **Cases is the actionable live scouting queue.** Persist scout/candidate identity and source lineage. Rank by backend-owned investigation actionability. Each card explains why the token was scouted, source-grounded suspicion, deterministic check results, and the reason for its recommended next action. The existing fresh cork/paper/mascot visual design remains the design foundation.
 2. **Automatic path:** the strongest candidates satisfying the explicit automatic-admission policy enter investigation directly, without a human click. Durable jobs run the investigation, produce the research bundle and generate report assets. The report appears in Reports and is linked from the originating Case. The Case remains inspectable through its workflow states.
-3. **Human path:** a case requiring judgment presents **Go for investigation**. A human reviews the case and initiates that action. World ID confirmation is required before the backend continues the investigation. The verified authorization binds the actual case/candidate, evidence/policy revision, intended action, nonce and expiry; it is consumed once. Denied, expired, cancelled or failed confirmation does not start work. This pre-investigation gate is distinct from final report review/publication.
+3. **Human path (admin only):** a case requiring judgment presents **Go for investigation**. An authorized admin reviews the case and initiates that action. World ID confirmation is required before the backend continues the investigation. The verified authorization binds the actual case/candidate, evidence/policy revision, intended action, nonce and expiry; it is consumed once. Denied, expired, cancelled or failed confirmation does not start work. This pre-investigation gate is distinct from final report review/publication.
 4. **Shared downstream path:** both paths use the same bounded investigation → report generation → Reports visibility → original-Case report access. Queued/running/partial/failed/completed states and supported retry/recovery are visible. An investigation job that merely marks all pillars unavailable is not this completed product path.
 5. **Reports stays available in the same app.** Existing authored reference reports remain readable, while newly produced reports populate automatically. Reference/demo provenance is explicit. A case without a report shows its actual investigation action or progress rather than a dead link.
 
@@ -24,6 +24,12 @@ The correction does not authorize invented suspicious findings. A new-pool lead 
 
 Final report sign-off and publication remain separate from the human authorization to start research. The existing World publication prototype does not automatically implement this candidate-action confirmation. The teammate build charter must include this required pre-investigation integration; a future-only checkbox is insufficient for product acceptance.
 
+## Two admin World ID checkpoints
+
+User clarification, 6 November 2026 IST: **both integrations belong to admins, not consumers/clients**. The [World ID build charter](WORLD-AGENT-BUILD-CHARTER.md) defines (1) case-scoped approval when a scout needs human permission to investigate, and (2) separate sign-off after a report is generated. Automatic investigations skip the first gate only; every generated report enters admin review. Bind the second decision to the exact immutable report/version/digest. Changes require new review. Neither receipt substitutes for the other, and report approval never automatically publishes or broadcasts.
+
+The Cases investigation controls and report review queue are admin functions. Consumers access reports permitted by release policy and safe provenance/review status, without these approval controls or World prompts. Server-side admin/reviewer authorization is required in addition to World identity; hidden controls and URL separation are insufficient. Local operator and synthetic tests do not prove this access boundary.
+
 ## Owner responsibilities
 
 | Owner | Correction required |
@@ -33,7 +39,7 @@ Final report sign-off and publication remain separate from the human authorizati
 | Investigation | Supply the invoked bounded research/report producer, not only isolated source adapters; preserve evidence, pillar coverage, reasoning and report contracts |
 | Web | Restore the established fresh design; put reasons and next actions on cards; implement required World ID launch/pending/result flow; restore Reports and connect generated reports back to Cases |
 | Report renderer | Ensure automatically produced bundles render readable HTML/PDF and publish draft artifacts into the report library with correct report/case identity |
-| Human World teammate | Implement/review the real case-scoped World ID confirmation adapter and consent binding in the charter; keep it separate from publication authority |
+| Human World teammate | Implement/review both admin World checkpoints: case-scoped investigation consent and digest-bound generated-report sign-off; keep them separate from publication authority |
 | Root | Correct all briefs/PR charter, reconcile interfaces and validate the whole journey; stop reporting component-level readiness as product completion |
 
 ## Acceptance checkpoint
@@ -42,5 +48,6 @@ Demonstrate two complete local journeys against the composed implementation:
 
 - Policy-qualified scout → automatic investigation → generated report visible in Reports → opening it from the original Case.
 - Human-required scout → human reviews reasons → Go for investigation → World ID confirmation → one investigation → generated report visible and reachable from the Case. Negative confirmation/expiry/replay never starts another run.
+- Each generated report enters admin review; a distinct World-confirmed exact-version sign-off records approve/reject/revise without automatic publication. Consumers/non-admins cannot invoke either checkpoint or access private review data.
 
 Use real source data where available and explicitly labeled synthetic/provider mocks for unavailable external identity or paid dependencies. A mocked World confirmation is an integration test, not live human verification. Record missing configuration/budgets honestly. Do not run more SearchApi calls, paid models, account registration, transactions, publisher or public deployment merely to claim completion; current source-call cap remains exhausted. Those operational boundaries do not excuse leaving the product wiring as disconnected placeholders.

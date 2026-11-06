@@ -1,62 +1,81 @@
-# World Agent: two-way investigation authorization handoff
+# World ID: two admin approval integrations
 
-**Required product gate:** a human reviews a scouted Case, clicks **Go for investigation**, completes World ID confirmation, and only then may the backend continue that Case through investigation and generated report creation. This is required for the human lane; it is distinct from final report sign-off/publication. Policy-qualified strongest scouts use the automatic lane without a human click. See [PRODUCT-FLOW.md](PRODUCT-FLOW.md). An unavailable verifier is an unfinished integration, not the target behavior.
+Authority: Aditya's clarification, 6 November 2026 IST. Both World ID checkpoints belong to the **admin application**, not consumer/client journeys. This is the human teammate's build charter and integration handoff, not a claim that live verification is complete. See [PRODUCT-FLOW.md](PRODUCT-FLOW.md).
 
-Owner: human teammate. Integrators: backend and web. Status: implementation build charter; live provider verification is not performed by this PR.
+## Scope and ownership
 
-## Protected action and two deliverables
+| Checkpoint | Admin action | Protected result |
+|---|---|---|
+| 1. Before investigation, when human approval is required | Review a scout Case, choose **Go for investigation**, then confirm through World ID | Start one bounded investigation for that exact Case/evidence/policy revision |
+| 2. After report generation | Review the generated report and evidence, choose approve, reject or request revision, then confirm through World ID | Record an authenticated sign-off decision for that exact immutable report version and digest |
 
-The action is **start or resume one bounded investigation for a particular candidate and evidence/policy revision**. It grants no report approval, scam certification, publication or financial action. There are two handoffs:
+Policy-qualified automatic investigations bypass checkpoint 1 only. Their generated reports still enter checkpoint 2. A candidate authorization, agent decision or successful report generation cannot count as report sign-off. Approval does not automatically publish anything or broadcast a transaction; publication/release remains a separate explicitly authorized action under its own policy.
 
-**A — Our system to the agent.** Backend/discovery publish a deterministic, versioned qualification decision, safe read model, dispatch/resume API and verifier interface. A delegated authenticated agent can request automatic admission only when all policy/evidence/budget conditions hold. Backend rechecks those conditions immediately before committing a job. The request carries no authority to change its own policy, claim new verified concern groups or broaden a budget.
+Consumers/clients read reports permitted by the release policy and see safe provenance/review status. They do not authorize investigations, operate either World flow, review private drafts or receive admin action controls, user codes, credentials or proof material. Pending reports and review queues belong to admins. Existing local operator prototypes are not a production admin access boundary.
 
-**B — Teammate to our system.** Implement and test AgentKit/delegation verification and explicit human verification for blocked cases behind that interface. Return a server-verifiable, scope-bound principal/decision result; the backend consumes it transactionally to resume the correct workflow. Supply provider config, pinned versions/network, failure semantics, consent UI requirements, test vectors and a reviewed integration PR. An unconfigured or failed verifier leaves the case waiting.
+The human teammate owns the real World identity/AgentKit adapter and integration PR. Backend owns authorization, target/receipt persistence, budgets and durable transitions. Web owns both admin journeys and consumer separation. Discovery supplies screening evidence; investigation supplies immutable research output; renderer supplies readable assets without changing report identity. Root reconciles contracts and acceptance.
 
-## Separate identity, permission and decision
+Deliver both integrations with pinned dependencies/configuration, versioned schemas, tests, setup and a cold-pickup handoff. Reuse reviewed issuer/JWKS primitives where appropriate. Keep case and report target/receipt namespaces distinct; preserve the existing publication implementation rather than introducing a competing one.
 
-AgentKit proves a relationship between an agent and a World ID-verified human. It does not prove a suspicious token, a satisfied Scooby concern group or informed consent to a specific investigation. World device-grant authentication similarly identifies a reviewer; the application must display and bind the action the person intends to authorize. The currently merged `publication/` module concerns report publication targets and is not automatically a candidate authorization service.
+## Identity, admin permission and consent
 
-The teammate may reuse reviewed issuer/JWKS/allowlist primitives from `publication/`, but must keep candidate-action targets, receipts, nonces and consumption separate from publication targets/receipts. Keep proof acquisition and app authorization separate. Do not interpret an agent wallet registration, frontend `verified: true`, local operator actor string or old publication receipt as this action's authorization.
+World authentication identifies a person; it does not grant Scooby admin permission, establish token risk or authorize a displayed action. Verify the admin session/permission, reviewer allowlist and action scope on the server as well as the World proof. A World-verified consumer cannot become an admin by completing a flow. AgentKit/delegation cannot impersonate either human decision or fabricate a human receipt.
 
-## Proposed binding (freeze with backend)
+Display the exact target, gaps, intended decision and consequences before confirmation. Bind consent in server-side records. A frontend Boolean, operator label, wallet registration or identity token alone is insufficient. Raw tokens, private keys, device codes and personal reviewer identifiers stay out of public DTOs, logs and report assets. Server secrets must not become public frontend variables.
 
-Use an additive versioned target/receipt profile rather than editing frozen candidate/report schemas. Each authorization target binds:
+## Checkpoint 1: scout Case to investigation
 
-- Canonical candidate ID, chain ID and contract address; immutable screening/evidence snapshot digest and revision; qualification decision ID and exact policy ID/version/digest.
-- Action `investigation:start` or a separately permitted `investigation:resume`; selected lane and diagnostic-exception status; applicable run ID on resume; explicit allowed bounded work/budget reference.
-- Service audience/resource, nonce, issued/expiry times and a human-readable explanation of evidence, gaps and what continuation does.
+Show source-grounded reasons, deterministic checks, unknowns, candidate identity and allowed research scope. The admin initiates **Go for investigation** and completes case-scoped World confirmation. An unconfigured verifier stays visibly unavailable and starts no job.
 
-The server-side verifier result additionally binds principal type (`agent` or `human`), verified issuer/principal reference, delegation/action scope where relevant, decision (`approve`, `reject`, `revise`), verification time, validity/revocation state and proof/receipt reference. Keep raw credentials, proof secrets and personal identifiers out of public DTOs, logs and report assets. Pseudonymous references still need appropriate access control.
+The target binds Case ID, canonical chain/address, immutable evidence snapshot/revision, exact policy digest/version, intended investigation action, diagnostic-exception status, allowed work/budget reference, existing run for a supported resume, audience/resource, nonce and issue/expiry times. The verified result binds the permitted admin/reviewer, issuer, decision, verification time and scoped receipt reference.
 
-An agent auto decision is an agent/policy authorization record. It must never be labeled as a human sign-off. Human consent is for the displayed candidate/snapshot/action; changes to candidate, evidence, policy or allowed scope invalidate continuation and require re-evaluation. Diagnostic approval records the exception and cannot promote its gate status.
+On approval, reopen evidence, recheck current policy/permissions/budget, then atomically consume authorization, persist audit and enqueue at most one durable investigation. Identical valid retries return the same run. Candidate/evidence/policy/scope changes invalidate the old target. Denial, cancellation, expiry, revocation and failure start no research. Diagnostic approval cannot upgrade gate qualification.
 
-## API and state contract
+Automatic and approved-human routes use the same producer/worker and Case -> run -> report lineage. An automatic policy decision is a backend authorization record, never a human receipt. The existing four-distinct-verified-group admission policy is unchanged.
 
-Backend owns exact route/JSON naming in [INTERFACE.md](INTERFACE.md). Required behavior:
+## Checkpoint 2: generated report to admin sign-off
 
-1. Read candidate/screening decision and allowed next action without triggering research. Expose source/verification availability and why human action is required.
-2. Begin a bound verification/consent attempt under authenticated access. Permit pending polling/cancel without leaking provider secrets; enforce expiry and provider backoff.
-3. Accept a verified principal+decision at a private server boundary. Browser assertions or caller-supplied snapshot hashes are not trusted. Verify audience, nonce, exact binding, allowlist/delegation, freshness and revocation.
-4. In one transaction, recheck current evidence/policy/budget, consume the correct unspent authorization, persist audit and enqueue at most one investigation. Replays return the existing result only for an identical idempotent request; conflicts/tampering fail. Do not consume authority without a recoverable committed dispatch record.
-5. Rejection/revision/expiry/revocation never starts work. An expired or changed case can begin a new attempt without reviving the old authorization. Retry/restart must not create duplicate research runs.
+Every successfully installed generated report, including partial reports and automatic-lane output, enters an admin pending-review queue. Generation and draft HTML/PDF rendering need no prior report sign-off. Imported references retain their provenance and absent Case lineage; they do not manufacture a live scout or approval.
 
-The common workflow is `observed → screened → auto-qualified / waiting-for-human / monitored`. Auto-qualified plus valid delegated authority and budget can enqueue research. Waiting-for-human plus a fresh verified authorization can enqueue diagnostic or qualified research as recorded. Both lead through the same investigation/report path and still require separate final report review before publication.
+The report review target binds:
 
-## AgentKit integration choices the teammate must pin
+- Report ID, immutable version and exact report SHA-256; candidate and originating Case/run when present. Missing reference lineage stays explicit.
+- Evidence/sidecar manifest digest and, when covered by the review, rendered artifact manifest/hashes. Changed report bytes, covered evidence or covered artifacts require a new target and fresh sign-off.
+- Intended decision (`approve`, `reject`, `revise`), reason, audience/resource, nonce, issue/expiry times and allowed reviewer scope.
 
-Pin the SDK/package and challenge protocol, exact AgentBook chain/deployment and RPC/finality assumptions, signer/audience validation, storage/replay strategy, registration/delegation revocation and principal rate limits. The current World integration guide resolves AgentBook on World Chain, while the GitHub README still describes a Base relay default; resolve this against the pinned package and canonical deployment rather than mixing defaults. This infrastructure chain is distinct from token research scope (Ethereum/Base).
+Show the recommendation, pillar TL;DRs, limitations, evidence and exact version. Fresh World confirmation creates a server-validated, single-use receipt for that decision/target. Rejection records a reason without release. Revision preserves the old report/decision; the replacement receives a new immutable version and pending-review target. An older approval never approves its replacement. Expired, denied, cancelled, failed or revoked attempts do not approve.
 
-The reference SDK integrates x402. This workflow does not authorize payments, payment fallback, wallet registration, relay submission or publication. Choose an identity/delegation boundary without an automatic payment side effect; any future paid/on-chain operation needs its own explicit authorization. Use fake provider transport or local test vectors for this build. Backend keys remain server-side and are not frontend config.
+Persist report review separately from generation/rendering and publication. Emit auditable review events and expose only a safe review status to permitted consumers; agree exact serialized names in a versioned DTO. World authentication is not itself a human signature over report bytes: application consent/receipt binding must be explicit. Local unauthenticated `/reviews` receipts cannot satisfy this checkpoint.
 
-## Definition of done and review evidence
+Reuse the existing `publication/` target/World reviewer receipt where suitable, followed by its separate explicit publish request. Its target may bind chain/claim parameters: reconcile those with off-chain report sign-off so a chain transaction, publisher key or publication is not a prerequisite for admin review. If a report receipt also authorizes a later publication request, document its exact scope and require that separate request. A case receipt can never substitute for it.
 
-- Backend and web accept one target/result contract and one declared authentication/authorization boundary. Provide source, dependency lock/version and setup/handoff docs without secrets.
-- Positive tests: scoped delegated agent plus actual policy eligibility dispatches exactly once; fresh allowed human consent resumes the exact blocked case once; correct request retries return the same result.
-- Negative tests: wrong token/chain/snapshot/policy/action/audience; expired/replayed/revoked result; disabled reviewer/delegation; unregistered signer; unavailable or timeout provider; changed evidence between approval and dispatch; concurrent retries; restart between consumption/enqueue. All preserve bounded and nonduplicated work.
-- UI shows candidate identity, evidence/gaps, scope and decision before consent, plus pending/deny/revise/expire/cancel/retry states. Authentication alone does not silently approve.
-- Cross-action tests prove investigation authorization cannot approve/publish a report and publication receipts cannot start investigations. Auto agents cannot manufacture human receipts.
-- A live acceptance run is separately documented only after appropriate configuration/authorization. Mock tests are labeled; no live claims from this charter.
+## Backend/web contract handoff
 
-## Handoff checklist
+These are existing repository seams to inspect, not a claim that production admin access or live verification is implemented:
 
-Our backend owner supplies state/read API, immutable revision/policy bindings, idempotency, queue/budget enforcement and an injectable verifier seam. Discovery supplies source-grounded concern assessment; investigation supplies bounded tools; web consumes backend state. The teammate supplies the real identity/delegation/human-verification adapter and its threat-model/test evidence. Root coordinates contract acceptance and PR integration. Do not replace the current publication module or start its publisher as a shortcut.
+| Surface | Existing seam | Required integration |
+|---|---|---|
+| Case confirmation | `POST /scouting/cases/{case_id}/challenge`, challenge World-attempt, attempt poll/cancel, case/run read model | Admin permission, bound target, v2 states and idempotent dispatch |
+| Report sign-off | `/publication/v1/targets`, target attempts, attempt poll/cancel/revoke and `/web/v1` adapter | Generated report review target, admin/reviewer access, review/publication distinction |
+| Local report review | `/reports/{id}/{version}/review` prototype | No unauthenticated alternate sign-off or release bypass |
+| Browser | Existing Cases, Reports and approval UI | Both mutations behind the admin boundary; consumer report pages have no investigation or approval controls |
+
+Backend/web must agree exact routes, session/principal handling, target/result profiles, safe read DTOs and error semantics. An `/admin` path is an organizational choice; URL naming, hidden buttons, CORS and loopback hosting do not supply server authorization. Protect private drafts, targets and relevant poll/status data as well as mutation routes.
+
+Cover pending, approved, denied, expired, cancelled, failed and superseded with explicit mapping to each existing service's serialized states, poll/backoff and deliberate retry. Preserve frozen candidate/report schemas through additive versioned runtime contracts. Neither checkpoint authorizes payments, wallet registration, relay submission, account enrollment, publication or transactions.
+
+## Acceptance and review evidence
+
+1. Allowed admin confirms an unchanged human-required Case: exactly one investigation and linked generated report. Automatic admission needs no checkpoint-1 receipt, but generated output still waits for checkpoint 2.
+2. Allowed report reviewer confirms the exact generated version: one authenticated decision, no repeated research and no automatic publication. Identical retries do not duplicate effects.
+3. Reject wrong candidate/report/version/digest, evidence/policy/action/audience/nonce, expired/replayed/revoked proof, disabled reviewers/delegation and changed permission. Concurrent requests and restart preserve consistency.
+4. Cross-action tests: case approval cannot sign off/publish a report; report approval cannot start investigation; agent/policy authority cannot impersonate a human; revised output cannot inherit old-target approval.
+5. Consumer/no-session/World-verified-but-non-admin requests cannot operate either checkpoint or access private drafts/codes/receipts. Hidden controls alone do not pass.
+6. Admin UI covers full review context, decision/reason, unavailable verifier, pending, reject/revise, expiry, cancellation, failure, retry and superseded target. Consumer UI shows only permitted reports and safe provenance/review state.
+7. Label synthetic provider/admission proof. Live World acceptance requires a separately recorded configured run; this charter performs no live verification, paid calls, publication or deployment.
+
+## Current state and next handoff
+
+Case orchestration is in backend PR #12, bounded producer in #11, web integration in web PR #6. Synthetic paths and captured historical evidence do not prove production admin authorization or live World. The merged publication prototype is not completion of both admin checkpoints. Reconcile each exact source head with this charter and record remaining admin authentication, report review/release, live verification and dependency gaps in the teammate PR.
+
+The teammate supplies real verifier/delegation integration and security review; backend supplies durable targets, receipts and authorization; web supplies the two admin journeys and consumer separation. Pin AgentKit SDK/network/deployment and delegated permissions before use. Model-enabled research remains separately bounded and cannot approve either human checkpoint.

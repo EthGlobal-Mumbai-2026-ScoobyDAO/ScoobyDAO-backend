@@ -1,6 +1,8 @@
-# Scouting and research qualification milestone
+# Scouting, research and admin World ID charter
 
 **Product authority correction:** read [PRODUCT-FLOW.md](PRODUCT-FLOW.md) first. Cases is the actionable live scouting queue. Highest-actionability policy-qualified cases automatically run investigation and generate Reports; human-required cases use **Go for investigation → required World ID confirmation → the same investigation/report workflow**. Generated reports appear in Reports and link from their original Case. This supersedes any interpretation below that a passive read-only board, isolated adapters or disabled controls complete the product.
+
+**Current admin scope:** [WORLD-AGENT-BUILD-CHARTER.md](WORLD-AGENT-BUILD-CHARTER.md) specifies both required admin World ID integrations: permission to investigate human-required scouts, and separate sign-off on generated reports. Automatic investigations skip only the first. Consumers/clients operate neither flow; server-side admin authorization is required. Report sign-off does not automatically publish.
 
 Status: active build charter, 6 November 2026. The user authorizes some policy-qualified candidates to enter bounded research automatically, while other candidates wait for verified human continuation. This supersedes blanket human candidate selection. Final report sign-off and publication remain separate actions.
 
@@ -26,7 +28,7 @@ Retain at least four distinct independently verified concern groups for normal g
 
 The backend owns dispatch policy and recomputes qualification from allowed verifiers and integrity-checked, fresh, candidate-bound evidence. Provider hints, Reddit allegations, stale/missing inputs, unsupported chains, held verifiers and demo/replay data cannot satisfy the live automatic gate. The API does not trust a client-supplied `auto_eligible` label.
 
-Human review can authorize bounded diagnostic research without changing gate qualification. A high-priority human case can therefore have incomplete evidence, with gaps visible. Urgency and research lane are distinct: show cases requiring an immediate human action in the attention row; show automatically admitted research in its own lane. Do not invent a percentage, calibrated risk score or fixed number of alert cards.
+Human review can authorize bounded diagnostic research without changing gate qualification. A high-priority human case can therefore have incomplete evidence, with gaps visible. Urgency and research lane are distinct: use one backend-owned actionability ranking across Cases; explain each lane/status without forcing every human-required case ahead of more actionable automatic cases. Do not invent a percentage, calibrated risk score or fixed number of alert cards.
 
 ## One social provider, two consumers
 

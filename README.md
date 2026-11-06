@@ -1,5 +1,7 @@
 # Scooby DAO backend — ACTIVE STATE
 
+Current build charter: [two admin World ID checkpoints](docs/scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md) cover human-required scout investigation and generated-report sign-off. These are admin functions, separate from consumer report reading and from explicit publication. Older runtime checkpoint notes below describe their recorded baseline.
+
 Checkpoint: **6 November 2026 IST — completed workstream PRs merged into main.** The FastAPI/Huey runtime, immutable native packages, offline discovery/investigation modules and portable PDF adapter are merged. Python checks and Linux Compose API/worker smoke passed. See [LIVE-STATE.md](LIVE-STATE.md) for the merge ledger, verification and exact remaining work; [DEPLOYMENT.md](DEPLOYMENT.md) for private staging; and [report storage/transfer](docs/report-assets.md) to carry the local RAY assets to a new target.
 
 The source is ready for **private single-host staging**. No server has been deployed. Continuous discovery and automated five-pillar research are not connected; sign-off is not authenticated. The teammate separately merged the World ID/publication prototype in PR #6 during this checkpoint; live verification remains deferred by user instruction. Public exposure requires a reviewed access boundary.
