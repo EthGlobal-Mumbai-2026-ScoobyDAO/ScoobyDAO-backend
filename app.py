@@ -115,7 +115,7 @@ def reference_run(x:Run,idempotency_key:str=Header(None)):
 @app.get('/investigations/{run_id}')
 def run(run_id:str):
  with db() as c:
-  r=row(getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))); r['pillars']=[row(x) for x in c.execute('SELECT * FROM pillars WHERE run_id=?',(run_id,))]; return r
+  r=row(getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))); r['pillars']=[row(x) for x in c.execute('SELECT * FROM pillars WHERE run_id=?',(run_id,))]; decision=c.execute('SELECT id FROM case_decisions WHERE run_id=?',(run_id,)).fetchone();r['graph_source']=__import__('case_graph').summary(c,decision['id']) if decision else None;return r
 @app.get('/investigations/{run_id}/events')
 def events(run_id:str):
  with db() as c:
@@ -193,23 +193,33 @@ def report_metadata(c,r):
  if digest(raw)!=r['sha256']: err(409,'Stored report integrity failure')
  doc=json.loads(raw)
  latest=c.execute('SELECT decision,created FROM reviews WHERE report_id=? AND version=? ORDER BY created DESC',(r['id'],r['version'])).fetchone()
- case_decision=c.execute('SELECT action,case_id FROM case_decisions WHERE run_id=?',(run['id'],)).fetchone()
+ case_decision=c.execute('SELECT id,action,case_id FROM case_decisions WHERE run_id=?',(run['id'],)).fetchone()
  admission_auth='world_id' if case_decision and case_decision['action']=='human_research' else 'policy_engine' if case_decision else 'unverified local operator'
- return {'report_id':r['id'],'report_version':r['version'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
-         'mode':doc.get('mode'),'provenance':'source_curated_reference' if run['status']=='reference_only' else 'case_investigation' if case_decision else 'imported','case_id':case_decision['case_id'] if case_decision else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),
+ return {'metadata_status':'available','integrity':'verified','report_id':r['id'],'report_version':r['version'],'run_id':run['id'],'run_status':run['status'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
+         'graph_source':__import__('case_graph').summary(c,case_decision['id']) if case_decision else None,'mode':doc.get('mode'),'provenance':'source_curated_reference' if run['status']=='reference_only' else 'case_investigation' if case_decision else 'imported','case_id':case_decision['case_id'] if case_decision else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),'fetch_times':sorted({e['fetched_at'] for e in doc.get('evidence',[]) if e.get('fetched_at')}),'pillars':{name:{'status':pillar['status'],'quality_issues':pillar.get('quality_issues',[])} for name,pillar in doc.get('pillars',{}).items()},'release':{'status':'unavailable','consumer_visible':None,'reason':'Admin review and release authorization are not implemented in this case workflow.'},
          'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':admission_auth},
          'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
+def unavailable_report_metadata(c,r):
+ # Preserve only indexed identifiers; never infer identity, coverage or review from unreadable bytes.
+ run=c.execute('SELECT id,candidate_id,status FROM investigations WHERE id=?',(r['run_id'],)).fetchone()
+ decision=c.execute('SELECT case_id FROM case_decisions WHERE run_id=?',(r['run_id'],)).fetchone()
+ return {'metadata_status':'unavailable','integrity':'unavailable','reason':'report_integrity_unavailable','report_id':r['id'],'report_version':r['version'],'run_id':r['run_id'],'run_status':run['status'] if run else None,'candidate_id':run['candidate_id'] if run else None,'case_id':decision['case_id'] if decision else None,'report_sha256':r['sha256'],'identity':None,'mode':None,'provenance':'unavailable','observation_times':[],'fetch_times':[],'pillars':None,'graph_source':None,'selection':None,'review':{'status':'unknown','authentication':'unavailable'},'release':{'status':'unavailable','consumer_visible':None,'reason':'Stored report cannot be verified.'},'created':r['created']}
 @app.get('/reports')
 def list_reports():
- with db() as c: return [report_metadata(c,r) for r in c.execute('SELECT * FROM reports ORDER BY created DESC').fetchall()]
+ with db() as c:
+  items=[]
+  for r in c.execute('SELECT * FROM reports ORDER BY created DESC,id ASC,version ASC').fetchall():
+   try:items.append(report_metadata(c,r))
+   except (HTTPException,OSError,ValueError,KeyError,TypeError,UnicodeError):items.append(unavailable_report_metadata(c,r))
+  return items
 @app.get('/reports/{report_id}/{version}/artifacts')
 def report_artifacts(report_id:str,version:str):
  with db() as c:
   r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version)); result=report_metadata(c,r)
-  jobs=c.execute("SELECT * FROM jobs WHERE kind='render' AND state='done' ORDER BY created DESC").fetchall()
-  match=next((j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}),None)
+  jobs=c.execute("SELECT * FROM jobs WHERE kind='render' ORDER BY created DESC").fetchall()
+  matching=[j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}];match=next((j for j in matching if j['state']=='done'),None);latest=matching[0] if matching else None
  if not match:
-  result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']='not_rendered'; result['package']={'availability':'unavailable','package_sha256':None,'url':None}; return result
+  result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']=({'queued':'queued','running':'rendering','failed':'failed','cancelled':'cancelled'}.get(latest['state'],'not_rendered') if latest else 'not_rendered'); result['package']={'availability':'unavailable','package_sha256':None,'url':None}; return result
  out=DATA/'artifacts'/match['id']; manifest_path=out/'manifest.json'
  if not manifest_path.is_file(): err(409,'Render manifest missing')
  with db() as c: locked=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(match['id'],)).fetchone()
@@ -229,7 +239,7 @@ def report_artifacts(report_id:str,version:str):
 def report(report_id:str,version:str):
  with db() as c:
   r=row(getrow(c,'SELECT id,version,run_id,sha256,created FROM reports WHERE id=? AND version=?',(report_id,version)))
-  r['reviews']=[row(x) for x in c.execute('SELECT id,sha256,decision,actor,reason,created FROM reviews WHERE report_id=? AND version=? ORDER BY created',(report_id,version))]; return r
+  r['reviews']=[row(x) for x in c.execute('SELECT id,sha256,decision,actor,reason,created FROM reviews WHERE report_id=? AND version=? ORDER BY created',(report_id,version))];full=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version));r['metadata']=report_metadata(c,full);return r
 @app.post('/reports/{report_id}/{version}/review')
 def review(report_id:str,version:str,x:Review,idempotency_key:str=Header(None)):
  k=key(idempotency_key)

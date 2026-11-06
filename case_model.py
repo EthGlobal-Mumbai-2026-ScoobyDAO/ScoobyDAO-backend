@@ -41,11 +41,11 @@ class Ledger:
    detail['pillar']=data['name'];detail['shared_request']=True
   if stage=='conclusion':detail['shared_request']=True
   if stage=='source':
-   if data.get('name') not in ('market','security','source','pools','daily'):raise ModelStageBlocked('invalid source stage')
+   if data.get('name') not in ('market','security','source','pools','daily','graph_token_day'):raise ModelStageBlocked('invalid source stage')
    detail['source']=data['name']
   if stage=='sources' and data.get('mode') in ('captured_replay','bounded_fetch'):detail['mode']=data['mode']
-  for name in ('attempts','captured'):
-   if isinstance(data.get(name),int) and not isinstance(data[name],bool) and 0<=data[name]<=5:detail[name]=data[name]
+  for name in ('attempts','captured','rows'):
+   if isinstance(data.get(name),int) and not isinstance(data[name],bool) and 0<=data[name]<=(100000 if name=='rows' else 5):detail[name]=data[name]
   if state in ('failed','unavailable','cancelled','blocked','skipped'):
    reason=data.get('reason')
    if isinstance(reason,str) and reason in ('context_or_evidence_invalid','missing_openai_key','provider_or_validation_failure','client_retries_not_disabled','refused','incomplete_output','invalid_or_unlinked_output','pillar_citation_scope_invalid','cross_pillar_citation','untyped_evidence_reference','unsupported_numeric_literal','provider_failure','model_identifier_mismatch','cancelled','no_identity_bound_source_evidence','sources_contain_no_usable_pillar_observation','model_budget_zero'):detail['reason']=reason

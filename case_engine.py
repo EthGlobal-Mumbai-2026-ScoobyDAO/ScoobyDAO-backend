@@ -19,7 +19,7 @@ def _policy_sources():
  manifest={p.name:digest(p.read_bytes()) for p in sorted(DISCOVERY.glob('*.py')) if not p.name.startswith('test_')}
  manifest['case_engine.py']=digest(Path(__file__).read_bytes());manifest['candidate.schema.json']=digest((ROOT/'schemas'/'candidate.schema.json').read_bytes())
  # Bind the model stage code and its static prompt/schema to the policy source snapshot.
- for relative in ('case_jobs.py','case_model.py','modules/investigation/model_reasoning.py','modules/investigation/reasoning_v2/output.schema.json','modules/investigation/reasoning_v2/analyst-v2.txt','modules/investigation/reasoning_v2/legacy-math-v1.txt'):
+ for relative in ('case_jobs.py','case_model.py','case_graph.py','modules/investigation/case_research.py','modules/investigation/history.py','modules/investigation/graph_history.py','modules/investigation/model_reasoning.py','modules/investigation/reasoning_v2/output.schema.json','modules/investigation/reasoning_v2/analyst-v2.txt','modules/investigation/reasoning_v2/legacy-math-v1.txt'):
   source=ROOT/relative
   if source.is_file():manifest[relative]=digest(source.read_bytes())
  return manifest

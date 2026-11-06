@@ -1,5 +1,5 @@
 """Durable case investigation-to-report bridge. No provider calls beyond decision budget."""
-import json
+import json,tempfile
 from pathlib import Path
 from store import DATA, db, now, digest, dumps, job, event, PILLARS
 
@@ -42,7 +42,18 @@ def run_case(run_id, producer=None, model_client=None):
   options={'max_source_requests':budget['max_source_requests'],'captured_snapshot':{'record':json.loads(snap['record']),'evidence':json.loads(snap['evidence'])},'cancelled':cancelled}
   from case_model import Ledger,OUTPUT_CAP,CONTEXT_CAP
   ledger=Ledger(run_id,decision['id'],snap['id']);options.update(max_model_calls=budget['max_model_calls'],model_client=model_client,max_model_output_tokens=OUTPUT_CAP,max_model_context_chars=CONTEXT_CAP,stage_callback=ledger,reasoning_checkpoint=ledger.checkpoint() if budget['max_model_calls'] else None)
-  result=producer(descriptor,out,**options)
+  # A separately admin-authorized Graph grant is optional and bound to this decision.
+  # The per-attempt copy is rehashed and verified before the producer reads it.
+  import case_graph
+  with tempfile.TemporaryDirectory(prefix='.graph-attempt-',dir=DATA) as tmp:
+   try:graph=case_graph.materialize(decision['id'],Path(tmp)/'graph')
+   except PermissionError:
+    with db() as c:
+     c.execute("UPDATE investigations SET status='blocked' WHERE id=? AND status!='cancelled'",(run_id,));event(c,run_id,'graph_authorization_unavailable','Graph source authorization expired or unavailable; no research performed.')
+    return 'blocked'
+   if graph:
+    options.update(graph_capture_dir=graph['capture_dir'],graph_model_dir=graph['model_dir'],graph_technical_sha256=graph['technical_sha256'])
+   result=producer(descriptor,out,**options)
  if result.get('state') in ('blocked','cancelled'):
   with db() as c:
    c.execute('BEGIN IMMEDIATE');current=c.execute('SELECT status FROM investigations WHERE id=?',(run_id,)).fetchone()
