@@ -30,13 +30,29 @@ def validate_render(out,ref):
 def work_one():
  with db() as c:
   c.execute('BEGIN IMMEDIATE')
-  c.execute("UPDATE jobs SET state='queued', lease=NULL WHERE state='running' AND lease<?",(now(),))
+  c.execute("UPDATE jobs SET state='failed', lease=NULL, error='Scout interrupted; manual inspection required' WHERE kind='scout_collect' AND state='running' AND lease<?",(now(),))
+  c.execute("UPDATE jobs SET state='queued', lease=NULL WHERE kind!='scout_collect' AND state='running' AND lease<?",(now(),))
   j=c.execute("SELECT * FROM jobs WHERE state='queued' AND available<=? ORDER BY created LIMIT 1",(now(),)).fetchone()
   if not j: return False
   c.execute("UPDATE jobs SET state='running', attempts=attempts+1, lease=? WHERE id=?",(now()+300,j['id']))
   attempt=j['attempts']+1
  try:
-  if j['kind']=='case_scan':
+  if j['kind']=='scout_collect':
+   import case_engine
+   import bounded_scout
+   source_db=os.getenv('SCOOBY_DISCOVERY_DB');source_root=os.getenv('SCOOBY_DISCOVERY_ROOT')
+   try:
+    budget=int(os.getenv('SCOOBY_SCOUT_CYCLE_BUDGET','0'));hourly=int(os.getenv('SCOOBY_SCOUT_HOURLY_BUDGET','0'));limit=int(os.getenv('SCOOBY_SCOUT_LIMIT_PER_CHAIN','5'))
+   except ValueError:budget=hourly=0;limit=5
+   if not source_db or not source_root:outcome={'status':'configuration_unavailable','calls':0}
+   else:outcome=bounded_scout.run_once(source_db,source_root,enabled=os.getenv('SCOOBY_SCOUT_ENABLED','false').lower()=='true',budget=budget,hourly_limit=hourly,limit=limit)
+   result=dumps(outcome)
+   with db() as c:
+    if outcome['status'] in ('ok','partial','no_leads'):
+     c.execute("UPDATE case_sources SET status=?,detail=?,updated=? WHERE id='discovery'",('available' if outcome['status']!='partial' else 'unavailable','Bounded scout cycle '+outcome['status']+'; evidence freshness is per source.',now()))
+     job(c,'case_scan','25','scout-sync:'+j['id'])
+    elif outcome['status']!='not_due':c.execute("UPDATE case_sources SET status='unavailable',detail=?,updated=? WHERE id='discovery'",('Scout '+outcome['status']+'; no clean result inferred.',now()))
+  elif j['kind']=='case_scan':
    import case_engine
    result=dumps(case_engine.reconcile(int(j['ref'])))
    with db() as c:c.execute("UPDATE case_sources SET status='available',detail=?,updated=? WHERE id='discovery'",('Local discovery snapshot synchronized; source freshness is per evidence.',now()))
@@ -142,6 +158,9 @@ def work_one():
   with db() as c:
    # Bounded exponential backoff. Persist terminal errors without exception payloads that could contain secrets.
    attempts=c.execute('SELECT attempts FROM jobs WHERE id=?',(j['id'],)).fetchone()[0]
+   if j['kind']=='scout_collect':
+    attempts=3 # Never automatically repeat a possibly transmitted provider request.
+    c.execute("UPDATE case_sources SET status='unavailable',detail=?,updated=? WHERE id='discovery'",('Scout failed; no clean result inferred.',now()))
    if j['kind']=='case_scan':
     c.execute("UPDATE case_sources SET status='unavailable',detail=?,updated=? WHERE id='discovery'",('Configured discovery store is unavailable; no case was qualified from this failure.',now()))
    if j['kind']=='case_start':
@@ -167,8 +186,15 @@ def enqueue_periodic_case_sync():
   c.execute('BEGIN IMMEDIATE')
   if c.execute("SELECT 1 FROM jobs WHERE kind='case_scan' AND state IN ('queued','running') LIMIT 1").fetchone(): return None
   return job(c,'case_scan',str(limit),'case-period:'+str(int(now()//60)))
+def enqueue_periodic_scout():
+ if os.getenv('SCOOBY_SCOUT_ENABLED','false').lower()!='true':return None
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE')
+  if c.execute("SELECT 1 FROM jobs WHERE kind='scout_collect' AND state IN ('queued','running') LIMIT 1").fetchone():return None
+  return job(c,'scout_collect','bounded','scout-period:'+str(int(now()//300)))
 @huey.periodic_task(crontab(minute='*'))
 def reconcile():
+ enqueue_periodic_scout()
  enqueue_periodic_case_sync()
  with db() as c: c.execute("INSERT OR REPLACE INTO heartbeats VALUES(?,?,?)",('worker',now(),'reconciliation active'))
  for _ in range(10):
