@@ -31,9 +31,18 @@ function Set-ScoobyEnvironmentValue {
 
 function Read-ScoobyExistingValue {
     param([string]$Name)
-    $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'Process')
-    if ([string]::IsNullOrWhiteSpace($scoobyExisting)) {
+    # The worker must not silently inherit an expired OpenAI process key when a
+    # current User-scoped key has been configured. Never print the value.
+    if ($Name -eq 'OPENAI_API_KEY') {
         $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'User')
+        if ([string]::IsNullOrWhiteSpace($scoobyExisting)) {
+            $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'Process')
+        }
+    } else {
+        $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'Process')
+        if ([string]::IsNullOrWhiteSpace($scoobyExisting)) {
+            $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'User')
+        }
     }
     return $scoobyExisting
 }

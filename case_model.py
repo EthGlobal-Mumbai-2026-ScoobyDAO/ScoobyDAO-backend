@@ -34,7 +34,7 @@ class Ledger:
  def __call__(self,data):
   if not isinstance(data,dict):raise ModelStageBlocked('invalid stage event')
   stage=data.get('stage');state=data.get('state')
-  if stage not in ('sources','source','report','reasoning','pillar','conclusion') or state not in ('started','completed','failed','cancelled','unavailable','resumed','analyzed','validated_shared_output','proposed','captured_replay','captured','skipped_budget','blocked','validated'):raise ModelStageBlocked('invalid stage event')
+  if stage not in ('sources','source','report','reasoning','pillar','conclusion') or state not in ('started','completed','failed','cancelled','unavailable','resumed','analyzed','validated_shared_output','proposed','captured_replay','captured','skipped_budget','skipped','blocked','validated'):raise ModelStageBlocked('invalid stage event')
   detail={'stage':stage,'state':state}
   if stage=='pillar':
    if data.get('name') not in PILLARS:raise ModelStageBlocked('invalid pillar')
@@ -46,9 +46,9 @@ class Ledger:
   if stage=='sources' and data.get('mode') in ('captured_replay','bounded_fetch'):detail['mode']=data['mode']
   for name in ('attempts','captured'):
    if isinstance(data.get(name),int) and not isinstance(data[name],bool) and 0<=data[name]<=5:detail[name]=data[name]
-  if state in ('failed','unavailable','cancelled','blocked'):
+  if state in ('failed','unavailable','cancelled','blocked','skipped'):
    reason=data.get('reason')
-   if isinstance(reason,str) and reason in ('context_or_evidence_invalid','missing_openai_key','provider_or_validation_failure','client_retries_not_disabled','refused','incomplete_output','invalid_or_unlinked_output','provider_failure','model_identifier_mismatch','cancelled','no_identity_bound_source_evidence','sources_contain_no_usable_pillar_observation'):detail['reason']=reason
+   if isinstance(reason,str) and reason in ('context_or_evidence_invalid','missing_openai_key','provider_or_validation_failure','client_retries_not_disabled','refused','incomplete_output','invalid_or_unlinked_output','provider_failure','model_identifier_mismatch','cancelled','no_identity_bound_source_evidence','sources_contain_no_usable_pillar_observation','model_budget_zero'):detail['reason']=reason
   with db() as c:
    c.execute('BEGIN IMMEDIATE');run=c.execute('SELECT status FROM investigations WHERE id=?',(self.run_id,)).fetchone();decision=c.execute('SELECT * FROM case_decisions WHERE id=? AND run_id=?',(self.decision_id,self.run_id)).fetchone()
    if not run or not decision:raise ModelStageBlocked('run authorization missing')
@@ -62,7 +62,7 @@ class Ledger:
    if not case or not snap or decision['snapshot_id']!=self.snapshot_id or case['current_snapshot']!=self.snapshot_id or snap['expires']<=now() or snap['policy_digest']!=decision['policy_digest'] or case_engine.policy_digest()!=decision['policy_digest']:raise ModelStageBlocked('case policy or evidence binding expired')
    budget=json.loads(decision['budget'])
    if budget.get('max_model_calls') not in (0,1) or budget.get('max_source_requests')!=0:raise ModelStageBlocked('model budget is unavailable')
-   if stage in ('reasoning','pillar','conclusion') and budget['max_model_calls']!=1:raise ModelStageBlocked('model budget is unavailable')
+   if stage in ('reasoning','pillar','conclusion') and budget['max_model_calls']!=1 and not (stage=='reasoning' and state=='skipped' and data.get('reason')=='model_budget_zero'):raise ModelStageBlocked('model budget is unavailable')
    current=c.execute("SELECT * FROM case_model_stages WHERE run_id=? AND stage='reasoning'",(self.run_id,)).fetchone()
    if stage=='reasoning' and state=='started':
     fp=fingerprint(self.run_id,self.decision_id,self.snapshot_id,data)

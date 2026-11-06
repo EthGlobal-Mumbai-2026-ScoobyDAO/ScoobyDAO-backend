@@ -259,8 +259,9 @@ def run(report: dict, root: Path, *, max_model_calls: int = 0, client=None,
     if getattr(client, 'max_retries', 0) != 0:
         _emit(stage_callback, {'stage': 'reasoning', 'state': 'failed', 'reason': 'client_retries_not_disabled'})
         return {'status': 'failed_client_retry_policy', 'sidecar': None, 'calls': 0}
-    _emit(stage_callback, {'stage': 'reasoning', 'state': 'started', 'input_sha256': input_sha,
-                           'model': MODEL, 'scope': 'shared_five_pillars_and_conclusion', 'max_output_tokens': max_output_tokens})
+    stage_identity = {'input_sha256': input_sha, 'prompt_sha256': prompt_sha, 'schema_sha256': schema_sha,
+                      'model': MODEL, 'max_output_tokens': max_output_tokens, 'max_context_chars': max_context_chars}
+    _emit(stage_callback, {'stage': 'reasoning', 'state': 'started', 'scope': 'shared_five_pillars_and_conclusion', **stage_identity})
     usage = None
     try:
         response = client.chat.completions.create(model=MODEL,
@@ -294,6 +295,6 @@ def run(report: dict, root: Path, *, max_model_calls: int = 0, client=None,
         return {'status': 'failed_' + reason, 'sidecar': None, 'calls': 1, 'usage': usage}
     saved = {'profile': 'scooby.reasoning-checkpoint/1', 'model': MODEL, 'input_sha256': input_sha,
              'prompt_sha256': prompt_sha, 'schema_sha256': schema_sha, 'payload': side['reasoning'], 'usage': usage}
-    _emit(stage_callback, {'stage': 'reasoning', 'state': 'completed', 'input_sha256': input_sha, 'usage': usage, 'checkpoint': saved})
+    _emit(stage_callback, {'stage': 'reasoning', 'state': 'completed', **stage_identity, 'usage': usage, 'checkpoint': saved})
     _emit_validated_sections(stage_callback, side, report, input_sha)
     return {'status': 'completed', 'sidecar': side, 'calls': 1, 'checkpoint': saved, 'usage': usage}
