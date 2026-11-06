@@ -1,4 +1,5 @@
-"""Operator API: /publication/v1. Mutating routes need the operator bearer token."""
+"""Operator API: /publication/v1. Every route needs the operator bearer token: target and attempt
+reads carry user codes and review state, which are private admin data."""
 from __future__ import annotations
 from typing import Any, Literal
 
@@ -41,7 +42,7 @@ def create_target(x: TargetIn, idempotency_key: str | None = Header(None), actor
 
 
 @router.get('/targets/{target_id}')
-def read_target(target_id: str):
+def read_target(target_id: str, actor: str = Depends(require_operator)):
     return _call(service.get_target, target_id)
 
 
@@ -53,7 +54,7 @@ def create_attempt(target_id: str, x: AttemptIn, idempotency_key: str | None = H
 
 
 @router.get('/attempts/{attempt_id}')
-def read_attempt(attempt_id: str, world=Depends(get_world_optional)):
+def read_attempt(attempt_id: str, actor: str = Depends(require_operator), world=Depends(get_world_optional)):
     return _call(service.poll_attempt, attempt_id, world)
 
 

@@ -1,7 +1,9 @@
-"""Operator CLI: python -m publication.cli {enroll,list,disable,enable,publish-confirm,reconcile}.
+"""Operator CLI: python -m publication.cli {enroll,list,disable,enable,grant,ungrant,publish-confirm,reconcile}.
 
 World subjects are pairwise, so a reviewer's (iss, sub) can only be learned by having them
 complete a device login for this client: `enroll` does exactly that and stores nothing else.
+Admin scopes (case_investigation, report_review, publication) are granted per enrolled reviewer;
+World authentication alone never grants one.
 """
 from __future__ import annotations
 import argparse
@@ -10,7 +12,7 @@ import time
 import uuid
 
 from store import db, digest, now
-from . import service
+from . import admin, service
 from .config import ConfigError, chain_config, settings, world_config
 from .db import audit
 from .world import Denied, Error, Expired, Pending, SlowDown, TokenInvalid, Tokens, WorldClient, WorldError
@@ -23,7 +25,7 @@ def _world() -> WorldClient:
         sys.exit(f'World is not configured: {e}')
 
 
-def enroll(label: str, world: WorldClient | None = None, *, sleep=time.sleep) -> tuple[str, str]:
+def enroll(label: str, world: WorldClient | None = None, *, sleep=time.sleep, scopes: tuple[str, ...] = ()) -> tuple[str, str]:
     world = world or _world()
     started = now()
     try:
@@ -58,14 +60,34 @@ def enroll(label: str, world: WorldClient | None = None, *, sleep=time.sleep) ->
                 c.execute('INSERT INTO pub_reviewers(iss,sub,label,enabled,created) VALUES(?,?,?,1,?) '
                           'ON CONFLICT(iss,sub) DO UPDATE SET label=excluded.label, enabled=1', (ident.iss, ident.sub, label, now()))
                 audit(c, None, 'reviewer_enrolled', 'cli', {'label': label, 'iss': ident.iss, 'sub_sha256': digest(ident.sub.encode()), 'acr': ident.acr})
-            print(f'Enrolled "{label}" ({ident.acr}).')
+                for scope in scopes:
+                    admin.grant(c, ident.iss, ident.sub, scope, 'cli')
+            print(f'Enrolled "{label}" ({ident.acr}){" with " + ", ".join(scopes) if scopes else ""}.')
             return ident.iss, ident.sub
     sys.exit('Device code expired; reviewer not added.')
 
 
 def list_reviewers() -> list[dict]:
     with db() as c:
-        return [dict(r) for r in c.execute('SELECT iss, sub, label, enabled, created FROM pub_reviewers ORDER BY created')]
+        out = [dict(r) for r in c.execute('SELECT iss, sub, label, enabled, created FROM pub_reviewers ORDER BY created')]
+        for r in out:
+            r['scopes'] = sorted(x['scope'] for x in c.execute(
+                'SELECT scope FROM admin_scopes WHERE iss=? AND sub=? AND revoked_at IS NULL', (r['iss'], r['sub'])))
+        return out
+
+
+def set_scope(label: str, scope: str, granted: bool) -> int:
+    """Grant or withdraw an admin scope for every enrolled reviewer with this label."""
+    if scope not in admin.SCOPES:
+        sys.exit(f'Unknown scope {scope}; expected one of {", ".join(admin.SCOPES)}.')
+    with db() as c:
+        rows = c.execute('SELECT iss, sub FROM pub_reviewers WHERE label=?', (label,)).fetchall()
+        for r in rows:
+            if granted:
+                admin.grant(c, r['iss'], r['sub'], scope, 'cli')
+            else:
+                admin.revoke_scope(c, r['iss'], r['sub'], scope, 'cli')
+        return len(rows)
 
 
 def set_enabled(label: str, enabled: bool) -> int:
@@ -111,22 +133,31 @@ def main(argv: list[str] | None = None) -> None:
     sp = ap.add_subparsers(dest='cmd', required=True)
     e = sp.add_parser('enroll', help='device-login a reviewer and allowlist their (iss, sub)')
     e.add_argument('--name', required=True)
+    e.add_argument('--scope', action='append', default=[], choices=admin.SCOPES, help='admin scope to grant (repeatable)')
     sp.add_parser('list', help='list reviewers')
     for name in ('disable', 'enable'):
         p = sp.add_parser(name)
         p.add_argument('--name', required=True)
+    for name, text in (('grant', 'grant an admin scope'), ('ungrant', 'withdraw an admin scope')):
+        p = sp.add_parser(name, help=text)
+        p.add_argument('--name', required=True)
+        p.add_argument('--scope', required=True, choices=admin.SCOPES)
     pc = sp.add_parser('publish-confirm', help='explicitly request publication of an approved target')
     pc.add_argument('--target', required=True)
     sp.add_parser('reconcile', help='drive outbox rows in reconcile/queued states with the real chain')
     a = ap.parse_args(argv)
     if a.cmd == 'enroll':
-        enroll(a.name)
+        enroll(a.name, scopes=tuple(dict.fromkeys(a.scope)))
     elif a.cmd == 'list':
         for r in list_reviewers():
-            print(f"{'enabled ' if r['enabled'] else 'disabled'}  {r['label']:<24} {r['iss']}  sub={r['sub'][:10]}…")
+            print(f"{'enabled ' if r['enabled'] else 'disabled'}  {r['label']:<24} {r['iss']}  sub={r['sub'][:10]}…  "
+                  f"scopes={','.join(r['scopes']) or '-'}")
     elif a.cmd in ('disable', 'enable'):
         n = set_enabled(a.name, a.cmd == 'enable')
         print(f'{a.cmd}d {n} reviewer(s)')
+    elif a.cmd in ('grant', 'ungrant'):
+        n = set_scope(a.name, a.scope, a.cmd == 'grant')
+        print(f'{a.cmd}ed {a.scope} for {n} reviewer(s)')
     elif a.cmd == 'publish-confirm':
         print(publish_confirm(a.target))
     elif a.cmd == 'reconcile':

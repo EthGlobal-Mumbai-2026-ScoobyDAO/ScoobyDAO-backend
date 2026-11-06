@@ -1,0 +1,362 @@
+{
+  "catalog_version": "reference-catalog/1",
+  "as_of": "2026-11-06",
+  "scope": "Historical reference triage; not current qualification, full investigation, financial advice, or publication approval.",
+  "fresh_discovery": "Separate; no admission or current verification is implied.",
+  "recommended_replay_case_id": "bald-base-2023",
+  "recommendation_reason": "Specific Base token identifier and event-linked chain reference; strongest fit for token-oriented historical reader replay in this bounded set. This is a liquidity case, not a proven sell trap.",
+  "method": "No model calls, paid sources, wallet transactions, or direct RPC. Source pages were read where accessible; blocked explorer links remain unverified leads.",
+  "cases": [
+    {
+      "case_id": "squid-bsc-2021",
+      "name": "SQUID (Squid Game token)",
+      "chain": "BNB Smart Chain",
+      "chain_id": 56,
+      "incident_date": "2021-11-01",
+      "incident_date_precision": "day",
+      "identifier": {
+        "kind": "token_proxy",
+        "value": "0x87230146E138d3F296a9a77e497A2A83012e9Bc5",
+        "verification": "source-linked or source-reported; no independent RPC decoding"
+      },
+      "incident_transaction": null,
+      "historical_mechanism": "Reported selective selling restrictions and changeable proxy logic; analyst observed some successful sells, and SharkTeam traced token cash-outs into BNB.",
+      "attributed_claim": "Historical investigator claims; not proof that every holder was unable to sell.",
+      "source_ids": [
+        "S1",
+        "S2",
+        "S16"
+      ],
+      "uncertainties": [
+        "Outside Ethereum/Base scope.",
+        "Historical implementations and exact holder-level behavior have not been independently replayed.",
+        "The 2026 article reports a later proxy state, not the November 2021 state."
+      ],
+      "historical_only": true,
+      "live_discovery_gate": "not_evaluated",
+      "current_status": "unknown; not checked",
+      "replay_triage": "not_eligible",
+      "human_review": "required; no publication approval",
+      "claim_ids": [
+        "C01"
+      ]
+    },
+    {
+      "case_id": "anubis-ethereum-2021",
+      "name": "AnubisDAO",
+      "chain": "Ethereum mainnet",
+      "chain_id": 1,
+      "incident_date": "2021-10-29",
+      "incident_date_precision": "day",
+      "identifier": {
+        "kind": "auction_pool_source_link",
+        "value": "0x9212b088d48fc749c5adc573b445bc0d0a289a34",
+        "verification": "source-linked or source-reported; no independent RPC decoding"
+      },
+      "incident_transaction": {
+        "hash": "0x551890a877c57cf19ddcb312c0a9962029225373daf2815f3720b723bd79b7b0",
+        "url": "https://etherscan.io/tx/0x551890a877c57cf19ddcb312c0a9962029225373daf2815f3720b723bd79b7b0",
+        "status": "linked by S4; explorer returned 403, not decoded"
+      },
+      "historical_mechanism": "Chainalysis describes a liquidity-bootstrap pool creator redeeming LP holdings and withdrawing pooled WETH and ANKH; source reports a drain before the sale ended.",
+      "attributed_claim": "Rug-pull attribution is an investigator conclusion; competing insider and compromised-key accounts remain unresolved.",
+      "source_ids": [
+        "S3",
+        "S4"
+      ],
+      "uncertainties": [
+        "Pool/auction identifier is not independently verified as the ANKH token address.",
+        "Incident is a liquidity/treasury drain, not established sell-trap behavior.",
+        "Competing developer accounts and actor intent remain unresolved."
+      ],
+      "historical_only": true,
+      "live_discovery_gate": "not_evaluated",
+      "current_status": "unknown; not checked",
+      "replay_triage": "secondary_reference",
+      "human_review": "required; no publication approval",
+      "claim_ids": [
+        "C02"
+      ]
+    },
+    {
+      "case_id": "lunayield-solana-2021",
+      "name": "Luna Yield",
+      "chain": "Solana mainnet",
+      "chain_id": null,
+      "incident_date": "2021-08-19",
+      "incident_date_precision": "day",
+      "identifier": {
+        "kind": "source_reported_deployer_account",
+        "value": "ivBMuQdExFYSQraWteitugJ5AixJF9AeVwgdCjQhGwM",
+        "verification": "source-linked or source-reported; no independent RPC decoding"
+      },
+      "incident_transaction": null,
+      "historical_mechanism": "Contemporary reporting attributes withdrawal of pooled assets and disappearance of the project to an apparent exit scam; SolPad reported a compensation plan for IDO participants.",
+      "attributed_claim": "Historical reporting and launchpad attribution; not independently reproduced.",
+      "source_ids": [
+        "S5",
+        "S6",
+        "S14",
+        "S15",
+        "S17"
+      ],
+      "uncertainties": [
+        "Outside Ethereum/Base scope.",
+        "Source-linked account is not established as a token mint or program ID; explorer history did not load.",
+        "Published loss estimates vary; the scope of reported compensation is unresolved."
+      ],
+      "historical_only": true,
+      "live_discovery_gate": "not_evaluated",
+      "current_status": "unknown; not checked",
+      "replay_triage": "not_eligible",
+      "human_review": "required; no publication approval",
+      "claim_ids": [
+        "C03"
+      ]
+    },
+    {
+      "case_id": "meerkat-bsc-2021",
+      "name": "Meerkat Finance",
+      "chain": "BNB Smart Chain",
+      "chain_id": 56,
+      "incident_date": "2021-03-04",
+      "incident_date_precision": "day",
+      "identifier": {
+        "kind": "busd_vault_proxy_source_link",
+        "value": "0x7e0c621ea9f7afd5b86a50b0942eaee68b04a61c",
+        "verification": "source-linked or source-reported; no independent RPC decoding"
+      },
+      "incident_transaction": {
+        "hash": "0x063970f8625f250101a7da8abf914748cf8eaaaa9458041f1928501accfe5d6c",
+        "url": "https://bscscan.com/tx/0x063970f8625f250101a7da8abf914748cf8eaaaa9458041f1928501accfe5d6c",
+        "status": "linked by S9; explorer returned 403, not decoded"
+      },
+      "historical_mechanism": "Analysts report deployer-controlled upgrades introduced an unprotected initializer; the vaults were subsequently drained.",
+      "attributed_claim": "Insider-led rug pull is suspected; key compromise and external action are not excluded.",
+      "source_ids": [
+        "S7",
+        "S8",
+        "S9"
+      ],
+      "uncertainties": [
+        "Outside Ethereum/Base scope.",
+        "Address is the reported BUSD vault proxy, not a token contract; explorer returned 403.",
+        "The vault upgrade and drain have not been independently decoded."
+      ],
+      "historical_only": true,
+      "live_discovery_gate": "not_evaluated",
+      "current_status": "unknown; not checked",
+      "replay_triage": "not_eligible",
+      "human_review": "required; no publication approval",
+      "claim_ids": [
+        "C04"
+      ]
+    },
+    {
+      "case_id": "bald-base-2023",
+      "name": "BALD",
+      "chain": "Base",
+      "chain_id": 8453,
+      "incident_date": "2023-07-31",
+      "incident_date_precision": "day",
+      "identifier": {
+        "kind": "token_contract",
+        "value": "0x27D2DECb4bFC9C76F0309b8E88dec3a601Fe25a8",
+        "verification": "source-linked or source-reported; no independent RPC decoding"
+      },
+      "incident_transaction": {
+        "hash": "0xf885a5862e8b75a8ab7c5dd66cf7c17692efd9dc784936e44d6feed4cafc5239",
+        "url": "https://basescan.org/tx/0xf885a5862e8b75a8ab7c5dd66cf7c17692efd9dc784936e44d6feed4cafc5239",
+        "status": "linked by S10; explorer returned 403, not decoded"
+      },
+      "historical_mechanism": "Reports link liquidity removal by the deployer to an acute price fall.",
+      "attributed_claim": "Rug-pull characterization is contested: developer denied selling tokens while acknowledging adding/removing two-sided liquidity.",
+      "source_ids": [
+        "S10",
+        "S11",
+        "S12",
+        "S18"
+      ],
+      "uncertainties": [
+        "Withdrawal amounts differ across reports and may refer to different transactions or aggregation windows.",
+        "No independent historical-block reconstruction, full transaction receipt, present-day trading or holder-level sell test.",
+        "Liquidity removal is not itself proof of a selective sell trap."
+      ],
+      "historical_only": true,
+      "live_discovery_gate": "not_evaluated",
+      "current_status": "unknown; not checked",
+      "replay_triage": "recommended_token_replay_candidate",
+      "human_review": "required; no publication approval",
+      "claim_ids": [
+        "C05",
+        "C06",
+        "C08"
+      ]
+    },
+    {
+      "case_id": "magnate-base-2023",
+      "name": "Magnate Finance",
+      "chain": "Base",
+      "chain_id": 8453,
+      "incident_date": "2023-08-25",
+      "incident_date_precision": "day",
+      "identifier": {
+        "kind": "protocol_contract_source_reported",
+        "value": "0x6a8fbf751c92a8c922428c0ffc5a89e709f7e505",
+        "verification": "source-linked or source-reported; no independent RPC decoding"
+      },
+      "incident_transaction": {
+        "hash": "0x39555e75d76b294248a434fdfe9640e0cfe3f22bd7fceb675fd4ef4b5e02f719",
+        "url": "https://basescan.org/tx/0x39555e75d76b294248a434fdfe9640e0cfe3f22bd7fceb675fd4ef4b5e02f719",
+        "status": "reported in S13; not independently opened or decoded"
+      },
+      "historical_mechanism": "QuillAudits reports a privileged price-oracle change followed by borrowing and exit; SharkTeam separately describes a Base asset drain.",
+      "attributed_claim": "Rug-pull and operator linkage are investigator attributions; no independent receipt replay performed.",
+      "source_ids": [
+        "S12",
+        "S13"
+      ],
+      "uncertainties": [
+        "Lending protocol/oracle incident, not established ERC-20 sell trap.",
+        "The source calls this a contract address but does not establish it is a token; its precise role needs independent decoding.",
+        "USD TVL fall is not the same measure as investor loss."
+      ],
+      "historical_only": true,
+      "live_discovery_gate": "not_evaluated",
+      "current_status": "unknown; not checked",
+      "replay_triage": "secondary_protocol_reference",
+      "human_review": "required; no publication approval",
+      "claim_ids": [
+        "C07"
+      ]
+    }
+  ],
+  "sources": {
+    "S1": {
+      "title": "SharkTeam SQUID fund-flow analysis",
+      "url": "https://sharkteam.org/report/analysis/20211112001A_en.pdf",
+      "type": "security-investigator analysis",
+      "date": "2021-11",
+      "access": "read"
+    },
+    "S2": {
+      "title": "BeeNBee SQUID proxy and trading analysis",
+      "url": "https://medium.com/@BeeNBee/how-squid-tokens-rug-pull-worked-4d547aa12229",
+      "type": "independent technical analysis",
+      "date": "2021-11-02",
+      "access": "read"
+    },
+    "S3": {
+      "title": "Chainalysis 2022 Crypto Crime Report, Anubis case",
+      "url": "https://www.lawsociety.org.sg/wp-content/uploads/2022/10/Crypto-Crime-Report-2022.pdf",
+      "type": "on-chain investigator analysis",
+      "date": "2022",
+      "access": "read"
+    },
+    "S4": {
+      "title": "Anubis incident summary and linked transaction/auction",
+      "url": "https://smartcontractshacking.com/hacks/anubisdao-hack-2021",
+      "type": "security incident index",
+      "date": "undated page, event 2021-10-29",
+      "access": "read; linked explorer and auction blocked"
+    },
+    "S5": {
+      "title": "Crypto Briefing Luna Yield report, republished by Investing.com",
+      "url": "https://www.investing.com/analysis/luna-yield-executes-first-major-rug-pull-on-solana-200599584",
+      "type": "contemporary reporting citing on-chain analyst and launchpad",
+      "date": "2021-08-22",
+      "access": "read"
+    },
+    "S6": {
+      "title": "Luna Yield incident index",
+      "url": "https://smartcontractshacking.com/hacks/luna-yield-hack-2021",
+      "type": "security incident index",
+      "date": "undated page, event 2021-08-20",
+      "access": "read; source contains unverified recovery claim excluded"
+    },
+    "S7": {
+      "title": "Meerkat on-chain investigator case study",
+      "url": "https://onchainattack.org/document/examples/2021-03-meerkat-finance/",
+      "type": "security case study drawing on Rekt",
+      "date": "2026-10-11 correction",
+      "access": "read"
+    },
+    "S8": {
+      "title": "Meerkat incident index with vault and transaction links",
+      "url": "https://smartcontractshacking.com/hacks/meerkat-finance-hack-2021",
+      "type": "security incident index",
+      "date": "undated page, event 2021-03-04",
+      "access": "read; linked explorers blocked"
+    },
+    "S9": {
+      "title": "Meerkat contemporary reporting",
+      "url": "https://www.theblock.co/news/defi/2021-03-04-rug-pull-defi-meerkat-31-million-97082",
+      "type": "contemporary reporting with chain links",
+      "date": "2021-03-04",
+      "access": "read"
+    },
+    "S10": {
+      "title": "BALD token developer denial and linked Base transaction",
+      "url": "https://cointelegraph.com/news/bald-token-developer-denies-rug-pull-price-falls-post-launch",
+      "type": "contemporary reporting with source and transaction links",
+      "date": "2023-07-31",
+      "access": "read; linked explorer blocked"
+    },
+    "S11": {
+      "title": "BALD contemporaneous liquidity withdrawal report",
+      "url": "https://www.theblock.co/news/ecosystems/2023-07-31-bald-memecoin-developer-liquidity-pull-242225",
+      "type": "contemporary reporting with chain link",
+      "date": "2023-07-31",
+      "access": "read"
+    },
+    "S12": {
+      "title": "SharkTeam Q3 2023 security report, Base cases",
+      "url": "https://www.sharkteam.org/report/analysis/20231020001A_en.pdf",
+      "type": "security investigator report",
+      "date": "2023-10",
+      "access": "read"
+    },
+    "S13": {
+      "title": "Magnate Finance incident analysis",
+      "url": "https://www.quillaudits.com/blog/hack-analysis/magnate-finance-rug-pull",
+      "type": "security investigator analysis",
+      "date": "2024-06-03",
+      "access": "read"
+    },
+    "S14": {
+      "title": "Solana Explorer account linked by Crypto Briefing",
+      "url": "https://explorer.solana.com/address/ivBMuQdExFYSQraWteitugJ5AixJF9AeVwgdCjQhGwM",
+      "type": "chain explorer link",
+      "date": "dynamic",
+      "access": "page shell read; transactions did not load"
+    },
+    "S15": {
+      "title": "Solscan token account linked by Luna incident index",
+      "url": "https://solscan.io/account/EiySftqENviEh339R1UhXN2Yxg9wi4ZpVHiRd99SXap7",
+      "type": "chain explorer link",
+      "date": "dynamic",
+      "access": "page shell read; transactions did not load"
+    },
+    "S16": {
+      "title": "SQUID proxy reading in September 2026",
+      "url": "https://fidesium.com/blog/rug-pull-red-flags/",
+      "type": "independent technical analysis",
+      "date": "2026, reports 2026-09-02 reads",
+      "access": "read; not independently reproduced"
+    },
+    "S17": {
+      "title": "RAID 2024 bridge security research",
+      "url": "https://zhiqlin.github.io/file/RAID24.pdf",
+      "type": "research paper",
+      "date": "2024",
+      "access": "read"
+    },
+    "S18": {
+      "title": "De.Fi July 2023 incident report",
+      "url": "https://de.fi/blog/de-fi-rekt-report-486m-funds-lost-in-july-2023-top-defi-scams-and-exploits",
+      "type": "security investigator analysis",
+      "date": "2023",
+      "access": "read; reported amounts not normalized"
+    }
+  }
+}
