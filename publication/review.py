@@ -179,6 +179,10 @@ def consumer_visible(c, report_id: str, version: str) -> bool:
         return False  # an invalid release policy hides reports rather than releasing them
     if c.execute('SELECT 1 FROM seed_imports WHERE report_id=? AND version=?',(report_id,version)).fetchone():
         return approved(c, report_id, version)
+    # Historical six-reference reports (case_reference_reports) likewise need a genuine approval under any policy.
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='case_reference_reports'").fetchone() and \
+            c.execute('SELECT 1 FROM case_reference_reports WHERE report_id=? AND version=?', (report_id, version)).fetchone():
+        return approved(c, report_id, version)
     return policy == 'all' or approved(c, report_id, version)
 
 

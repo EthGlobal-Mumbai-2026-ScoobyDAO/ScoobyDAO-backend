@@ -59,6 +59,17 @@ services:
         sync: false
       # No persistent disk on the free plan: run the worker in this container and reapply the verified report seed
       # at every start (DEPLOYMENT.md, "seed at start"). Upload the archive's base64 as Secret File report-seed.zip.b64.
+      # Display-only milestone (docs/reference-display-contract.md): no scouting, case sync, research, model,
+      # render or reasoning work. SCOOBY_DISPLAY_ONLY=true returns 503 on those routes and never starts a worker,
+      # whatever SCOOBY_EMBEDDED_WORKER says (so seeded reports are not rendered; the reference reader needs no render).
+      - key: SCOOBY_DISPLAY_ONLY
+        value: "true"
+      - key: SCOOBY_SCOUT_ENABLED
+        value: "false"
+      - key: SCOOBY_CASE_SYNC_ENABLED
+        value: "false"
+      - key: SCOOBY_CASE_MODEL_MAX_CALLS
+        value: "0"
       - key: SCOOBY_EMBEDDED_WORKER
         value: "true"
       - key: SCOOBY_SEED_ARCHIVE
@@ -68,6 +79,17 @@ services:
       - key: SCOOBY_SEED_MANIFEST_SHA256
         sync: false
       - key: SCOOBY_SEED_REPORT_IDS
+        sync: false
+      # Six-reference display seed. The base64 ZIP (~3.5 MB) exceeds Render's 1 MB combined Secret File limit, so use
+      # either SCOOBY_REFERENCE_SEED_ARCHIVE (a path on a persistent disk / one-time restore) or SCOOBY_REFERENCE_SEED_URL
+      # (+ optional SCOOBY_REFERENCE_SEED_AUTH_HEADER) for one HTTPS GET at each start. Set exactly one of them.
+      - key: SCOOBY_REFERENCE_SEED_SHA256
+        value: c9fcbf2a32b7c58142389075511989357431b4d457ae89997ebae2261697b8a0
+      - key: SCOOBY_REFERENCE_SEED_ARCHIVE
+        sync: false
+      - key: SCOOBY_REFERENCE_SEED_URL
+        sync: false
+      - key: SCOOBY_REFERENCE_SEED_AUTH_HEADER
         sync: false
       # Set when the frontend is deployed (step 4); exact origin, no trailing slash.
       - key: SCOOBY_WEB_ORIGIN
