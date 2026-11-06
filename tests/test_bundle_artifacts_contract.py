@@ -90,6 +90,7 @@ def test_bound_synthetic_producer_bundle_to_draft_artifacts(tmp_path):
         pdf = client.get(pdf_ref["url"]).content
         assert hashlib.sha256(pdf).hexdigest() == pdf_ref["sha256"]
         parsed = PdfReader(BytesIO(pdf))
+        assert all((page.extract_text() or "").strip() for page in parsed.pages), "Unexpected empty PDF page"
         text = "\n".join(page.extract_text() or "" for page in parsed.pages)
         assert "SYNTHETIC TEST ONLY" in text and "Evidence and artifact index" in text
         for expected_text in ("SYNTHETIC TEST ONLY: defer the fictional interaction.", "SYNTHETIC rationale.", "SYNTHETIC counterevidence.", "SYNTHETIC reversal condition."):

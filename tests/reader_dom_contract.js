@@ -37,4 +37,11 @@ if(process.argv.includes('--captured-partial')){
   if(Object.values(pillars).every(p=>p.series.length===0)&&all.some(n=>n.className==='chart-block'||n.className==='var-chart'))throw Error('chart without supported data');
   for(const e of values.data.evidence)if(!document.getElementById('evidence-'+encodeURIComponent(e.id)))throw Error('missing evidence '+e.id);
 }
+if(process.argv.includes('--day-series')){
+  const svg=all.find(n=>n.tag==='svg'&&n.class==='chart');
+  if(!svg||!svg['aria-label'].includes('Positioned by date, day precision.'))throw Error('date precision not presented');
+  const points=svg.children.filter(n=>n.tag==='circle').map(n=>Number(n.cx));
+  if(points.length!==3||points[0]!==15||points[1]!==205||points[2]!==585)throw Error('day spacing did not preserve missing dates');
+  if(!text.includes('2026-11-03')||!text.includes('2026-11-06'))throw Error('date labels missing');
+}
 console.log('PASS DOM, provenance anchors, coverage and safe text');
