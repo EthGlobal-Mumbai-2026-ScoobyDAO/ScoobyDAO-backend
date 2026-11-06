@@ -1,5 +1,5 @@
 """Fetch identity-bound GeckoTerminal daily candles; no trading, no model calls."""
-import argparse, datetime, hashlib, json, math, re, urllib.parse, urllib.request
+import argparse, datetime, hashlib, json, math, re, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 NETWORKS={1:'eth',8453:'base'}
 def stamp(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -14,16 +14,40 @@ def get(url,out,name):
   if len(raw)>10000000: raise ValueError('response too large')
   doc=json.loads(raw,parse_constant=lambda s:(_ for _ in ()).throw(ValueError('non-finite JSON')))
   (out/(name+'.json')).write_bytes(raw); return doc,{'url':url,'requested_at':start,'fetched_at':stamp(),'http_status':status,'sha256':hashlib.sha256(raw).hexdigest(),'path':name+'.json'}
+ except urllib.error.HTTPError as e: return None,{'url':url,'requested_at':start,'fetched_at':stamp(),'error_type':'HTTPError','http_status':e.code,'status':'unavailable'}
  except Exception as e: return None,{'url':url,'requested_at':start,'fetched_at':stamp(),'error_type':type(e).__name__,'status':'unavailable'}
 def select_pool(doc,chain,address,preferred=None):
  asset=f'{NETWORKS[chain]}_{address.lower()}'; matches=[]
  for p in doc.get('data',[]):
   rel=p.get('relationships',{}); base=rel.get('base_token',{}).get('data',{}).get('id','').lower(); quote=rel.get('quote_token',{}).get('data',{}).get('id','').lower(); addr=p.get('attributes',{}).get('address','').lower()
-  if not re.fullmatch(r'0x[0-9a-f]{40}',addr): continue
-  if asset==base or asset==quote: matches.append({'address':addr,'side':'base' if asset==base else 'quote','name':p['attributes'].get('name'),'created_at':p['attributes'].get('pool_created_at')})
+  is_address=bool(re.fullmatch(r'0x[0-9a-f]{40}',addr))
+  # GeckoTerminal identifies Base Uniswap v4 pools using a bytes32 pool ID,
+  # not a contract address. Require its chain-specific DEX and pool record ID;
+  # this is a provider attribution, not independent on-chain verification.
+  dex=rel.get('dex',{}); dex=dex.get('data',{}) if isinstance(dex,dict) else {}; dex=dex if isinstance(dex,dict) else {}
+  is_base_v4_id=(chain==8453 and bool(re.fullmatch(r'0x[0-9a-f]{64}',addr))
+                 and dex.get('id')=='uniswap-v4-base' and str(p.get('id','')).lower()==f'base_{addr}')
+  if not (is_address or is_base_v4_id): continue
+  if asset==base or asset==quote:
+   record={'address':addr,'side':'base' if asset==base else 'quote','name':p['attributes'].get('name'),'created_at':p['attributes'].get('pool_created_at')}
+   if is_base_v4_id: record.update(identifier_type='provider_reported_uniswap_v4_pool_id',dex_id='uniswap-v4-base')
+   matches.append(record)
  if preferred: matches=[p for p in matches if p['address']==preferred.lower()]
  if not matches: raise ValueError('no identity-matched pool in returned page')
  return matches[0],matches
+
+def validate_candle_identity(doc,chain,address,side):
+ # When OHLC metadata exists, it must agree with the token side established
+ # from the selected pool response. Missing metadata is separately disclosed.
+ identity(chain,address)
+ if side not in ('base','quote'): raise ValueError('invalid selected token side')
+ meta=doc.get('meta') if isinstance(doc,dict) else None
+ if meta is None: return False
+ if not isinstance(meta,dict): raise ValueError('invalid OHLC token metadata')
+ token=meta.get(side)
+ if not isinstance(token,dict) or not isinstance(token.get('address'),str) or token['address'].lower()!=address.lower():
+  raise ValueError('OHLC token metadata disagrees with selected pool side')
+ return True
 
 def prepare(doc,cutoff):
  # Return closes and adjacent returns; never forward-fill missing dates or invent prices.
@@ -50,12 +74,16 @@ def fetch(chain,address,out,pool=None):
  try: chosen,alternatives=select_pool(doc,chain,address,pool)
  except ValueError as exc: result['error']=str(exc); store(out/'source-status.json',result); return result
  result['pool']=chosen; result['pool_alternatives']=alternatives; result['selection']='explicit pool' if pool else 'first matching pool in provider response; not best execution or market-wide coverage'
- url=base+'/pools/'+chosen['address']+'/ohlcv/day?'+urllib.parse.urlencode({'aggregate':1,'limit':1000,'currency':'usd','token':chosen['side']}); candles,rec=get(url,out,'daily'); result['requests'].append(rec)
+ url=base+'/pools/'+chosen['address']+'/ohlcv/day?'+urllib.parse.urlencode({'aggregate':1,'limit':1000,'currency':'usd','token':chosen['side'],'include_empty_intervals':'false'}); candles,rec=get(url,out,'daily'); result['requests'].append(rec)
  if candles is None: store(out/'source-status.json',result); return result
  cutoff=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
- try: h=prepare(candles,cutoff)
+ try:
+  meta_verified=validate_candle_identity(candles,chain,address,chosen['side'])
+  h=prepare(candles,cutoff)
  except (KeyError,TypeError,ValueError,OverflowError) as exc:
-  result['error']='Daily candle payload invalid: '+type(exc).__name__; store(out/'source-status.json',result); return result
- result['history']={'closes_before_cutoff':h['close_count'],'adjacent_daily_returns':len(h['returns']),'gaps':h['gaps'],'cutoff_utc_date':cutoff,'policy':h['policy']}; result['state']='available_for_operator_review' if len(h['returns'])>=2 and not h['gaps'] else 'pending_history_or_data_gaps'; store(out/'returns.json',h); store(out/'source-status.json',result); return result
+  result['error']='Daily candle payload invalid: '+type(exc).__name__
+  if str(exc)=='OHLC token metadata disagrees with selected pool side': result['reason']='ohlc_token_side_mismatch'
+  store(out/'source-status.json',result); return result
+ result['history']={'ohlc_side_metadata_matches':meta_verified,'closes_before_cutoff':h['close_count'],'adjacent_daily_returns':len(h['returns']),'gaps':h['gaps'],'cutoff_utc_date':cutoff,'policy':h['policy']}; result['state']='available_for_operator_review' if len(h['returns'])>=2 and not h['gaps'] else 'pending_history_or_data_gaps'; store(out/'returns.json',h); store(out/'source-status.json',result); return result
 if __name__=='__main__':
  a=argparse.ArgumentParser(description=__doc__); a.add_argument('--chain',type=int,required=True); a.add_argument('--address',required=True); a.add_argument('--output',type=Path,required=True); a.add_argument('--pool'); x=a.parse_args(); print(json.dumps(fetch(x.chain,x.address,x.output,x.pool),indent=2))

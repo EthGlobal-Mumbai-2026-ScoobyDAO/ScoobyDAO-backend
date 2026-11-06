@@ -51,10 +51,9 @@ services:
         value: approved
       - key: SCOOBY_ADMIN_AUDIENCE
         value: https://scoobydao-backend.onrender.com
-      # Any Orb-verified World ID may review reports and sign off publication (no reviewer list yet).
-      # Set to false and use SCOOBY_REVIEWERS (export-reviewer) to restrict it to named SMEs later.
-      - key: SCOOBY_OPEN_REVIEW
-        value: "true"
+      # Output of `python -m publication.cli export-reviewer --name <label>`; set in the dashboard.
+      - key: SCOOBY_REVIEWERS
+        sync: false
       # No persistent disk on the free plan: run the worker in this container and reapply the verified report seed
       # at every start (DEPLOYMENT.md, "seed at start"). Upload the archive's base64 as Secret File report-seed.zip.b64.
       - key: SCOOBY_EMBEDDED_WORKER

@@ -1,5 +1,9 @@
 # Handoff — initial integration checkpoint
 
+## Case orchestration (topic branch)
+
+See [case orchestration](docs/case-orchestration.md) for actionable cases, the four-group automatic gate, distinct case-scoped World confirmation, bounded common producer and report lineage. Both routes have synthetic end-to-end tests; no live World confirmation or real policy-qualified candidate has been demonstrated. The actual verifier covers fewer than four groups. Current decisions allow zero source/model calls; the producer blocks without usable captured inputs rather than inventing a report. The local RAY import is reference-only, pending, not gate-qualified. Final report sign-off and publication remain separate. Older sections below describe earlier checkpoints and may predate this case workflow.
+
 ## Current checkpoint
 
 All completed source slices are merged: backend PRs #1–5 and #7, web PRs #1–2. See [LIVE-STATE.md](LIVE-STATE.md) for exact source commits, checks and workstream gaps. The teammate separately merged World ID PR #6 while reconciliation was active; preserve its implementation and tests. Live World/chain integration remains deferred and was not performed by root. Root owns cross-repo reconciliation; backend owns runtime/packages; discovery owns screening/fork tools; investigation owns producers/mechanism protocol; web owns native cards; standalone reader owns presentation/export; the human teammate owns post-report publication and authenticated sign-off.

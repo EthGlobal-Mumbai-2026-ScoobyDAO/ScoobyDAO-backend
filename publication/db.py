@@ -120,6 +120,8 @@ def init() -> None:
         for col in ('initiator_iss', 'initiator_sub'):
             if col not in cols:
                 c.execute(f'ALTER TABLE pub_attempts ADD COLUMN {col} TEXT')
+    from .upgrade import retire_open_review_grants
+    retire_open_review_grants()
 
 
 def audit(c, target_id: str | None, kind: str, actor: str, detail: dict | None = None) -> None:

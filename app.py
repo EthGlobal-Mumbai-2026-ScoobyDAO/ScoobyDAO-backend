@@ -1,7 +1,9 @@
-import hashlib, hmac, json, os, shutil, subprocess, sys, tempfile
+import base64, datetime, hashlib, hmac, json, os, shutil, subprocess, sys, tempfile
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Literal
-from fastapi import Depends, FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Depends
+from publication.deps import get_world_optional
 from fastapi.responses import Response
 from urllib.parse import quote
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,6 +65,16 @@ def candidate(x:Candidate):
 @app.get('/candidates')
 def candidates():
  with db() as c: return [{'candidate_id':x['id'],'gate':'unknown','monitoring':True} for x in c.execute('SELECT * FROM candidates')]
+@app.get('/diagnostics')
+def diagnostics():
+ with db() as c:
+  result=[]
+  for x in c.execute('SELECT * FROM diagnostic_shortlist ORDER BY rowid'):
+   attempt=c.execute('SELECT * FROM diagnostic_attempts WHERE candidate_id=?',(x['candidate_id'],)).fetchone()
+   installed=c.execute('SELECT r.id,r.version,r.sha256 FROM reports r JOIN diagnostic_imports d ON d.run_id=r.run_id WHERE d.candidate_id=?',(x['candidate_id'],)).fetchone()
+   reference=c.execute("SELECT r.id,r.version,r.sha256 FROM reports r JOIN investigations i ON i.id=r.run_id WHERE i.candidate_id=? AND i.status='reference_only' AND NOT EXISTS (SELECT 1 FROM diagnostic_imports d WHERE d.run_id=i.id) ORDER BY r.created DESC LIMIT 1",(x['candidate_id'],)).fetchone()
+   result.append(dict(row(x),attempt=row(attempt),report=row(installed),reference=dict(row(reference),provenance='source_curated_reference') if reference else None,case_admitted=False,world_verified=False,provenance='user_requested_historical_diagnostic'))
+  return result
 @app.get('/candidates/{candidate_id}')
 def candidate_detail(candidate_id:str):
  with db() as c: r=getrow(c,'SELECT * FROM candidates WHERE id=?',(candidate_id,))
@@ -89,14 +101,31 @@ def investigate(x:Run,idempotency_key:str=Header(None)):
    return row(old)
   s=getrow(c,'SELECT * FROM selections WHERE id=?',(x.selection_id,))
   if s['candidate_id']!=x.candidate_id or s['kind'] not in ('qualified','diagnostic_exception'): err(409,'Selection does not authorize this investigation')
+  candidate_row=getrow(c,'SELECT payload FROM candidates WHERE id=?',(x.candidate_id,))
+  if json.loads(candidate_row['payload']).get('mode')=='live': err(403,'Live research requires a policy decision or a verified human authorization; legacy selection is unverified')
   i=ident(); c.execute('INSERT INTO investigations VALUES(?,?,?,?,?,?)',(i,x.candidate_id,x.selection_id,'queued',now(),k))
   for p in PILLARS: c.execute('INSERT INTO pillars VALUES(?,?,?,?)',(i,p,'queued','Awaiting worker'))
   event(c,i,'created','Local operator selection; human identity not authenticated'); job(c,'investigate',i,'investigate:'+i)
  signal(); return {'id':i,'status':'queued'}
+@app.post('/reference-runs')
+def reference_run(x:Run,idempotency_key:str=Header(None)):
+ """A no-research container for separately authorized, manually imported reference reports."""
+ k=key(idempotency_key)
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE');old=c.execute('SELECT * FROM investigations WHERE idem=?',(k,)).fetchone()
+  if old:
+   if (old['candidate_id'],old['selection_id'],old['status'])!=(x.candidate_id,x.selection_id,'reference_only'):err(409,'Idempotency key conflict')
+   return {'id':old['id'],'status':'reference_only'}
+  selection=getrow(c,'SELECT * FROM selections WHERE id=?',(x.selection_id,))
+  if selection['candidate_id']!=x.candidate_id or selection['kind']!='diagnostic_exception':err(409,'Scoped reference selection required')
+  run=ident();c.execute('INSERT INTO investigations VALUES(?,?,?,?,?,?)',(run,x.candidate_id,x.selection_id,'reference_only',now(),k))
+  for pillar in PILLARS:c.execute('INSERT INTO pillars VALUES(?,?,?,?)',(run,pillar,'unavailable','Reference import only; no research authorized or performed.'))
+  event(c,run,'reference_only','Local source-curated report import only; no research job or authenticated approval')
+  return {'id':run,'status':'reference_only'}
 @app.get('/investigations/{run_id}')
 def run(run_id:str):
  with db() as c:
-  r=row(getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))); r['pillars']=[row(x) for x in c.execute('SELECT * FROM pillars WHERE run_id=?',(run_id,))]; return r
+  r=row(getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))); r['pillars']=[row(x) for x in c.execute('SELECT * FROM pillars WHERE run_id=?',(run_id,))]; decision=c.execute('SELECT id FROM case_decisions WHERE run_id=?',(run_id,)).fetchone();r['graph_source']=__import__('case_graph').summary(c,decision['id']) if decision else None;return r
 @app.get('/investigations/{run_id}/events')
 def events(run_id:str):
  with db() as c:
@@ -110,13 +139,21 @@ def cancel(run_id:str):
 def resume(run_id:str,idempotency_key:str=Header(None)):
  k=key(idempotency_key)
  with db() as c:
+  c.execute('BEGIN IMMEDIATE')
   r=getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))
   old=c.execute('SELECT * FROM jobs WHERE idem=?',(k,)).fetchone()
   if old:
    if old['kind']!='investigate' or old['ref']!=run_id: err(409,'Idempotency key conflict')
    return {'job_id':old['id']}
-  if r['status'] not in ('incomplete','cancelled'): err(409,'Run is not resumable')
-  c.execute("UPDATE investigations SET status='queued' WHERE id=?",(run_id,)); c.execute("UPDATE pillars SET status='queued' WHERE run_id=? AND status IN ('unavailable','failed')",(run_id,)); event(c,run_id,'resumed','Local operator'); j=job(c,'investigate',run_id,k)
+  candidate_row=getrow(c,'SELECT payload FROM candidates WHERE id=?',(r['candidate_id'],));decision=c.execute('SELECT * FROM case_decisions WHERE run_id=?',(run_id,)).fetchone()
+  if decision:
+   if r['status'] not in ('blocked','failed'):err(409,'Case run is not retryable')
+   snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(decision['snapshot_id'],));case=getrow(c,'SELECT * FROM cases WHERE id=?',(decision['case_id'],))
+   if snap['expires']<=now() or case['current_snapshot']!=snap['id'] or snap['policy_digest']!=case_policy_digest():err(409,'Authorization expired or superseded; new authorization required')
+  else:
+   if json.loads(candidate_row['payload']).get('mode')=='live': err(403,'Live resumption requires a fresh authorized case decision')
+   if r['status'] not in ('incomplete','cancelled'): err(409,'Run is not resumable')
+  c.execute("UPDATE investigations SET status='queued' WHERE id=?",(run_id,)); c.execute("UPDATE pillars SET status='queued' WHERE run_id=? AND status IN ('unavailable','failed')",(run_id,)); event(c,run_id,'resumed','Retry under existing case authorization and budget' if decision else 'Local operator'); j=job(c,'investigate',run_id,k)
  signal(); return {'job_id':j}
 @app.post('/scans')
 def scan(idempotency_key:str=Header(None)):
@@ -166,15 +203,28 @@ def report_metadata(c,r):
  if digest(raw)!=r['sha256']: err(409,'Stored report integrity failure')
  doc=json.loads(raw)
  latest=c.execute('SELECT decision,created FROM reviews WHERE report_id=? AND version=? ORDER BY created DESC',(r['id'],r['version'])).fetchone()
+ case_decision=c.execute('SELECT id,action,case_id FROM case_decisions WHERE run_id=?',(run['id'],)).fetchone()
  diagnostic=c.execute('SELECT * FROM diagnostic_imports WHERE run_id=?',(run['id'],)).fetchone()
- return {'report_id':r['id'],'report_version':r['version'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
-         'mode':doc.get('mode'),'provenance':'user_requested_historical_diagnostic' if diagnostic else 'source_curated_reference' if run['status']=='reference_only' else 'imported','diagnostic':{'description':diagnostic['description'],'model_status':diagnostic['model_status'],'case_admitted':False,'world_verified':False} if diagnostic else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),
-         'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':'unverified local operator'},
+ admission_auth='world_id' if case_decision and case_decision['action']=='human_research' else 'policy_engine' if case_decision else 'unverified local operator'
+ return {'metadata_status':'available','integrity':'verified','report_id':r['id'],'report_version':r['version'],'run_id':run['id'],'run_status':run['status'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
+         'graph_source':__import__('case_graph').summary(c,case_decision['id']) if case_decision else None,'mode':doc.get('mode'),'provenance':'user_requested_historical_diagnostic' if diagnostic else 'source_curated_reference' if run['status']=='reference_only' else 'case_investigation' if case_decision else 'imported','diagnostic':{'description':diagnostic['description'],'model_status':diagnostic['model_status'],'case_admitted':False,'world_verified':False} if diagnostic else None,'case_id':case_decision['case_id'] if case_decision else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),'fetch_times':sorted({e['fetched_at'] for e in doc.get('evidence',[]) if e.get('fetched_at')}),'pillars':{name:{'status':pillar['status'],'quality_issues':pillar.get('quality_issues',[])} for name,pillar in doc.get('pillars',{}).items()},'release':{'status':'unavailable','consumer_visible':None,'reason':'Admin review and release authorization are not implemented in this case workflow.'},
+         'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':admission_auth},
          'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
+def unavailable_report_metadata(c,r):
+ # Preserve only indexed identifiers; never infer identity, coverage or review from unreadable bytes.
+ run=c.execute('SELECT id,candidate_id,status FROM investigations WHERE id=?',(r['run_id'],)).fetchone()
+ decision=c.execute('SELECT case_id FROM case_decisions WHERE run_id=?',(r['run_id'],)).fetchone()
+ return {'metadata_status':'unavailable','integrity':'unavailable','reason':'report_integrity_unavailable','report_id':r['id'],'report_version':r['version'],'run_id':r['run_id'],'run_status':run['status'] if run else None,'candidate_id':run['candidate_id'] if run else None,'case_id':decision['case_id'] if decision else None,'report_sha256':r['sha256'],'identity':None,'mode':None,'provenance':'unavailable','observation_times':[],'fetch_times':[],'pillars':None,'graph_source':None,'selection':None,'review':{'status':'unknown','authentication':'unavailable'},'release':{'status':'unavailable','consumer_visible':None,'reason':'Stored report cannot be verified.'},'created':r['created']}
 @app.get('/reports')
 def list_reports():
- # admin_review is the World-confirmed checkpoint-2 state; the local 'review' above it never authorizes release.
- with db() as c: return [dict(report_metadata(c,r),admin_review=report_review.public_status(c,r['id'],r['version'])) for r in c.execute('SELECT * FROM reports ORDER BY created DESC').fetchall() if report_review.consumer_visible(c,r['id'],r['version'])]
+ # Public listings expose only separately approved and released reports.
+ with db() as c:
+  items=[]
+  for r in c.execute('SELECT * FROM reports ORDER BY created DESC,id ASC,version ASC').fetchall():
+   if not report_review.consumer_visible(c,r['id'],r['version']): continue
+   try: items.append(dict(report_metadata(c,r),admin_review=report_review.public_status(c,r['id'],r['version'])))
+   except (HTTPException,OSError,ValueError,KeyError,TypeError,UnicodeError): items.append(unavailable_report_metadata(c,r))
+  return items
 @app.get('/reports/{report_id}/{version}/artifacts')
 def report_artifacts(report_id:str,version:str):
  with db() as c:
@@ -185,13 +235,15 @@ def latest_render(c,report_id,version,sha256):
  jobs=c.execute("SELECT * FROM jobs WHERE kind='render' AND state='done' ORDER BY created DESC").fetchall()
  return next((j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':sha256}),None)
 def artifact_listing(report_id,version,file_url,package_url):
- """Render artifacts of exactly these report bytes. Callers decide who may see them and how URLs look."""
  with db() as c:
   r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version))
   result=report_metadata(c,r); result['admin_review']=report_review.public_status(c,report_id,version)
-  match=latest_render(c,report_id,version,r['sha256'])
+  jobs=c.execute("SELECT * FROM jobs WHERE kind='render' ORDER BY created DESC").fetchall()
+  matching=[j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}]
+  match=next((j for j in matching if j['state']=='done'),None);latest=matching[0] if matching else None
+
  if not match:
-  result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']='not_rendered'; result['package']={'availability':'unavailable','package_sha256':None,'url':None}; return result
+  result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']=({'queued':'queued','running':'rendering','failed':'failed','cancelled':'cancelled'}.get(latest['state'],'not_rendered') if latest else 'not_rendered'); result['package']={'availability':'unavailable','package_sha256':None,'url':None}; return result
  out=DATA/'artifacts'/match['id']; manifest_path=out/'manifest.json'
  if not manifest_path.is_file(): err(409,'Render manifest missing')
  with db() as c: locked=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(match['id'],)).fetchone()
@@ -211,7 +263,7 @@ def artifact_listing(report_id,version,file_url,package_url):
 def report(report_id:str,version:str):
  with db() as c:
   r=row(getrow(c,'SELECT id,version,run_id,sha256,created FROM reports WHERE id=? AND version=?',(report_id,version)))
-  r['reviews']=[row(x) for x in c.execute('SELECT id,sha256,decision,actor,reason,created FROM reviews WHERE report_id=? AND version=? ORDER BY created',(report_id,version))]; return r
+  r['reviews']=[row(x) for x in c.execute('SELECT id,sha256,decision,actor,reason,created FROM reviews WHERE report_id=? AND version=? ORDER BY created',(report_id,version))];full=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version));r['metadata']=report_metadata(c,full);return r
 @app.post('/reports/{report_id}/{version}/review')
 def review(report_id:str,version:str,x:Review,idempotency_key:str=Header(None)):
  k=key(idempotency_key)
@@ -331,6 +383,8 @@ def queue_reason(run_id:str,x:ReasonInput,idempotency_key:str=Header(None)):
  with db() as c:
   run=getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))
   if run['status']=='cancelled': err(409,'Run cancelled')
+  source=getrow(c,'SELECT payload FROM candidates WHERE id=?',(run['candidate_id'],))
+  if json.loads(source['payload']).get('mode')=='live': err(403,'Live reasoning requires a bound, authorized evidence adapter')
   old=c.execute('SELECT * FROM jobs WHERE idem=?',(k,)).fetchone()
   if old:
    inp=c.execute('SELECT * FROM reasoning_inputs WHERE id=?',(old['ref'],)).fetchone()
@@ -403,9 +457,6 @@ def sme_file(report_id:str,version:str,name:str,principal=Depends(_require_admin
 # disk still knows who they are. Invalid configuration loads nobody.
 from publication import reviewers as publication_reviewers
 publication_reviewers.load_from_env()
-# SCOOBY_OPEN_REVIEW=true lets any validated World ID review and sign off publication; when it is off, reviewers
-# that open review added are disabled so no check still accepts them.
-publication_admin.apply_open_review_mode()
 if web_origin:
  app.add_middleware(publication_admin_routes.AdminWebCORS, allow_origins=[web_origin], allow_credentials=False,
                     allow_methods=['GET','POST','DELETE'], allow_headers=['Content-Type','Authorization','Idempotency-Key'])
@@ -421,6 +472,234 @@ if web_origin:
  app.add_middleware(PublicationWebCORS, allow_origins=[web_origin], allow_methods=['GET','POST'],
                     allow_headers=['Content-Type'])
 
+class CaseWebCORS(CORSMiddleware):
+ async def __call__(self,scope,receive,send):
+  path=scope.get('path','')
+  if scope['type']=='http' and ((path.startswith('/scouting/cases/') and path.endswith('/challenge')) or path.startswith('/scouting/challenges/') or path.startswith('/scouting/world-attempts/') or (path.startswith('/investigations/') and (path.endswith('/resume') or path.endswith('/events')))):
+   await super().__call__(scope,receive,send)
+  else:await self.app(scope,receive,send)
+if web_origin:
+ app.add_middleware(CaseWebCORS,allow_origins=[web_origin],allow_methods=['GET','POST'],allow_headers=['Content-Type','Authorization','Idempotency-Key'])
+
+class CaseScan(BaseModel):
+ limit: int = Field(default=10,ge=1,le=25)
+class ChallengeRequest(BaseModel):
+ action: Literal['diagnostic_research'] = 'diagnostic_research'
+ expected_revision: str = Field(pattern=r'^[0-9a-f]{64}$')
+@app.post('/scouting/cases/refresh')
+def refresh_cases(x:CaseScan,idempotency_key:str=Header(None)):
+ with db() as c:
+  try: jid=job(c,'case_scan',str(x.limit),key(idempotency_key))
+  except ValueError: err(409,'Idempotency key conflict')
+ signal();return {'job_id':jid,'status':'queued','scope':'configured local discovery store; no network calls'}
+def case_policy_digest():
+ try:return __import__('case_engine').policy_digest()
+ except (OSError,RuntimeError,ValueError):err(503,'Case policy source or budget configuration changed or is unavailable; restart after review')
+def scouting_clues(record,captured):
+ evidence={e['id']:e for e in record.get('evidence',[])};clues=[]
+ for trigger in record.get('triggers',[]):
+  for evidence_id in trigger.get('evidence_ids',[]) or [None]:
+   e=evidence.get(evidence_id,{})
+   clues.append({'kind':'discovery_trigger','description':trigger['description'],'evidence_id':evidence_id,'observed_at':e.get('observed_at'),'fetched_at':e.get('fetched_at'),'verification':'unverified_provider_lead'})
+ # Project a narrow, labeled allowlist of provider claims from the already captured, hash-bound evidence.
+ for e in record.get('evidence',[]):
+  if not any('api.gopluslabs.io/api/v1/token_security/' in x for x in e.get('limitations',[])):continue
+  try:
+   raw=base64.b64decode(captured[e['source']],validate=True)
+   if digest(raw)!=e['sha256']:continue
+   data=json.loads(raw);results=data.get('result',{});address=record['identity']['address'].lower();token=next(v for k,v in results.items() if k.lower()==address and isinstance(v,dict))
+   descriptions=[]
+   if token.get('creator_percent')=='1.000000':descriptions.append('GoPlus reported creator balance equal to 100% of supply; the measurement time is unknown and the claim needs independent verification.')
+   n=token.get('honeypot_with_same_creator')
+   if isinstance(n,str) and n.isdigit() and 0<int(n)<=1000000:descriptions.append('GoPlus reported '+n+' honeypot(s) associated with the same creator; the claim and attribution are unverified.')
+   if token.get('is_proxy')=='1':descriptions.append('GoPlus reported a proxy; its implementation and control require independent review.')
+   for description in descriptions:clues.append({'kind':'provider_claim','description':description,'evidence_id':e['id'],'observed_at':e.get('observed_at'),'fetched_at':e.get('fetched_at'),'verification':'unverified_provider_claim'})
+  except (ValueError,TypeError,KeyError,StopIteration,AttributeError):continue
+ return clues
+
+def case_view(c,case,policy=None):
+ import datetime as dt
+ policy=policy or case_policy_digest()
+ snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],));record=json.loads(snap['record']);ass=json.loads(snap['assessment']);state=case['state']
+ decision=c.execute("SELECT investigations.id AS run_id,investigations.status,case_decisions.budget FROM investigations LEFT JOIN case_decisions ON case_decisions.run_id=investigations.id WHERE investigations.candidate_id=? AND investigations.status!='reference_only' ORDER BY investigations.created DESC LIMIT 1",(case['candidate_id'],)).fetchone()
+ if decision: state='investigating' if decision['status'] in ('queued','running') else 'research_partial' if decision['status']=='partial' else 'research_complete' if decision['status']=='complete' else 'unavailable'
+ captured=json.loads(snap['evidence'])
+ expected=digest(dumps({'record':record,'evidence':captured,'policy':snap['policy_digest'],'assessment':ass}).encode())
+ if expected!=snap['id']: err(409,'Case snapshot integrity failure')
+ if (snap['expires']<=now() or policy!=snap['policy_digest']) and state!='investigating': state='unavailable'
+ lane={'monitoring':'monitoring','awaiting_human':'human_review_required','auto_queued':'auto_qualified','investigating':'research_running','research_partial':'research_partial','research_complete':'research_complete','unavailable':'unavailable'}[state]
+ def latest(key):
+  values=[e.get(key) for e in record.get('evidence',[]) if e.get(key)]
+  try:return max(values,key=lambda x:dt.datetime.fromisoformat(x.replace('Z','+00:00'))) if values else None
+  except (ValueError,TypeError):return None
+ reasons=[{'group_id':g['id'],'name':g.get('name',g['id']),'measurements':g.get('measurements',[]),'description':g['detail'],'verification_status':g['status'],'evidence_ids':[e['id'] for e in g.get('evidence',[])],'observed_at':max((e['observed_at'] for e in g.get('evidence',[])),default=None)} for g in ass['groups']]
+ pillars=[row(x) for x in c.execute('SELECT pillar,status,detail FROM pillars WHERE run_id=? ORDER BY pillar',(decision['run_id'],))] if decision else []
+ linked=c.execute('SELECT id,version FROM reports WHERE run_id=? ORDER BY created DESC LIMIT 1',(decision['run_id'],)).fetchone() if decision else None
+ _,count,_=__import__('case_engine').verified_gate(ass,captured)
+ clues=scouting_clues(record,captured); fetched=latest('fetched_at'); observed=latest('observed_at')
+ try:
+  ages=[(dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(t.replace('Z','+00:00'))).total_seconds() for t in (fetched,observed) if t]
+  freshness='stale' if any(age>3600 for age in ages) else 'unknown' if not fetched or not observed or any(age<0 for age in ages) else 'fresh'
+ except (ValueError,TypeError):freshness='unknown'
+ world_ready=__import__('case_world').admin_ready(get_world_optional())
+ remaining=max(0,4-count); has_concern=any(x['kind']=='provider_claim' for x in clues)
+ if lane=='research_running':routing='Investigation is running; report will appear here when generated.'
+ elif lane=='research_partial':routing='Partial investigation report is available; review its coverage and limitations.'
+ elif lane=='research_complete':routing='Investigation report is available for review.'
+ elif count>=4:routing='Four fresh independently verified concern groups qualify this case for automatic investigation.'
+ elif has_concern:routing='Review the unverified provider concern; '+str(count)+'/4 fresh groups verified. World ID is required to start an exception.'
+ else:routing='New-pool lead needs evidence of concern; '+str(count)+'/4 fresh groups verified. World ID is required to start an exception.'
+ if freshness!='fresh':routing+=' Refresh evidence before acting.'
+ summary=next((x['description'] for x in clues if x['kind']=='provider_claim'),None) or next((x['description'] for x in clues), 'No captured discovery trigger is available.')
+ # A concrete provider claim raises review urgency within the same verified tier; it never adds gate votes.
+ priority=(12-min(count,12))*2+(0 if has_concern else 1)+(60 if lane in ('research_running','research_partial','research_complete') else 100 if lane=='unavailable' else 0)
+ return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':summary,'scouting_clues':clues,'routing_rationale':routing,'evidence_freshness':freshness,'uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'available' if world_ready and lane in ('human_review_required','monitoring') and snap['expires']>now() else 'unavailable','reason':'World ID confirmation required for this case.' if world_ready else 'World ID administrator authorization is not configured.','action_url':('/scouting/cases/'+case['id']+'/challenge') if world_ready and lane in ('human_review_required','monitoring') and snap['expires']>now() else None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':linked['id'] if linked else None,'report_version':linked['version'] if linked else None,'budget':json.loads(decision['budget']) if decision['budget'] else None,'authorization':('world_id_human' if decision['run_id'] and c.execute("SELECT 1 FROM case_decisions WHERE run_id=? AND action='human_research'",(decision['run_id'],)).fetchone() else 'policy_qualified_local') if decision['budget'] else 'unverified_legacy','pillars':pillars,'reason':'No usable evidence under the authorized budget; no report generated.' if decision['status']=='blocked' else 'Evidence-linked draft is partial and pending review.' if decision['status']=='partial' else 'Research is incomplete; inspect the per-pillar states.' if decision['status']=='incomplete' else None} if decision else None}
+@app.get('/cases')
+@app.get('/scouting/cases')
+def scouting_cases():
+ import datetime as dt
+ with db() as c:
+  total=c.execute('SELECT count(*) FROM cases').fetchone()[0]
+  if total>5000: err(503,'Case index exceeds bounded list capacity; cursor pagination required')
+  policy=case_policy_digest();items=[case_view(c,x,policy) for x in c.execute('SELECT * FROM cases').fetchall()]
+ items.sort(key=lambda x:(x['priority_order'],x['candidate_id']))
+ return {'schema_version':'scouting-case-list/2','generated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'stale_after_seconds':60,'cases':items[:100],'truncated':total>100,'authentication':'none; local operator prototype'}
+@app.get('/cases/{case_id}')
+@app.get('/scouting/cases/{case_id}')
+def scouting_case(case_id:str):
+ with db() as c:return case_view(c,getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,)))
+@app.post('/scouting/cases/{case_id}/challenge')
+def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None),principal=Depends(_require_admin('case_investigation'))):
+ import secrets
+ k=key(idempotency_key)
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE');case=getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,));snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],))
+  old=c.execute('SELECT * FROM case_challenges WHERE idem=?',(k,)).fetchone()
+  if old:
+   __import__('case_world').require_owner(c,old['id'],principal)
+   if (old['case_id'],old['snapshot_id'],old['action'])!=(case_id,x.expected_revision,x.action):err(409,'Idempotency key conflict')
+   old_state=old['state']
+   if old_state=='pending' and old['expires']<=now():old_state='expired'
+   if old_state=='pending' and (case['current_snapshot']!=old['snapshot_id'] or case_policy_digest()!=old['policy_digest']):old_state='superseded'
+   return {'challenge_id':old['id'],'case_id':case_id,'candidate_id':case['candidate_id'],'snapshot_digest':old['snapshot_id'],'policy_digest':old['policy_digest'],'action':old['action'],'nonce':old['nonce'],'state':old_state,'expires_at':old['expires'],'verification':'configured' if __import__('case_world').admin_ready(get_world_optional()) else 'unavailable'}
+  if snap['id']!=x.expected_revision or snap['expires']<=now() or case_policy_digest()!=snap['policy_digest']:err(409,'Snapshot is stale or superseded')
+  if case['state'] not in ('awaiting_human','monitoring'):err(409,'Case is not awaiting an exception')
+  i=ident();nonce=secrets.token_hex(32);expires=min(snap['expires'],now()+900)
+  c.execute('INSERT INTO case_challenges VALUES(?,?,?,?,?,?,?,?,?,?)',(i,case_id,snap['id'],snap['policy_digest'],x.action,nonce,'pending',expires,now(),k))
+  c.execute('INSERT INTO case_challenge_admin VALUES(?,?,?)',(i,principal.session_id,publication_admin.subject_hash(principal.iss,principal.sub)))
+  c.execute("UPDATE cases SET state='awaiting_human',updated=? WHERE id=?",(now(),case_id))
+  return {'challenge_id':i,'case_id':case_id,'candidate_id':case['candidate_id'],'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'action':x.action,'nonce':nonce,'state':'pending','expires_at':expires,'verification':'configured' if __import__('case_world').admin_ready(get_world_optional()) else 'unavailable'}
+@app.post('/scouting/challenges/{challenge_id}/continue')
+def continue_challenge(challenge_id:str,principal=Depends(_require_admin('case_investigation'))):
+ # Fail closed until the separately owned verifier checks action, identity, nonce, expiry and revocation.
+ with db() as c:
+  challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,))
+  __import__('case_world').require_owner(c,challenge_id,principal)
+  if challenge['state']!='pending' or challenge['expires']<=now():err(409,'Challenge is expired or superseded')
+  case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],))
+  if case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']:err(409,'Challenge is stale or superseded')
+ err(503,'Authenticated human verification adapter is not configured')
+
+@app.get('/scouting/challenges/{challenge_id}')
+def challenge_status(challenge_id:str,principal=Depends(_require_admin('case_investigation'))):
+ with db() as c:
+  challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));__import__('case_world').require_owner(c,challenge_id,principal);case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],));state=challenge['state']
+  if state=='pending' and challenge['expires']<=now():state='expired'
+  if state=='pending' and (case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']):state='superseded'
+  return {'challenge_id':challenge_id,'candidate_id':case['candidate_id'],'snapshot_digest':challenge['snapshot_id'],'policy_digest':challenge['policy_digest'],'action':challenge['action'],'nonce':challenge['nonce'],'expires_at':challenge['expires'],'state':state,'verification':'configured' if __import__('case_world').admin_ready(get_world_optional()) else 'unavailable'}
+@app.post('/scouting/challenges/{challenge_id}/world-attempt')
+def case_world_start(challenge_id:str,world=Depends(get_world_optional),principal=Depends(_require_admin('case_investigation'))):
+ import case_world
+ return case_world.start(challenge_id,world,principal)
+@app.get('/scouting/world-attempts/{attempt_id}')
+def case_world_poll(attempt_id:str,world=Depends(get_world_optional),principal=Depends(_require_admin('case_investigation'))):
+ import case_world
+ result=case_world.poll(attempt_id,world,principal)
+ if result['state']=='approved':signal()
+ return result
+
+@app.post('/scouting/world-attempts/{attempt_id}/cancel')
+def case_world_cancel(attempt_id:str,principal=Depends(_require_admin('case_investigation'))):
+ import case_world
+ return case_world.cancel(attempt_id,principal)
+
+@app.post('/scouting/challenges/{challenge_id}/{human_action}')
+def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke','revise'],principal=Depends(_require_admin('case_investigation'))):
+ if human_action=='revise':err(503,'Revision requires a new discovery snapshot')
+ import case_world
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE');ch=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));case_world.require_owner(c,challenge_id,principal)
+  if ch['state']=='pending':
+   c.execute("UPDATE case_challenges SET state=? WHERE id=?",('denied' if human_action=='deny' else 'revoked',challenge_id))
+   attempts=c.execute("SELECT id FROM case_world_attempts WHERE challenge_id=? AND state='pending'",(challenge_id,)).fetchall()
+   c.execute("UPDATE case_world_attempts SET state='cancelled' WHERE challenge_id=? AND state='pending'",(challenge_id,))
+   with case_world._lock:
+    for attempt in attempts:case_world._codes.pop(attempt['id'],None)
+  return {'challenge_id':challenge_id,'state':getrow(c,'SELECT state FROM case_challenges WHERE id=?',(challenge_id,))['state']}
+
+def social_context_file(path):
+ # Explicitly configured local metadata only. Read on demand; never copy into the database or reports.
+ unavailable={'leads':[],'status':'unavailable','reason':'No current bounded SearchApi metadata is configured.','provider':'searchapi.io'}
+ if not path:return unavailable
+ try:
+  p=Path(path)
+  if p.stat().st_size>262144:raise ValueError('metadata too large')
+  data=json.loads(p.read_text(encoding='utf-8-sig'))
+  if data.get('profile')!='scooby.reddit-leads/1' or data.get('provider')!='searchapi.io':raise ValueError('unsupported metadata')
+  observations=data['observations']
+  if not isinstance(observations,list) or len(observations)>40:raise ValueError('invalid observations')
+  leads=[];current=datetime.datetime.now(datetime.timezone.utc)
+  for item in observations:
+   fetched=datetime.datetime.fromisoformat(item['fetched_at'].replace('Z','+00:00'));observed=datetime.datetime.fromisoformat(item['observed_at'].replace('Z','+00:00'))
+   age=(current-fetched).total_seconds()
+   if fetched.tzinfo is None or observed.tzinfo is None or age<0 or age>86400 or observed>fetched:raise ValueError('stale or invalid observation')
+   url=item['url'];parts=urlsplit(url)
+   if parts.scheme!='https' or parts.hostname not in ('www.reddit.com','reddit.com') or parts.username or parts.password or len(url)>2048:raise ValueError('invalid URL')
+   ident=item['id'];sub=item['subreddit']
+   if not isinstance(ident,str) or not ident.startswith('t3_') or not ident[3:].isalnum() or not isinstance(sub,str) or not sub.replace('_','').isalnum() or len(sub)>32:raise ValueError('invalid identity')
+   leads.append({'id':ident,'url':url,'subreddit':sub,'observed_at':observed.isoformat(),'fetched_at':fetched.isoformat(),'age_days':round((current-observed).total_seconds()/86400,2),'source_mode':'dated_social_context','attribution':'unresolved','verified_concern_votes':0})
+  return {'leads':leads,'status':'partial','provider':'searchapi.io','reason':'Historical context only; attribution unresolved and research integration incomplete. Metadata expires 24 hours after fetch.','coverage':{'posts_examined':len(leads),'complete':False},'storage':'read-only external metadata; not persisted by backend'}
+ except (OSError,ValueError,TypeError,KeyError,AttributeError,OverflowError):return unavailable
+
+def social_context():
+ paths=[p for p in (os.getenv('SCOOBY_SOCIAL_CONTEXT_FILES','') or os.getenv('SCOOBY_SOCIAL_CONTEXT_FILE','')).split(os.pathsep) if p.strip()][:3]
+ results=[social_context_file(p.strip()) for p in paths];good=[r for r in results if r['status']=='partial'];leads=[];seen=set()
+ for result in good:
+  for lead in result['leads']:
+   if lead['id'] not in seen:leads.append(lead);seen.add(lead['id'])
+ return {'leads':leads,'status':'partial' if good else 'unavailable','provider':'searchapi.io','reason':'Historical context only; attribution unresolved and research integration incomplete.' if good else 'No current bounded SearchApi metadata is configured.','coverage':{'configured_feeds':len(paths),'available_feeds':len(good),'complete':False},'storage':'read-only external metadata; not persisted by backend'}
+
+def candidate_social_status():
+ path=os.getenv('SCOOBY_SOCIAL_CANDIDATE_STATUS_FILE','').strip()
+ if not path:return []
+ try:
+  p=Path(path)
+  if p.stat().st_size>262144:raise ValueError('metadata too large')
+  data=json.loads(p.read_text(encoding='utf-8-sig'));candidate=data['candidate_id'];end=datetime.datetime.fromisoformat(data['window']['end'].replace('Z','+00:00'));age=(datetime.datetime.now(datetime.timezone.utc)-end).total_seconds()
+  chain,address=candidate.split(':',1)
+  if data['profile']!='scooby.reddit-evidence/1' or data['provider']!='searchapi.io' or data['coverage']['reason']!='provider_error' or data['observations'] or chain not in ('1','8453') or len(address)!=42 or not address.startswith('0x') or any(c not in '0123456789abcdefABCDEF' for c in address[2:]) or not 0<=age<=86400:raise ValueError('unsupported status')
+  return [{'candidate_id':candidate,'status':'unavailable','reason':'provider_error','interpretation':'unavailable','observation_count':0}]
+ except (OSError,ValueError,TypeError,KeyError,AttributeError,OverflowError):return []
+
+@app.get('/scouting/social-candidate-status')
+def scouting_social_candidate_status():
+ return {'candidate_queries':candidate_social_status(),'provider':'searchapi.io'}
+
+@app.get('/scouting/sources')
+def scouting_sources():
+ context=social_context()
+ with db() as c:sources=[row(x) for x in c.execute('SELECT * FROM case_sources ORDER BY id')]
+ for source in sources:
+  if source['id']=='reddit' and context['status']=='partial':source.update(status='partial',detail='SearchApi metadata is available as historical context; identity resolution and durable lifecycle remain incomplete.')
+ return {'sources':sources,'reddit_lead_storage':'blocked_pending_retention_and_deletion_review','authentication':'none; local operator prototype'}
+@app.get('/scouting/leads')
+def scouting_leads():
+ return social_context()
+
+@app.get('/scouting/schema')
+def scouting_schema():
+ path=ROOT/'schemas/runtime/scouting-case-list-v2.schema.json';raw=path.read_bytes()
+ return {'schema_version':'scouting-case-list/2','sha256':digest(raw),'schema':json.loads(raw)}
 # Public-host gate (SCOOBY_PUBLIC_GATE=true, e.g. on Render). Deny by default: anonymous callers reach only
 # /health, the /web/v1 adapter and /publication/v1 (whose writes require the operator bearer token). Every
 # other route, including /docs and /openapi.json, requires `Authorization: Bearer $SCOOBY_OPERATOR_TOKEN`.
@@ -430,8 +709,14 @@ PUBLIC_PREFIXES=('/web/v1/','/publication/v1/')
 # Public report library, GET/HEAD only: list, per-version artifacts, packages and rendered files.
 import re as _re
 PUBLIC_LIBRARY=_re.compile(r'^/(reports|reports/[^/]+/[^/]+/artifacts|packages/[0-9a-f]{64}(/.+)?|artifacts/[^/]+/.+)$')
+SCOUT_READ=_re.compile(r'^/scouting/(?:cases(?:/[^/]+)?|schema)$')
+CASE_AUTH=_re.compile(r'^/scouting/(?:cases/[^/]+/challenge|challenges/[^/]+(?:/(?:world-attempt|continue|deny|revoke|revise))?|world-attempts/[^/]+(?:/cancel)?)$')
+CASE_PROGRESS=_re.compile(r'^/investigations/[^/]+/(?:events|resume)$')
 def _public_path(path,method='GET'):
  if path in PUBLIC_EXACT or path.startswith(PUBLIC_PREFIXES): return True
+ if method in ('GET','HEAD') and SCOUT_READ.fullmatch(path) and path!='/scouting/cases/refresh': return True
+ if method in ('GET','POST','OPTIONS') and CASE_AUTH.fullmatch(path): return True
+ if method in ('GET','POST','OPTIONS') and CASE_PROGRESS.fullmatch(path): return True
  return method in ('GET','HEAD') and bool(PUBLIC_LIBRARY.match(path))
 class PublicGate:
  def __init__(self, app): self.app=app
