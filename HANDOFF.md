@@ -2,7 +2,7 @@
 
 ## Case orchestration (topic branch)
 
-See [case orchestration](docs/case-orchestration.md) for the bounded discovery-store bridge, global-priority case DTO, zero-call auto decisions, one-run-per-candidate suppression and fail-closed human challenge. Discovery PR #9, investigation PR #11 and [qualification charter PR #10](https://github.com/EthGlobal-Mumbai-2026-ScoobyDAO/ScoobyDAO-backend/pull/10) are separate dependencies; no World Agent research verifier or final human report sign-off is inferred. The actual discovery verifiers support only two groups, so no real candidate auto-qualifies. Per-pillar producers remain unwired and a started run is incomplete. Reddit-derived content/lead retention and linking are blocked pending a compliant deletion lifecycle. Legacy unverified live start, resume and reasoning are blocked; use the no-research `POST /reference-runs` lane for a separately scoped reference report import.
+See [case orchestration](docs/case-orchestration.md) for actionable cases, the four-group automatic gate, distinct case-scoped World confirmation, bounded common producer and report lineage. Both routes have synthetic end-to-end tests; no live World confirmation or real policy-qualified candidate has been demonstrated. The actual verifier covers fewer than four groups. Current decisions allow zero source/model calls; the producer blocks without usable captured inputs rather than inventing a report. The local RAY import is reference-only, pending, not gate-qualified. Final report sign-off and publication remain separate. Older sections below describe earlier checkpoints and may predate this case workflow.
 
 ## Current checkpoint
 

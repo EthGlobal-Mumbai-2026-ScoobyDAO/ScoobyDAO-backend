@@ -129,15 +129,21 @@ def cancel(run_id:str):
 def resume(run_id:str,idempotency_key:str=Header(None)):
  k=key(idempotency_key)
  with db() as c:
+  c.execute('BEGIN IMMEDIATE')
   r=getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))
   old=c.execute('SELECT * FROM jobs WHERE idem=?',(k,)).fetchone()
   if old:
    if old['kind']!='investigate' or old['ref']!=run_id: err(409,'Idempotency key conflict')
    return {'job_id':old['id']}
-  candidate_row=getrow(c,'SELECT payload FROM candidates WHERE id=?',(r['candidate_id'],))
-  if json.loads(candidate_row['payload']).get('mode')=='live': err(403,'Live resumption requires a fresh authorized case decision')
-  if r['status'] not in ('incomplete','cancelled'): err(409,'Run is not resumable')
-  c.execute("UPDATE investigations SET status='queued' WHERE id=?",(run_id,)); c.execute("UPDATE pillars SET status='queued' WHERE run_id=? AND status IN ('unavailable','failed')",(run_id,)); event(c,run_id,'resumed','Local operator'); j=job(c,'investigate',run_id,k)
+  candidate_row=getrow(c,'SELECT payload FROM candidates WHERE id=?',(r['candidate_id'],));decision=c.execute('SELECT * FROM case_decisions WHERE run_id=?',(run_id,)).fetchone()
+  if decision:
+   if r['status'] not in ('blocked','failed'):err(409,'Case run is not retryable')
+   snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(decision['snapshot_id'],));case=getrow(c,'SELECT * FROM cases WHERE id=?',(decision['case_id'],))
+   if snap['expires']<=now() or case['current_snapshot']!=snap['id'] or snap['policy_digest']!=case_policy_digest():err(409,'Authorization expired or superseded; new authorization required')
+  else:
+   if json.loads(candidate_row['payload']).get('mode')=='live': err(403,'Live resumption requires a fresh authorized case decision')
+   if r['status'] not in ('incomplete','cancelled'): err(409,'Run is not resumable')
+  c.execute("UPDATE investigations SET status='queued' WHERE id=?",(run_id,)); c.execute("UPDATE pillars SET status='queued' WHERE run_id=? AND status IN ('unavailable','failed')",(run_id,)); event(c,run_id,'resumed','Retry under existing case authorization and budget' if decision else 'Local operator'); j=job(c,'investigate',run_id,k)
  signal(); return {'job_id':j}
 @app.post('/scans')
 def scan(idempotency_key:str=Header(None)):
@@ -385,7 +391,7 @@ if web_origin:
 class CaseWebCORS(CORSMiddleware):
  async def __call__(self,scope,receive,send):
   path=scope.get('path','')
-  if scope['type']=='http' and ((path.startswith('/scouting/cases/') and path.endswith('/challenge')) or path.startswith('/scouting/challenges/') or path.startswith('/scouting/world-attempts/')):
+  if scope['type']=='http' and ((path.startswith('/scouting/cases/') and path.endswith('/challenge')) or path.startswith('/scouting/challenges/') or path.startswith('/scouting/world-attempts/') or (path.startswith('/investigations/') and path.endswith('/resume'))):
    await super().__call__(scope,receive,send)
   else:await self.app(scope,receive,send)
 if web_origin:

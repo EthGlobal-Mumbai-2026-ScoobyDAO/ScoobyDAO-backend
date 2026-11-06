@@ -16,7 +16,7 @@ The [native package contract](docs/native-package-contract.md) binds report, sid
 
 ## Case orchestration workstream (proposed branch)
 
-The local case orchestration slice reads bounded, configured discovery snapshots into a versioned case list, rechecks policy and evidence before an auto-qualified run, and pauses human exceptions until a credential verifier exists. Actual production groups currently number two, so no live auto-qualification is possible. Research producers, durable Reddit retention and identity linking remain unwired; a configured external metadata file can supply temporary, unresolved social context; a started run ends incomplete with explicit unavailable pillars. See [case orchestration](docs/case-orchestration.md), discovery PR #9, investigation PR #11 and the separate [qualification charter PR #10](https://github.com/EthGlobal-Mumbai-2026-ScoobyDAO/ScoobyDAO-backend/pull/10). The API is unauthenticated local prototype; report sign-off/publication remains separate.
+The local case orchestration slice ranks source-grounded scouting cases, auto-starts only after four independently verified fresh groups, and supports a separate case-scoped World ID confirmation for human-authorized starts. Both use the same bounded investigation/report worker; resulting partial drafts appear in Reports and link to the Case. With the current zero-source budget, a run with no usable captured inputs is blocked without a report. World configuration and live evidence are required for a real journey; synthetic end-to-end tests are not live proof. See [case orchestration](docs/case-orchestration.md). Final report sign-off/publication is separate.
 
 ## What works and what remains
 
@@ -31,7 +31,7 @@ Candidate v0.1 and report v0.2 are frozen shared contracts. The reader validates
 
 - **Backend integration (this checkout):** core lifecycle, worker orchestration, schemas, research integration, local draft generation and durable state.
 - **Discovery chat `01a1adf5-c90c-7ec0-9a93-8adb65d9aca6`:** source ingestion and verified screening; portable package imported under `modules/discovery`; not yet wired to the API.
-- **Investigation chat `01a1adf5-caef-7e50-9fac-5e344c5a169a`:** five-pillar research and producer interfaces; final portable export imported under `modules/investigation`; not wired to the API.
+- **Investigation chat `01a1adf5-caef-7e50-9fac-5e344c5a169a`:** five-pillar research and producer interfaces; case producer is invoked by the bounded worker; incomplete coverage remains explicit.
 - **Frontend chat `01a1adf5-cdb8-78e0-b887-625f6ca4e941`:** portable reader/build export and contributor handoff/interface proposal only.
 - **Another human teammate:** post-report publication and World ID/AgentKit human sign-off. Implemented in `publication/` on top of this seam (fake-issuer tested; live run pending); see the section below. See [workstreams](docs/workstreams.md) and the [human teammate handoff](docs/post-report-handoff.md) for the seam and exact continuation.
 

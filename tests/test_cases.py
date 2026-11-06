@@ -244,6 +244,7 @@ def test_world_confirmation_atomically_starts_one_case_run(tmp_path,monkeypatch)
   with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1 and c.execute("SELECT count(*) FROM jobs WHERE kind='investigate'").fetchone()[0]==1
   import case_jobs
   assert case_jobs.run_case(poll['run_id'],producer=lambda *a,**kw:{'state':'blocked','bundle_path':None})=='blocked'
+  retry=client.post('/investigations/'+poll['run_id']+'/resume',headers={'Idempotency-Key':'retry-human'});assert retry.status_code==200;assert client.post('/investigations/'+poll['run_id']+'/resume',headers={'Idempotency-Key':'retry-human'}).json()==retry.json()
   case2=case_engine.ingest_record(with_sources(record(1912),tmp_path),tmp_path);rev=client.get('/scouting/cases/'+case2).json()['snapshot_digest'];ch2=client.post('/scouting/cases/'+case2+'/challenge',json={'expected_revision':rev},headers={'Idempotency-Key':'denied-test'}).json();aid2=client.post('/scouting/challenges/'+ch2['challenge_id']+'/world-attempt').json()['attempt_id'];world.outcome=Denied();assert client.get('/scouting/world-attempts/'+aid2).json()['state']=='denied'
   with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1
  finally:app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
