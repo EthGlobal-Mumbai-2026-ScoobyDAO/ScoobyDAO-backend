@@ -108,6 +108,14 @@ Reviewers holding `report_review` are the subject-matter experts (SMEs). With `S
 
 **Reviewers on a host without a persistent disk.** `SCOOBY_REVIEWERS` (a JSON list of `{label, iss, sub, scopes, enabled}`) is reapplied at API startup: each listed `(iss, sub)` is upserted with exactly the listed scopes; unlisted reviewers are untouched; invalid JSON loads nobody and logs no subject. Produce an entry from a real World enrollment with `python -m publication.cli export-reviewer --name <label>` and store it as a host secret. Being listed never approves anything; each decision still needs its own World confirmation.
 
+## Per-report reading (review desk "Read" button)
+
+`POST /web/v1/admin/session` with `{"report_id", "version"}` starts a World login whose session is limited to that installed report version: its review detail, SME files, decisions, revocation and publication sign-off. Any other route answers 403 ("limited to another report"). A per-report session never authorizes an investigation: the case-checkpoint route guard refuses it and `authorize_case_admin` ignores it. The confirmed World ID must still be an enabled reviewer with `report_review` (via `SCOOBY_REVIEWERS` or `enroll`), and each decision still needs its own World confirmation.
+
+`SCOOBY_REVIEW_PER_REPORT=true` makes this mandatory for reading and deciding: an unrestricted admin session then gets 403 ("use Read on this report") on any report-specific review route, though it can still list the queue and use case routes. Off by default.
+
+`GET /web/v1/review-queue` (anonymous) lists `report_id`, `report_version`, `report_sha256`, `created` and `state` for every installed version, so the desk can show a Read button per report without a sign-in. It exposes that pending versions exist and their ids, not their contents.
+
 ## Setup and walkthrough
 
 1. Configure World as in [publication-demo.md](publication-demo.md) step 1. Run the API (`python -m uvicorn app:app --host 127.0.0.1 --port 8000`).

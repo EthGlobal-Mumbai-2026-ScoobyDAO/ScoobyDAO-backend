@@ -426,6 +426,7 @@ app.include_router(publication_web.router)
 # path guard on case-checkpoint routes, and CORS that lets the admin web send its session bearer token.
 from publication import admin as publication_admin, admin_routes as publication_admin_routes, review as report_review
 app.include_router(publication_admin_routes.router)
+app.include_router(publication_admin_routes.public_router)
 app.add_middleware(publication_admin.AdminRouteGuard)
 
 # Subject-matter-expert view of the full rendered report before release (any installed version). Needs an admin

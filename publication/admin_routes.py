@@ -17,6 +17,7 @@ from . import admin, review, service
 from .deps import get_admin_cfg, get_world, get_world_optional, idem_key, require_admin
 
 router = APIRouter(prefix='/web/v1/admin', tags=['admin'])
+public_router = APIRouter(prefix='/web/v1', tags=['admin'])
 
 
 def _call(fn, *a, **kw):
@@ -38,11 +39,17 @@ class ReviewRevokeIn(BaseModel):
 
 
 # ---------------------------------------------------------------------------- session
+class SessionIn(BaseModel):
+    report_id: str = Field(min_length=1, max_length=200)
+    version: str = Field(min_length=1, max_length=200)
+
+
 @router.post('/session')
-def start_session(cfg=Depends(get_admin_cfg), world=Depends(get_world)):
+def start_session(x: SessionIn | None = None, cfg=Depends(get_admin_cfg), world=Depends(get_world)):
     """Start a World login. The response carries the session token once; it stays inactive until an
-    enabled reviewer holding at least one scope completes the login."""
-    return _call(admin.start_session, world, cfg)
+    enabled reviewer holding at least one scope completes the login. With {report_id, version} in the body the
+    session is limited to that report version (the review desk "Read" button)."""
+    return _call(admin.start_session, world, cfg, (x.report_id, x.version) if x else None)
 
 
 @router.get('/session')
@@ -56,6 +63,15 @@ def end_session(authorization: str | None = Header(None)):
 
 
 # ---------------------------------------------------------------------------- checkpoint 2: report sign-off
+@public_router.get('/review-queue')
+def public_review_queue():
+    """Anonymous list for the review desk's Read buttons: id, version, report hash and review state only."""
+    with db() as c:
+        q = review.queue(c)
+    return {'schema': 'scooby.review-queue-public/1', 'generated_at': q['generated_at'],
+            'items': [{k: i[k] for k in ('report_id', 'report_version', 'report_sha256', 'created', 'state')} for i in q['items']]}
+
+
 @router.get('/reviews')
 def review_queue(principal=Depends(require_admin('report_review'))):
     with db() as c:

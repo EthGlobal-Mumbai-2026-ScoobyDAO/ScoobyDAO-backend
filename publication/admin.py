@@ -56,6 +56,7 @@ class Principal:
     label: str
     scopes: frozenset
     expires_at: float
+    resource: str | None = None   # 'report/<id>/<version>' for a per-report session, else None
 
 
 def subject_hash(iss: str, sub: str) -> str:
@@ -145,8 +146,20 @@ def _end(c, session_id: str, state: str, why: str | None = None) -> dict:
     return public_session(c, _session(c, session_id))
 
 
-def start_session(world: WorldClient, cfg: AdminConfig) -> dict:
-    """Start a World device login. Anyone may start one; only an enabled reviewer with a scope can finish it."""
+def report_resource(report_id: str, version: str) -> str:
+    return f'report/{report_id}/{version}'
+
+
+def start_session(world: WorldClient, cfg: AdminConfig, report: tuple[str, str] | None = None) -> dict:
+    """Start a World device login. Anyone may start one; only an enabled reviewer with a scope can finish it.
+    With `report` (report_id, version) the session is limited to that one installed report version."""
+    resource = None
+    if report is not None:
+        rid, ver = report
+        with db() as c:
+            if not c.execute('SELECT 1 FROM reports WHERE id=? AND version=?', (rid, ver)).fetchone():
+                raise service.NotFound('no installed report version with this id')
+        resource = report_resource(rid, ver)
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
         for s in c.execute("SELECT id FROM admin_sessions WHERE state='pending' AND login_expires_at<=?", (now(),)).fetchall():
@@ -163,12 +176,12 @@ def start_session(world: WorldClient, cfg: AdminConfig) -> dict:
     sid = ident()
     with db() as c:
         c.execute('''INSERT INTO admin_sessions(id,token_hash,state,accepted_acr,device_code_hash,user_code,verification_uri,
-                     verification_uri_complete,interval,next_poll_at,started_at,login_expires_at,created)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                     verification_uri_complete,interval,next_poll_at,started_at,login_expires_at,created,resource)
+                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                   (sid, _token_hash(token), 'pending', json.dumps(list(world.config.accepted_acr)),
                    digest(dev.device_code.encode()), dev.user_code, dev.verification_uri, dev.verification_uri_complete,
-                   dev.interval, started + dev.interval, started, started + dev.expires_in, now()))
-        audit(c, 'login_started', 'anonymous', {'session_id': sid})
+                   dev.interval, started + dev.interval, started, started + dev.expires_in, now(), resource))
+        audit(c, 'login_started', 'anonymous', {'session_id': sid, 'resource': resource})
         service._remember(sid, dev.device_code)
         out = public_session(c, _session(c, sid))
     out['session_token'] = token  # returned once; only its hash is stored
@@ -263,7 +276,8 @@ def principal_for_token(token: str | None) -> Principal | None:
         reviewer = c.execute('SELECT label, enabled FROM pub_reviewers WHERE iss=? AND sub=?', (s['iss'], s['sub'])).fetchone()
         if not reviewer or not reviewer['enabled']:
             return None
-        return Principal(s['id'], s['iss'], s['sub'], reviewer['label'], scopes_of(c, s['iss'], s['sub']), s['expires_at'])
+        return Principal(s['id'], s['iss'], s['sub'], reviewer['label'], scopes_of(c, s['iss'], s['sub']), s['expires_at'],
+                         s['resource'])
 
 
 def session_active(c, session_id: str, iss: str, sub: str) -> bool:
@@ -284,8 +298,8 @@ def authorize_case_admin(identity: Identity, binding: dict) -> bool:
     try:
         with db() as c:
             allowed = (action in CASE_ACTIONS and permitted(c, identity.iss, identity.sub, 'case_investigation')
-                       and c.execute("SELECT 1 FROM admin_sessions WHERE iss=? AND sub=? AND state='active' AND expires_at>?",
-                                     (identity.iss, identity.sub, now())).fetchone() is not None)
+                       and c.execute("SELECT 1 FROM admin_sessions WHERE iss=? AND sub=? AND state='active' AND expires_at>? "
+                                     "AND resource IS NULL", (identity.iss, identity.sub, now())).fetchone() is not None)
     except Exception as e:  # fail closed; never let an authorizer error approve
         log.warning('case admin authorization failed closed (%s)', type(e).__name__)
         return False
@@ -337,6 +351,8 @@ class AdminRouteGuard:
             return await _deny(send, 401, 'admin session required')
         if required not in principal.scopes:
             return await _deny(send, 403, f'admin scope {required} required')
+        if principal.resource:
+            return await _deny(send, 403, 'this session is limited to one report; sign in to the review desk for case actions')
         return await self.app(scope, receive, send)
 
 
