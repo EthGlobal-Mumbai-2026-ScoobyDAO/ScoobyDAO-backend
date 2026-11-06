@@ -12,8 +12,13 @@ client=TestClient(app)
 BASE=Path(__file__).parent
 
 @pytest.fixture(autouse=True)
-def isolated_state(tmp_path,monkeypatch):
+def isolated_state(tmp_path,monkeypatch,request):
  monkeypatch.delenv('SCOOBY_SOCIAL_CONTEXT_FILE',raising=False);monkeypatch.delenv('SCOOBY_SOCIAL_CONTEXT_FILES',raising=False);monkeypatch.delenv('SCOOBY_SOCIAL_CANDIDATE_STATUS_FILE',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'case-state.sqlite3');store.init()
+ from admin_support import session_headers
+ iss,sub=('synthetic-issuer','synthetic-human') if request.node.name=='test_world_confirmation_atomically_starts_one_case_run' else ('synthetic','synthetic')
+ client.headers.update(session_headers(iss,sub,'case_investigation'))
+ yield
+ client.headers.pop('Authorization',None)
 
 def record(n):
  d=json.loads((BASE/'candidate.json').read_text(encoding='utf-8-sig'));d['mode']='live';d['identity']['address']='0x'+format(n,'040x');d['candidate_id']='1:'+d['identity']['address'];d['identity']['symbol']='SYNTHETIC';d['selection']={'status':'not_selected','selected_by':None,'selected_at':None,'reason':None};d['state']='monitoring';d['evidence']=[];return d
