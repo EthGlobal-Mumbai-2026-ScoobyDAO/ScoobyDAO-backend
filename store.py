@@ -34,6 +34,7 @@ def init():
   CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, report_id TEXT NOT NULL, version TEXT NOT NULL, sha256 TEXT NOT NULL, decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, created REAL NOT NULL, idem TEXT UNIQUE NOT NULL, FOREIGN KEY(report_id,version) REFERENCES reports(id,version));
   CREATE TABLE IF NOT EXISTS reasoning_inputs(id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES investigations(id), pillar TEXT NOT NULL, evidence TEXT NOT NULL, output TEXT, status TEXT NOT NULL, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS budget_reservations(job_id TEXT PRIMARY KEY, created REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS render_manifests(job_id TEXT PRIMARY KEY REFERENCES jobs(id), sha256 TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS heartbeats(name TEXT PRIMARY KEY, seen REAL NOT NULL, detail TEXT NOT NULL);
   ''')
 def row(r): return dict(r) if r else None

@@ -56,22 +56,43 @@ def work_one():
    import html as html_module
    banner='<div style="background:#fff1b8;color:#222;padding:12px;font:16px sans-serif">'+html_module.escape('PENDING REVIEW - LOCAL DRAFT | report '+ref['id']+' | version '+ref['version']+' | SHA-256 '+ref['sha256'])+'</div>'
    html=html.replace('<body>', '<body>'+banner, 1); page.write_text(html,encoding='utf-8')
-   pdf=out/'report.pdf'; browser=os.getenv('SCOOBY_BROWSER'); pdf_status='unavailable: SCOOBY_BROWSER not configured'
-   if browser:
-    import tempfile
-    try:
-     with tempfile.TemporaryDirectory(dir=DATA) as profile:
-      subprocess.run([browser,'--headless','--disable-gpu','--no-first-run','--no-default-browser-check','--user-data-dir='+profile,'--print-to-pdf='+str(pdf),page.resolve().as_uri()],check=True,timeout=90,capture_output=True)
-     if not pdf.is_file() or not pdf.read_bytes().startswith(b'%PDF-'): raise RuntimeError('PDF missing')
-     pdf_status='available'
-    except Exception:
-     if pdf.exists(): pdf.unlink()
-     pdf_status='failed: browser rendering failed'
-   manifest={'report_id':ref['id'],'report_version':ref['version'],'report_sha256':ref['sha256'],'status':'pending_review_draft','html_sha256':digest(page.read_bytes()),'pdf_status':pdf_status,'pdf_sha256':digest(pdf.read_bytes()) if pdf.is_file() else None}
+   # The full PDF includes expanded reader details and exact, hash-verified Markdown.
+   doc=json.loads((Path(report['path'])/'report.json').read_text(encoding='utf-8-sig'))
+   markdowns=[a for a in doc['artifacts'] if a['kind']=='markdown' and a['availability']=='available']
+   pdf=out/'report.pdf'; browser=os.getenv('SCOOBY_BROWSER'); pdf_status='unavailable: SCOOBY_BROWSER not configured'; markdown_sha=None
+   if len(markdowns)!=1:
+    pdf_status='unavailable: exactly one bound Markdown report required'
+   else:
+    m=markdowns[0]; markdown_path=out/'assets'/m['path']
+    if not markdown_path.is_file() or digest(markdown_path.read_bytes())!=m['sha256']: raise RuntimeError('Markdown digest mismatch')
+    markdown=markdown_path.read_text(encoding='utf-8-sig'); markdown_sha=m['sha256']; (out/'report.md').write_bytes(markdown_path.read_bytes())
+    if browser:
+     import tempfile
+     try:
+      # Source/model text is escaped; JS opens all original details after the reader has rendered.
+      extra='<section class="full-report"><h1>Full report (source Markdown)</h1><pre>'+html_module.escape(markdown)+'</pre></section>'
+      style='<style>@media print{details{break-inside:auto} .full-report{break-before:page} .full-report pre{white-space:pre-wrap;overflow-wrap:anywhere;font:9pt/1.45 sans-serif} nav,.skip{display:none}}</style>'
+      script='<script>document.querySelectorAll("details").forEach(x=>x.open=true);</script>'
+      printable=html.replace('</head>',style+'</head>',1).replace('</body>',extra+script+'</body>',1)
+      (out/'print.html').write_text(printable,encoding='utf-8')
+      with tempfile.TemporaryDirectory(dir=DATA) as profile:
+       subprocess.run([browser,'--headless','--disable-gpu','--no-first-run','--no-default-browser-check','--no-pdf-header-footer','--virtual-time-budget=3000','--user-data-dir='+profile,'--print-to-pdf='+str(pdf),(out/'print.html').resolve().as_uri()],check=True,timeout=90,capture_output=True)
+      if not pdf.is_file() or not pdf.read_bytes().startswith(b'%PDF-'): raise RuntimeError('PDF missing')
+      pdf_status='available'
+     except Exception:
+      if pdf.exists(): pdf.unlink()
+      pdf_status='failed: browser rendering failed'
+   manifest={'report_id':ref['id'],'report_version':ref['version'],'report_sha256':ref['sha256'],'status':'pending_review_draft','html_sha256':digest(page.read_bytes()),'markdown_sha256':markdown_sha,'pdf_status':pdf_status,'pdf_sha256':digest(pdf.read_bytes()) if pdf.is_file() else None,'pdf_content':'expanded reader and bound full Markdown' if pdf.is_file() else None}
    (out/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
    result='HTML draft generated; PDF '+pdf_status
   else: raise RuntimeError('unknown job kind')
-  with db() as c: c.execute("UPDATE jobs SET state='done', lease=NULL, error=? WHERE id=?",(result,j['id']))
+  with db() as c:
+   if j['kind']=='render':
+    manifest_sha=digest((out/'manifest.json').read_bytes())
+    existing=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(j['id'],)).fetchone()
+    if existing and existing['sha256']!=manifest_sha: raise RuntimeError('immutable render manifest conflict')
+    c.execute('INSERT OR IGNORE INTO render_manifests VALUES(?,?)',(j['id'],manifest_sha))
+   c.execute("UPDATE jobs SET state='done', lease=NULL, error=? WHERE id=?",(result,j['id']))
  except Exception as e:
   with db() as c:
    # Bounded exponential backoff. Persist terminal errors without exception payloads that could contain secrets.

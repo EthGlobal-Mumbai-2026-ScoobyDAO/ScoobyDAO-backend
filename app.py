@@ -3,11 +3,17 @@ from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from jsonschema import Draft202012Validator
 from store import ROOT, DATA, db, ident, now, dumps, digest, row, job, event, PILLARS
 from worker import wake
 app=FastAPI(title='Scooby DAO local operator API',version='0.1.0',description='Local-only prototype. Identities and review receipts are not authenticated.')
+web_origin=os.getenv('SCOOBY_WEB_ORIGIN','').strip()
+if web_origin:
+ if not (web_origin.startswith('http://') or web_origin.startswith('https://')) or '*' in web_origin or web_origin.endswith('/'):
+  raise ValueError('SCOOBY_WEB_ORIGIN must be one explicit origin without trailing slash')
+ app.add_middleware(CORSMiddleware,allow_origins=[web_origin],allow_credentials=False,allow_methods=['GET'],allow_headers=['Content-Type'])
 def err(code,msg): raise HTTPException(code,msg)
 def getrow(c,sql,args):
  r=c.execute(sql,args).fetchone()
@@ -143,6 +149,40 @@ def import_report(x:ImportReport):
    c.execute('INSERT INTO reports VALUES(?,?,?,?,?,?)',(d['report_id'],d['report_version'],x.run_id,sha,str(target),now()))
    event(c,x.run_id,'report_imported',sha)
    return {'report_id':d['report_id'],'version':d['report_version'],'sha256':sha,'review':'pending'}
+def report_metadata(c,r):
+ run=getrow(c,'SELECT * FROM investigations WHERE id=?',(r['run_id'],))
+ selection=getrow(c,'SELECT * FROM selections WHERE id=?',(run['selection_id'],))
+ path=Path(r['path'])/'report.json'
+ if not path.is_file() or digest(path.read_bytes())!=r['sha256']: err(409,'Stored report integrity failure')
+ doc=json.loads(path.read_bytes())
+ latest=c.execute('SELECT decision,created FROM reviews WHERE report_id=? AND version=? ORDER BY created DESC',(r['id'],r['version'])).fetchone()
+ return {'report_id':r['id'],'report_version':r['version'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
+         'mode':doc.get('mode'),'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),
+         'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':'unverified local operator'},
+         'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
+@app.get('/reports')
+def list_reports():
+ with db() as c: return [report_metadata(c,r) for r in c.execute('SELECT * FROM reports ORDER BY created DESC').fetchall()]
+@app.get('/reports/{report_id}/{version}/artifacts')
+def report_artifacts(report_id:str,version:str):
+ with db() as c:
+  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version)); result=report_metadata(c,r)
+  jobs=c.execute("SELECT * FROM jobs WHERE kind='render' AND state='done' ORDER BY created DESC").fetchall()
+  match=next((j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}),None)
+ if not match:
+  result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']='not_rendered'; return result
+ out=DATA/'artifacts'/match['id']; manifest_path=out/'manifest.json'
+ if not manifest_path.is_file(): err(409,'Render manifest missing')
+ with db() as c: locked=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(match['id'],)).fetchone()
+ if not locked or digest(manifest_path.read_bytes())!=locked['sha256']: err(409,'Render manifest integrity failure')
+ m=json.loads(manifest_path.read_text(encoding='utf-8'))
+ if (m.get('report_id'),m.get('report_version'),m.get('report_sha256'))!=(report_id,version,r['sha256']): err(409,'Render manifest identity mismatch')
+ result['render_status']='pending_review_draft'; result['artifacts']={}
+ for kind,name,keyname in [('html','index.html','html_sha256'),('markdown','report.md','markdown_sha256'),('pdf','report.pdf','pdf_sha256')]:
+  expected=m.get(keyname); f=out/name
+  if expected and (not f.is_file() or digest(f.read_bytes())!=expected): err(409,'Render artifact integrity failure')
+  result['artifacts'][kind]={'availability':'available' if expected else 'unavailable','sha256':expected,'url':f'/artifacts/{match["id"]}/{name}' if expected else None,'report_sha256':r['sha256']}
+ return result
 @app.get('/reports/{report_id}/{version}')
 def report(report_id:str,version:str):
  with db() as c:
@@ -166,12 +206,25 @@ def render(report_id:str,version:str,idempotency_key:str=Header(None)):
  signal(); return {'job_id':j,'status':'pending review draft','pdf':'attempted when SCOOBY_BROWSER is configured'}
 @app.get('/artifacts/{job_id}/{name}')
 def artifact(job_id:str,name:str):
- if name not in ('index.html','report.json','report.pdf','manifest.json'): err(404,'Artifact unavailable')
+ if name not in ('index.html','report.json','report.md','report.pdf','manifest.json'): err(404,'Artifact unavailable')
  with db() as c:
   j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
   if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
  path=DATA/'artifacts'/job_id/name
  if not path.is_file(): err(404,'Artifact missing')
+ if name=='report.json':
+  ref=json.loads(j['ref'])
+  if digest(path.read_bytes())!=ref['sha256']: err(409,'Report integrity failure')
+ if name=='manifest.json':
+  with db() as c: locked=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(job_id,)).fetchone()
+  if not locked or digest(path.read_bytes())!=locked['sha256']: err(409,'Render manifest integrity failure')
+ if name in ('index.html','report.md','report.pdf'):
+  manifest_path=path.parent/'manifest.json'
+  if not manifest_path.is_file(): err(409,'Render manifest missing')
+  with db() as c: locked=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(job_id,)).fetchone()
+  if not locked or digest(manifest_path.read_bytes())!=locked['sha256']: err(409,'Render manifest integrity failure')
+  m=json.loads(manifest_path.read_text(encoding='utf-8')); k={'index.html':'html_sha256','report.md':'markdown_sha256','report.pdf':'pdf_sha256'}[name]
+  if not m.get(k) or digest(path.read_bytes())!=m[k]: err(409,'Artifact integrity failure')
  return FileResponse(path,headers={'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;"})
 
 @app.get('/artifacts/{job_id}/assets/{asset_path:path}')
@@ -185,6 +238,11 @@ def artifact_asset(job_id:str,asset_path:str):
   path=path/part
   if path.is_symlink(): err(400,'Symlink forbidden')
  if not path.resolve().is_relative_to(base) or not path.is_file(): err(404,'Asset not found')
+ ref=json.loads(j['ref']); report_path=DATA/'bundles'/ref['sha256']/'report.json'
+ if not report_path.is_file() or digest(report_path.read_bytes())!=ref['sha256']: err(409,'Report integrity failure')
+ doc=json.loads(report_path.read_bytes()); allowed={e['path']:e['sha256'] for e in doc['evidence']}
+ allowed.update({a['path']:a['sha256'] for a in doc['artifacts'] if a['availability']=='available'})
+ if asset_path not in allowed or digest(path.read_bytes())!=allowed[asset_path]: err(409,'Asset integrity failure')
  return FileResponse(path,media_type='application/octet-stream',headers={'X-Content-Type-Options':'nosniff','Content-Disposition':'attachment'})
 
 class ReasonInput(BaseModel):
@@ -222,8 +280,8 @@ def honeypot_readiness():
   'discovery_newer_work':'G07 and partial G09 exist in an unmerged worktree, not in this worker',
   'investigation':'five persisted pillar states; producers are not wired',
   'research_output':'external bundle import and validation only; no automated end-to-end report',
-  'reader':'bundled earlier reader; newer IRC reader not integrated',
-  'pdf':'draft browser print only; full report PDF not implemented',
+  'reader':'corrected IRC reader integrated for imported bundles; automated research remains unwired',
+  'pdf':'pending draft with expanded reader and bound full Markdown; case-specific QA required',
   'review':'local unverified receipts; no authenticated sign-off',
   'publication':'reserved for human teammate; not implemented',
   'paid_model_budget_default':0,

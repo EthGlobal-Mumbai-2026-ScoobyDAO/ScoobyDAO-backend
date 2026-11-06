@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import pytest
 os.environ['SCOOBY_DATA']=tempfile.mkdtemp(prefix='scooby-test-')
+os.environ['SCOOBY_WEB_ORIGIN']='http://localhost:5173'
 os.environ['SCOOBY_FRONTEND_DIR']=str(Path(__file__).resolve().parent.parent/'vendor'/'reader')
 from fastapi.testclient import TestClient
 from app import app
@@ -33,6 +34,8 @@ def test_lifecycle(monkeypatch):
  imported=post('/reports/import',{'run_id':rid,'bundle_path':str(BASE/'historical-bundle')})
  assert imported.status_code==200, imported.text
  report=imported.json(); path='/reports/'+report['report_id']+'/'+report['version']
+ listed=client.get('/reports').json(); assert any(x['report_sha256']==report['sha256'] and x['selection']['admission_qualified'] is False for x in listed)
+ assert client.get(path+'/artifacts').json()['render_status']=='not_rendered'
  draft=post(path+'/render',{},'render-before'); assert draft.status_code==200
  assert work_one(); assert client.get('/jobs/'+draft.json()['job_id']).json()['state']=='done'
  assert 'PENDING REVIEW' in client.get('/artifacts/'+draft.json()['job_id']+'/index.html').text
@@ -42,6 +45,17 @@ def test_lifecycle(monkeypatch):
  out=post(path+'/render',{},'render'); assert out.status_code==200
  assert work_one(); j=client.get('/jobs/'+out.json()['job_id']).json(); assert j['state']=='done',j
  html=client.get('/artifacts/'+out.json()['job_id']+'/index.html'); assert html.status_code==200
+ listing=client.get(path+'/artifacts').json(); assert listing['report_sha256']==report['sha256']
+ assert listing['artifacts']['html']['availability']=='available' and listing['artifacts']['html']['report_sha256']==report['sha256']
+ manifest=client.get('/artifacts/'+out.json()['job_id']+'/manifest.json').json()
+ assert manifest['report_sha256']==report['sha256'] and manifest['markdown_sha256']
+ assert client.get('/artifacts/'+out.json()['job_id']+'/report.md').content==(BASE/'historical-bundle'/'report.md').read_bytes()
+ rendered=Path(os.environ['SCOOBY_DATA'])/'artifacts'/out.json()['job_id']/'index.html'; original=rendered.read_bytes(); rendered.write_bytes(original+b'tamper')
+ assert client.get(path+'/artifacts').status_code==409 and client.get('/artifacts/'+out.json()['job_id']+'/index.html').status_code==409
+ rendered.write_bytes(original)
+ manifest_file=rendered.parent/'manifest.json'; original_manifest=manifest_file.read_bytes(); manifest_file.write_bytes(original_manifest+b' ')
+ assert client.get(path+'/artifacts').status_code==409 and client.get('/artifacts/'+out.json()['job_id']+'/manifest.json').status_code==409
+ manifest_file.write_bytes(original_manifest)
  if not os.environ.get('SCOOBY_BROWSER'): assert client.get('/artifacts/'+out.json()['job_id']+'/report.pdf').status_code==404
  os.environ['SCOOBY_MODEL_CALL_BUDGET']='1'
  monkeypatch.setattr(provider,'reason',lambda evidence: {'output':{'summary':'mock','evidence_ids':[evidence[0]['id']],'limitations':['fixture']},'model':'gpt-6.1-terra','transport':'chat.completions','usage':None})
@@ -50,6 +64,7 @@ def test_lifecycle(monkeypatch):
  assert client.get('/reasoning/'+reasoning.json()['input_id']).json()['output']['model']=='gpt-6.1-terra'
  if os.environ.get('SCOOBY_BROWSER'):
   pdf=client.get('/artifacts/'+out.json()['job_id']+'/report.pdf'); assert pdf.status_code==200 and pdf.content.startswith(b'%PDF-')
+  assert manifest['pdf_content']=='expanded reader and bound full Markdown'
   print('PDF_TEST_PATH='+str(Path(os.environ['SCOOBY_DATA'])/'artifacts'/out.json()['job_id']/'report.pdf'))
  assert post(path+'/review',dict(review,decision='revise'),'revise').status_code==200
  assert post(path+'/render',{},'render-after-revision').status_code==200
@@ -73,3 +88,9 @@ def test_honeypot_readiness_is_honest():
  assert data['normal_gate']=={'required_distinct_verified_groups':4,'wired_verifiers':0,'qualified_selection_enabled':False}
  assert data['paid_model_budget_default']==0 and data['checkpoint_case_status']=='no_selection_recorded_in_this_checkpoint'
  assert 'not implemented' in data['publication']
+
+def test_cors_restricts_origin():
+ good=client.get('/reports',headers={'Origin':'http://localhost:5173'})
+ bad=client.get('/reports',headers={'Origin':'http://untrusted.invalid'})
+ assert good.headers.get('access-control-allow-origin')=='http://localhost:5173'
+ assert 'access-control-allow-origin' not in bad.headers
