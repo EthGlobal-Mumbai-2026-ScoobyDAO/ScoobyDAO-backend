@@ -229,3 +229,12 @@ def honeypot_readiness():
   'paid_model_budget_default':0,
   'documentation':'docs/honeypot-readiness.md'
  }
+
+# Publication boundary and World ID Agent Pass sign-off live in publication/ (see docs/publication-plan.md).
+from fastapi.middleware.cors import CORSMiddleware
+from publication import routes as publication_routes, web_adapter as publication_web
+from publication.config import settings as publication_settings
+app.include_router(publication_routes.router)
+app.include_router(publication_web.router)
+app.add_middleware(CORSMiddleware, allow_origins=[publication_settings().web_origin], allow_methods=['GET','POST'],
+                   allow_headers=['Authorization','Content-Type','Idempotency-Key'])

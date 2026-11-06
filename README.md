@@ -14,7 +14,7 @@ Discovery's newer unmerged worktree has narrowly scoped G07 and partial G09 veri
 
 - **Implemented locally:** candidate schema validation; diagnostic selection/defer records; queued investigation and five explicit unavailable pillar states; persistent jobs/events and bounded retry; exact-byte report digest and local review records; existing frontend validation and HTML draft; optional browser PDF printout; opt-in Terra Chat Completions reasoning on supplied evidence. The call budget defaults to zero.
 - **Partial:** SQLite lease recovery is not fenced; cancellation is not cooperative during work. Review actor labels are unauthenticated local assertions. The PDF prints the reader and omits collapsed content; it is not a full research PDF. Outputs are draft only, including after local approval. The reasoning task is not a research engine and does not establish evidence truth. No central token/rate spend controls exist.
-- **Missing:** live feeds, source snapshots/freshness and accepted concern verifiers; production gate qualification; real five-pillar producers, evidence/counterevidence synthesis and source-linked TL;DR authoring; authenticated sign-off; durable approved export; publication and World ID/AgentKit. No live model call or production deployment has been verified.
+- **Missing:** live feeds, source snapshots/freshness and accepted concern verifiers; production gate qualification; real five-pillar producers, evidence/counterevidence synthesis and source-linked TL;DR authoring; durable approved export; AgentKit; IDKit/REP. Authenticated sign-off and publication (World ID Agent Pass device grant + ReportRegistry outbox) are implemented and tested against a fake issuer and a local anvil only; they have not been verified against the live World issuer or Sepolia. See "Publication and World ID Agent Pass" below. No live model call or production deployment has been verified.
 
 Candidate v0.1 and report v0.2 are frozen shared contracts. The reader validates JSON schema, references and bundle hashes, including the optional `scooby.pillar-tldr/1` profile. Do not change the frozen schemas silently. See [architecture](architecture.md), [contract amendments](contract-amendments.md), [endpoint map](endpoint-schema-map.md), and [OpenAPI](openapi.json).
 
@@ -24,7 +24,7 @@ Candidate v0.1 and report v0.2 are frozen shared contracts. The reader validates
 - **Discovery chat `01a1adf5-c90c-7ec0-9a93-8adb65d9aca6`:** source ingestion and verified screening; portable package imported under `modules/discovery`; not yet wired to the API.
 - **Investigation chat `01a1adf5-caef-7e50-9fac-5e344c5a169a`:** five-pillar research and producer interfaces; final portable export imported under `modules/investigation`; not wired to the API.
 - **Frontend chat `01a1adf5-cdb8-78e0-b887-625f6ca4e941`:** portable reader/build export and contributor handoff/interface proposal only.
-- **Another human teammate:** post-report publication and World ID/AgentKit human sign-off. This is reserved work; there is no World ID integration or publication adapter here. See [workstreams](docs/workstreams.md) and the [human teammate handoff](docs/post-report-handoff.md) for the seam and exact continuation.
+- **Another human teammate:** post-report publication and World ID/AgentKit human sign-off. Implemented in `publication/` on top of this seam (fake-issuer tested; live run pending); see the section below. See [workstreams](docs/workstreams.md) and the [human teammate handoff](docs/post-report-handoff.md) for the seam and exact continuation.
 
 Use separate topic branches and pull requests for workstreams. `main` is the integration checkpoint; coordinate shared contracts and review/publication interfaces before merging. Avoid concurrent edits to the same integration checkout. Discovery and investigation source exports are imported as isolated modules; neither is connected to the backend worker.
 
@@ -48,3 +48,26 @@ Verify with `python -m pytest -q tests`, `python tests/smoke_worker.py`, `python
 The operator may render a **pending-review draft** before sign-off. The generated manifest and banner bind the report ID/version and exact report digest; a PDF is a draft reader printout. A local review receipt records a digest and decision but has no authenticated identity. There is no approved or published state in this implementation. The human teammate must define and implement an authenticated sign-off and publication seam; neither this draft nor an unauthenticated receipt authorizes publication or financial action.
 
 See [HANDOFF.md](HANDOFF.md) for exact next steps and current limitations. No wallet, transaction, settlement, treasury or financial eligibility work is included.
+
+## Publication and World ID Agent Pass
+
+`publication/` implements the protected action from [docs/post-report-handoff.md](docs/post-report-handoff.md): publishing a reviewed report version with `ReportRegistry.publish` on Sepolia only after a fresh, validated, single-use human approval for exactly those bytes, followed by a separate explicit publish request. Read [the plan](docs/publication-plan.md), [decisions](docs/publication-decisions.md) and [demo runbook](docs/publication-demo.md).
+
+- **Sign-off:** OIDC Device Authorization Grant against World (`private_key_jwt`, RS256, essential `acr`). The backend starts it, and the reviewer enters the code shown on the web `/approve/[id]` page in World App. ID tokens are validated against JWKS, and the reviewer must be an allowlisted `(iss, sub)`. The receipt binds the exact `scooby.publication-target/1` digest.
+- **Publish:** an explicit operator call consumes the receipt and has the attestor key sign `approvalDigest`. It queues a row in a fenced outbox drained by a separate publisher process; `tx_hash` is persisted before broadcast, and reconciliation uses `usedNonce`.
+- **Off by default:** nothing broadcasts unless `SCOOBY_PUBLISH_ENABLED=true` and the publisher key equals `ReportRegistry.publisher()` (RPC check). Live chains also need the operator to type a confirmation.
+
+```bash
+python -m uvicorn app:app --host 127.0.0.1 --port 8000          # API incl. /publication/v1 and /web/v1
+python -m publication.publisher                                 # fenced outbox publisher (separate process)
+python -m publication.cli enroll --name alice                   # reviewer device login -> allowlist
+python -m publication.cli list | disable --name alice | enable --name alice
+python -m publication.cli publish-confirm --target <target_id>  # explicit publish request
+python -m publication.cli reconcile                             # drive uncertain outbox rows
+```
+
+**Trust model (hackathon):** the backend holds two trusted keys. The attestor (`SCOOBY_ATTESTOR_KEY`, which is `report.reviewer`) signs only after a validated World approval. The publisher (`SCOOBY_PUBLISHER_KEY`, which is `ReportRegistry.publisher()`) only broadcasts. A compromised backend could sign without a human, and the production path is a reviewer-held or threshold key. **Revocation** before broadcast stops publication; after broadcast or confirmation it is recorded and the status shows `revoked`, but the onchain record cannot be undone.
+
+**Five-step judge demo:** deny, expire, non-reviewer, approve → tx, replay → spent. See [docs/publication-demo.md](docs/publication-demo.md).
+
+**Tests:** `python -m pytest -q tests` (fake World issuer). `tests/test_publication_anvil.py` additionally deploys `../SmartContracts` `ReportRegistry` on a local anvil when Foundry is installed.

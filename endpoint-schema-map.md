@@ -20,3 +20,25 @@ All routes below are local operator routes; no authentication or production auth
 | GET /artifacts/{job_id}/{name} | Download exact generated artifact |
 
 OpenAPI DTOs are implementation-owned. Frozen candidate v0.1 and report v0.2 are copied byte-for-byte; the frontend validator is the integration authority for bundle semantics. The proposed TL;DR sidecar remains `scooby.pillar-tldr/1`.
+
+## Publication v1 (operator; bearer `SCOOBY_OPERATOR_TOKEN` on mutating routes)
+
+| Route | Purpose |
+|---|---|
+| POST /publication/v1/targets | `{report_id, version, params}` → `scooby.publication-target/1` + claim manifest; Idempotency-Key; timing rules → 422 |
+| GET /publication/v1/targets/{id} | Target, manifest and current status projection |
+| POST /publication/v1/targets/{id}/attempts | `{decision: approve\|reject\|revise, reason}` → World device grant; one pending per target |
+| GET /publication/v1/attempts/{id} | Poll-on-read; at most one World poll per interval |
+| POST /publication/v1/attempts/{id}/cancel | Pending → cancelled; later World success is ignored and audited |
+| POST /publication/v1/targets/{id}/publish | Explicit publish request → outbox id; 503 unless publishing is enabled and preflight passes |
+| POST /publication/v1/targets/{id}/revoke | Stop before broadcast; record after confirmation |
+
+## Web v1 (shapes from `ScoobyDAO-web/src/lib/types.ts`)
+
+| Route | Purpose |
+|---|---|
+| GET /web/v1/health | `{ok: true}` |
+| GET /web/v1/reports, /web/v1/reports/{report_id@version} | `Report` (manifest = claim manifest, manifestHash = 0x+claim_hash) + reportSha256, targetDigest, publicationState |
+| GET /web/v1/reports/{id}/raw | Exact `report.json` bytes |
+| POST /web/v1/reports/{id}/approve | Start (or reuse) an approve attempt → `Approval` |
+| GET /web/v1/approvals/{id} | `Approval` (pending/approved/denied/expired/rejected_not_reviewer/spent); never returns device codes or tokens |

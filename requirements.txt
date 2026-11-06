@@ -7,3 +7,7 @@ openai>=1.40,<3
 httpx>=0.27,<1
 pytest>=8,<10
 pycryptodome>=3.20,<4
+PyJWT[crypto]>=2.8,<3
+cryptography>=42,<47
+eth-account>=0.13,<1
+web3>=7,<8
