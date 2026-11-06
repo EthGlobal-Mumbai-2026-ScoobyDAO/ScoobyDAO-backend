@@ -79,3 +79,5 @@ Cover pending, approved, denied, expired, cancelled, failed and superseded with 
 Case orchestration is in backend PR #12, bounded producer in #11, web integration in web PR #6. Synthetic paths and captured historical evidence do not prove production admin authorization or live World. The merged publication prototype is not completion of both admin checkpoints. Reconcile each exact source head with this charter and record remaining admin authentication, report review/release, live verification and dependency gaps in the teammate PR.
 
 The teammate supplies real verifier/delegation integration and security review; backend supplies durable targets, receipts and authorization; web supplies the two admin journeys and consumer separation. Pin AgentKit SDK/network/deployment and delegated permissions before use. Model-enabled research remains separately bounded and cannot approve either human checkpoint.
+
+Existing committed work and exact inspected PR heads: [World ID PR inventory and teammate continuation](WORLD-ID-PR-INVENTORY.md). Start there to reuse the case bridge and publication primitives without duplicating them.
