@@ -7,7 +7,7 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter          # paid plan: persistent disks and the Render Shell need it
     region: singapore
-    branch: deploy/render-backend
+    branch: main
     numInstances: 1
     healthCheckPath: /health
     disk:
