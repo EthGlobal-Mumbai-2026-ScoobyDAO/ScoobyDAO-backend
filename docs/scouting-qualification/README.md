@@ -1,5 +1,7 @@
 # Scouting and research qualification milestone
 
+**Product authority correction:** read [PRODUCT-FLOW.md](PRODUCT-FLOW.md) first. Cases is the actionable live scouting queue. Highest-actionability policy-qualified cases automatically run investigation and generate Reports; human-required cases use **Go for investigation → required World ID confirmation → the same investigation/report workflow**. Generated reports appear in Reports and link from their original Case. This supersedes any interpretation below that a passive read-only board, isolated adapters or disabled controls complete the product.
+
 Status: active build charter, 6 November 2026. The user authorizes some policy-qualified candidates to enter bounded research automatically, while other candidates wait for verified human continuation. This supersedes blanket human candidate selection. Final report sign-off and publication remain separate actions.
 
 This PR is an implementation charter and proposed interface agreement. It does not claim the new endpoints, verifiers, Reddit access or automatic research engine are already running. Candidate v0.1 and report v0.2 remain frozen. Read current repository LIVE-STATE before older workstream notes.

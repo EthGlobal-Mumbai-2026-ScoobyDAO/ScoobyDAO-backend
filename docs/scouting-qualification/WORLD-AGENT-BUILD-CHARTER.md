@@ -1,5 +1,7 @@
 # World Agent: two-way investigation authorization handoff
 
+**Required product gate:** a human reviews a scouted Case, clicks **Go for investigation**, completes World ID confirmation, and only then may the backend continue that Case through investigation and generated report creation. This is required for the human lane; it is distinct from final report sign-off/publication. Policy-qualified strongest scouts use the automatic lane without a human click. See [PRODUCT-FLOW.md](PRODUCT-FLOW.md). An unavailable verifier is an unfinished integration, not the target behavior.
+
 Owner: human teammate. Integrators: backend and web. Status: implementation build charter; live provider verification is not performed by this PR.
 
 ## Protected action and two deliverables
