@@ -407,7 +407,7 @@ def scouting_clues(record,captured):
    if digest(raw)!=e['sha256']:continue
    data=json.loads(raw);results=data.get('result',{});address=record['identity']['address'].lower();token=next(v for k,v in results.items() if k.lower()==address and isinstance(v,dict))
    descriptions=[]
-   if token.get('creator_percent')=='1.000000':descriptions.append('GoPlus reported the creator held 100% of supply at fetch time; this provider claim needs independent verification.')
+   if token.get('creator_percent')=='1.000000':descriptions.append('GoPlus reported creator balance equal to 100% of supply; the measurement time is unknown and the claim needs independent verification.')
    n=token.get('honeypot_with_same_creator')
    if isinstance(n,str) and n.isdigit() and 0<int(n)<=1000000:descriptions.append('GoPlus reported '+n+' honeypot(s) associated with the same creator; the claim and attribution are unverified.')
    if token.get('is_proxy')=='1':descriptions.append('GoPlus reported a proxy; its implementation and control require independent review.')
