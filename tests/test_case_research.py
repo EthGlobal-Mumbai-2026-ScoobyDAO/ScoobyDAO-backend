@@ -215,3 +215,45 @@ def test_gapped_history_does_not_invoke_vae_or_fabricate_risk(tmp_path):
                       vae_runner=lambda *_: (_ for _ in ()).throw(AssertionError('must not run')))
     assert result['pillar_status']['statistical_risk'] == 'unavailable'
     assert 'legacy_vae_pending_insufficient_or_gapped_history' in result['limitations']
+
+
+@pytest.mark.parametrize('route', ['automatic_policy', 'world_confirmed'])
+def test_generated_bundle_imports_into_existing_report_library_and_renders(tmp_path, route):
+    # This exercises the current backend importer/worker with a synthetic diagnostic
+    # selection. It does not pretend that the backend already implements case policy
+    # or verifies a real World confirmation.
+    from fastapi.testclient import TestClient
+    from app import app
+    from worker import work_one
+    client = TestClient(app)
+    fixture = json.loads((Path(__file__).parent / 'candidate.json').read_text(encoding='utf-8-sig'))
+    fixture['candidate_id'] = CANDIDATE
+    fixture['identity'].update(chain_id=1, address=ADDR, symbol='SYNTH')
+    fixture['mode'] = 'synthetic_demo'
+    assert client.post('/candidates', json={'payload': fixture}).status_code == 200
+    selected = client.post('/candidates/' + CANDIDATE + '/selection',
+        json={'kind': 'diagnostic_exception', 'actor': 'synthetic test', 'reason': 'component integration only'},
+        headers={'Idempotency-Key': 'case-producer-selection-' + route})
+    assert selected.status_code == 200
+    response = client.post('/investigations', json={'candidate_id': CANDIDATE, 'selection_id': selected.json()['id']},
+                           headers={'Idempotency-Key': 'case-producer-run-' + route})
+    assert response.status_code == 200
+    run_id = response.json()['id']
+    request_case = {'case_id': 'integration_' + route, 'run_id': run_id, 'candidate_id': CANDIDATE,
+                    'mode': 'synthetic_demo', 'authorization': {'route': route, 'reference_id': 'synthetic_not_world'}}
+    produced = run_case(request_case, tmp_path / route, max_source_requests=5,
+                        transport=mock_provider(source_payloads(), []))
+    imported = client.post('/reports/import', json={'run_id': run_id, 'bundle_path': produced['bundle_path']})
+    assert imported.status_code == 200, imported.text
+    assert imported.json()['sha256'] == produced['report_sha256']
+    path = '/reports/' + produced['report_id'] + '/' + produced['report_version']
+    rendered = client.post(path + '/render', json={}, headers={'Idempotency-Key': 'case-producer-render-' + route})
+    assert rendered.status_code == 200
+    job_id = rendered.json()['job_id']
+    for _ in range(6):
+        if client.get('/jobs/' + job_id).json()['state'] == 'done':
+            break
+        assert work_one()
+    assert client.get('/jobs/' + job_id).json()['state'] == 'done'
+    assert client.get('/artifacts/' + job_id + '/index.html').status_code == 200
+    assert any(x['report_sha256'] == produced['report_sha256'] for x in client.get('/reports').json())
