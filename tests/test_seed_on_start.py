@@ -153,3 +153,19 @@ def test_embedded_worker_readiness_tracks_heartbeat(monkeypatch,tmp_path):
     assert c.get('/health/ready').status_code==200
     with db() as conn:conn.execute("UPDATE heartbeats SET seen=? WHERE name='worker'",(now()-151,))
     assert c.get('/health/ready').status_code==503
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX process supervision test')
+@pytest.mark.parametrize('failure', ['seed', 'worker'])
+def test_startup_fails_if_configured_seed_or_worker_fails(tmp_path, failure):
+    import shutil
+    shell = shutil.which('sh')
+    if not shell: pytest.skip('POSIX shell unavailable')
+    fake = tmp_path / 'python'
+    fake.write_text('#!/bin/sh\ncase "$*" in\n  *seed_on_start*) [ "$FAIL_COMPONENT" != seed ] ;;\n  *huey_consumer*) exit 7 ;;\n  *uvicorn*) exec sleep 20 ;;\nesac\n')
+    fake.chmod(0o755)
+    script = tmp_path / 'start.sh'
+    script.write_text((ROOT / 'ops' / 'start.sh').read_text().replace('/app', str(tmp_path)))
+    env = dict(os.environ, PATH=str(tmp_path)+os.pathsep+os.environ.get('PATH',''), SCOOBY_EMBEDDED_WORKER='true', FAIL_COMPONENT=failure)
+    run = subprocess.run([shell, str(script)], env=env, capture_output=True, timeout=10)
+    assert run.returncode != 0
+

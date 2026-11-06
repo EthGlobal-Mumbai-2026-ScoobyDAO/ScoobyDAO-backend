@@ -9,7 +9,7 @@ services:
     region: singapore
     branch: main
     numInstances: 1
-    healthCheckPath: /health
+    healthCheckPath: /health/ready
     disk:
       name: scooby-data
       mountPath: /data
