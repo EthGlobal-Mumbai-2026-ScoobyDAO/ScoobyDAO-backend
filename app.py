@@ -1,4 +1,4 @@
-import hashlib, json, os, shutil, subprocess, sys, tempfile
+import hashlib, hmac, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Header
@@ -356,3 +356,30 @@ class PublicationWebCORS(CORSMiddleware):
 if web_origin:
  app.add_middleware(PublicationWebCORS, allow_origins=[web_origin], allow_methods=['GET','POST'],
                     allow_headers=['Content-Type'])
+
+# Public-host gate (SCOOBY_PUBLIC_GATE=true, e.g. on Render). Deny by default: anonymous callers reach only
+# /health, the /web/v1 adapter and /publication/v1 (whose writes require the operator bearer token). Every
+# other route, including /docs and /openapi.json, requires `Authorization: Bearer $SCOOBY_OPERATOR_TOKEN`.
+# Without a configured token those routes are closed. This is a stopgap, not the reviewed gateway in DEPLOYMENT.md.
+PUBLIC_EXACT=frozenset({'/health'})
+PUBLIC_PREFIXES=('/web/v1/','/publication/v1/')
+def _public_path(path): return path in PUBLIC_EXACT or path.startswith(PUBLIC_PREFIXES)
+class PublicGate:
+ def __init__(self, app): self.app=app
+ async def __call__(self, scope, receive, send):
+  if scope['type']!='http' or os.getenv('SCOOBY_PUBLIC_GATE','').strip().lower() not in ('1','true','yes','on'):
+   return await self.app(scope, receive, send)
+  path=scope['path']
+  # Public paths must be plain (no encoded or traversal segments) so prefix matching cannot be bypassed.
+  plain=not ('..' in path or '//' in path or '\\' in path or b'%' in (scope.get('raw_path') or b''))
+  if plain and _public_path(path): return await self.app(scope, receive, send)
+  token=os.getenv('SCOOBY_OPERATOR_TOKEN') or ''
+  supplied=dict(scope.get('headers') or []).get(b'authorization',b'').decode('latin-1').removeprefix('Bearer ').strip()
+  if token and supplied and hmac.compare_digest(supplied.encode(), token.encode()):
+   return await self.app(scope, receive, send)
+  return await _deny(send, 404)
+async def _deny(send, code):
+ body=b'{"detail":"Not found"}'
+ await send({'type':'http.response.start','status':code,'headers':[(b'content-type',b'application/json'),(b'content-length',str(len(body)).encode())]})
+ await send({'type':'http.response.body','body':body})
+app.add_middleware(PublicGate)
