@@ -1,0 +1,40 @@
+# Invoked case research producer
+
+`modules.investigation.case_research.run_case` is the common downstream research and v0.2 bundle producer for automatic-policy and human-confirmed cases. It does not decide admission, authenticate World ID, consume an authorization, schedule jobs, render HTML/PDF, or approve/publish a report. Backend must enforce the actual policy/World-ID binding, expiry, replay protection and one-time consumption before it calls this function. The supplied authorization fields are lineage references, not authentication.
+
+```python
+from modules.investigation.case_research import run_case
+
+case = {
+    'case_id': 'case_123', 'run_id': 'run_123',
+    'candidate_id': '1:0x' + '12' * 20,
+    'mode': 'synthetic_demo',
+    'authorization': {'route': 'world_confirmed', 'reference_id': 'verified_auth_record'},
+}
+# `mock_transport` must be an explicit httpx.MockTransport for synthetic mode.
+result = run_case(case, output_dir, max_source_requests=5, transport=mock_transport)
+```
+
+The backend must use its real case/run/authorization IDs and an isolated new output path whose parent exists. IDs accept only letters, digits, `_` and `-`; candidates must be canonical lowercase `1:0x...` or `8453:0x...`. `mode` is `live`, `historical_replay` or `synthetic_demo`; non-live test/replay mode requires injected transport rather than calling real providers. `max_source_requests` is an explicit total HTTP-attempt budget, 0–5, default **zero**. The exact ordered sources are DEX Screener pairs, GoPlus token security, Sourcify source, GeckoTerminal token pools, and, if a matching pool is found, GeckoTerminal daily OHLC. No retries, model calls, Reddit calls, transactions or hidden background work occur. HTTP clients have bounded timeouts and no redirects. Source errors are isolated and reported; provider identity is checked against chain/address before mapping content.
+
+Return states:
+
+- `partial`: a validated, version-bound report bundle exists, with `bundle_path`, `report_id`, `report_version`, `report_sha256`, per-pillar statuses, source attempts and limitations. This is a generated **pending-review draft**, not a successful complete investigation or an authenticated conclusion. Backend may import the bundle using its existing report importer, then generate and register HTML/PDF with its worker; attach the resulting report to the original case.
+- `blocked`: no identity-bound usable observation exists; no bundle is installed and backend must not claim a generated report. Retry with a new run and output path after correcting the cause/budget.
+- `cancelled`: no bundle is installed. Cancellation is checked before each source request, before VAE execution and before bundle commit; it cannot interrupt a currently running HTTP request or VAE subprocess.
+
+The bundle contains frozen v0.2 `report.json`, exact-byte `digest.json`, `report.md`, `pillar-tldr.json`, source ledger, case lineage, and hashed evidence files. Writes stage in a temporary sibling directory and install by rename after validation. A pre-existing output is rejected rather than overwritten. The backend owns durable idempotency, cross-worker fencing and recovery; caller-supplied IDs or a path alone do not provide authorization or deduplication.
+
+## Actual pillar inputs and limits
+
+Microstructure uses identity-matched DEX Screener pool fields, or a matching GeckoTerminal pool when the former is unavailable; reserve/liquidity and volume are provider snapshots, not executable depth. On-chain maps GoPlus fields as provider reports and Sourcify runtime-match status as a provider assertion. Supply `pinned_contract_capture` for `contract_analysis.analyze` to add line-located potential control mechanisms and a source/runtime evidence copy. Verify its RPC and source provenance separately; lexical findings do not establish execution, permissions, selectivity or a honeypot. Fundamentals currently has only exact-token provider symbol metadata: project attribution, development and social sentiment require further evidence. Price health uses token-side closed daily candles and adjacent returns without filling gaps; these are separate from the legacy technical score.
+
+Statistical risk and legacy technical outputs remain pending unless a valid identity- and daily-candle-hash-bound original VAE run with exactly 50 reconstruction columns is supplied as `legacy_model_dir`, or an explicit `vae_config={'legacy_repo': <local legacy checkout>, 'days': <positive horizon>}` is passed. The latter invokes `legacy_vae.run` only for consecutive daily history with at least two adjacent returns, then verifies the output manifest, hashes, candidate and 50 series. Two returns is a computational minimum, not a validated adequacy rule. The caller must choose the horizon under an existing policy; this module does not choose one. The local VAE subprocess has the legacy 600-second timeout and cannot be cooperatively cancelled while running. Missing dependencies, gapped history or execution failure leave those metrics pending while other pillars proceed. `vae_runner` is an injectable test boundary; never treat mock reconstructions as live output.
+
+Optional `legacy_capture_root` plus `legacy_records` for `microstructure` and/or `onchain` invoke the preserved legacy arithmetic and attach both hash-checked input and result evidence. Original scores, labels and known limitations are retained; they are not recast as calibrated safety claims. The input capture record includes `id`, `path`, `candidate_id` and exact `sha256`; unsupported record kinds are rejected. The VAE outputs retain their full 50-series CSV and original metric JSON.
+
+Social search remains a separate transient provider; this producer does not embed social text/hashes or claim sentiment until the backend's applicable retention and derived-artifact deletion lifecycle is reviewed. It does not generate OpenAI reasoning. A backend may separately run its explicitly budgeted, evidence-grounded reasoning pipeline against the resulting bundle and preserve its version/citation contracts. Without that work, the assessment is honestly `not_assessed` and there is no final cross-pillar conclusion.
+
+## Verification
+
+`python -m pytest -q tests/test_case_research.py` uses synthetic HTTP, authorization references and a mocked VAE runner to test both routes, generated v0.2/reader HTML, source failure isolation, blocked/cancelled behavior, independent retry, original score fixtures, VAE input binding and 50-reconstructions rejection. Those route tests do not verify a real World ID confirmation or backend job state. The existing captured RAY source/RPC material was replayed with injected transport and rendered into a new historical draft: four pillars partial, statistical risk pending because daily history had gaps; no new provider request was made. This is a component test, not the full case→authorization→job→report-library acceptance journey.

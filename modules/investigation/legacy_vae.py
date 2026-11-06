@@ -1,7 +1,10 @@
 """Execute the original legacy VAE and risk/technical code using validated captured data."""
 import argparse, ast, csv, hashlib, json, os, pathlib, subprocess, sys
 from datetime import date
-import history
+try:
+ from . import history
+except ImportError:
+ import history
 def sha(b): return hashlib.sha256(b).hexdigest()
 def load(p): return json.loads(pathlib.Path(p).read_text(encoding='utf8'))
 def run(source,out,days,legacy_repo):
