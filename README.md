@@ -1,98 +1,32 @@
-# Scooby DAO backend — ACTIVE STATE
+# Scooby DAO backend
 
-Current build charter: [two admin World ID checkpoints](docs/scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md) cover human-required scout investigation and generated-report sign-off. These are admin functions, separate from consumer report reading and from explicit publication. Older runtime checkpoint notes below describe their recorded baseline. The backend runtime for both checkpoints (admin sessions, report sign-off, the case-bridge hook) is in [docs/admin-world-checkpoints.md](docs/admin-world-checkpoints.md); it is synthetic-tested only, with no live World run yet.
+This branch integrates case orchestration, captured-source research, the report library, and two separate admin World ID checkpoints. See [LIVE-STATE.md](LIVE-STATE.md) for the current integration status and [admin checkpoints](docs/admin-world-checkpoints.md) for the authentication contract. The integration is under review in PR #22; do not assume it is deployed or merged until the repository confirms that state.
 
-Checkpoint: **6 November 2026 IST — completed workstream PRs merged into main.** The FastAPI/Huey runtime, immutable native packages, offline discovery/investigation modules and portable PDF adapter are merged. Python checks and Linux Compose API/worker smoke passed. See [LIVE-STATE.md](LIVE-STATE.md) for the merge ledger, verification and exact remaining work; [DEPLOYMENT.md](DEPLOYMENT.md) for private staging; and [report storage/transfer](docs/report-assets.md) to carry the local RAY assets to a new target.
+A candidate is automatically queued only after four distinct, fresh, independently verified concern groups pass server-side revalidation. The available verifiers cover narrow G07 and G09 checks, not a complete twelve-group screening system. Provider hints do not count as votes. Actionable non-qualified cases require a scoped admin session and a separate World confirmation bound to the initiating session, candidate, snapshot and policy; stale or unavailable evidence does not authorize a run. Report sign-off and publication are separate actions. The checkpoints have synthetic-issuer coverage, but no live World end-to-end confirmation has been established.
 
-The source is ready for **private single-host staging**. No server has been deployed. Continuous discovery and automated five-pillar research are not connected; sign-off is not authenticated. The teammate separately merged the World ID/publication prototype in PR #6 during this checkpoint; live verification remains deferred by user instruction. Public exposure requires a reviewed access boundary.
+The worker invokes the shared case producer with immutable decision budgets. It replays bound evidence, preserves missing and contradictory sources, and can generate a partial report with at most one explicitly authorized Terra call. Source and model budgets default to zero; no paid call follows simply from starting the service. Historical diagnostics and reference reports are not policy-qualified cases, World confirmations, final approval or publication. Local operator previews are not a public security boundary.
 
-## Active milestone: suspected-honeypot validation (M0–M6)
+## Run and configure
 
-M0 readiness is in progress; M1 bounded discovery is owned by discovery, with no new case selected in this backend checkpoint. M2 requires separate human selection or a newly approved diagnostic exception. M3 investigates the mechanism and five pillars; M4 integrates the actual selected run into IRC HTML and a complete PDF; M5 compares the locked draft with independent evidence and seeks human sign-off. M6 includes a World ID and publication prototype contributed by the human teammate; live validation and security review remain. The conclusion is evidence-driven and may be inconclusive. See the [milestones](docs/honeypot-validation-milestones.md) and [readiness/dependency map](docs/honeypot-readiness.md).
-
-Discovery has narrowly scoped G07 and partial G09 verifiers; the backend worker does not have them wired. The corrected IRC reader is integrated for imported reference bundles; offline source helpers and the reasoning/2 producer contract are merged but remain separate from worker execution. The root-curated RAY reference has passed the local API-to-worker-to-HTML/Markdown/PDF path, but automated deep research is not wired and detailed PDF accessibility and typography QA remains. `GET /readiness/honeypot` is a static integration inventory, not a live case gate or health check.
-
-## Merged report pipeline
-
-The [native package contract](docs/native-package-contract.md) binds report, sidecars and evidence to exact bytes, with atomic installation and immutable reads. The standalone reader and native web cards accept reasoning/1 and additive reasoning/2; synthetic cross-consumer checks passed. RAY remains an unchanged reasoning/1 reference, pending review, not gate-qualified, with its current sell trap unproven. No real reasoning/2 model report or autonomous deep research was performed. The separately contributed World ID/publication module is present; its live issuer, frontend hash compatibility and chain path have not been verified here. HTML/Markdown and optional draft PDF are derived assets. PDF source links now resolve to an internal companion-file/hash index; evidence is supplied separately. Target-container PDF rendering and detailed visual/accessibility QA remain.
-
-## Case orchestration workstream (proposed branch)
-
-The local case orchestration slice ranks source-grounded scouting cases, auto-starts only after four independently verified fresh groups, and has a separate case-scoped World ID attempt for administrator-authorized starts; it fails closed until a real admin authorization adapter is implemented. Both use the same bounded investigation/report worker; resulting partial drafts appear in Reports and link to the Case. With the current zero-source budget, a run with no usable captured inputs is blocked without a report. World configuration and live evidence are required for a real journey; synthetic end-to-end tests are not live proof. See [case orchestration](docs/case-orchestration.md). Final report sign-off/publication is separate.
-
-## What works and what remains
-
-- **Implemented locally:** candidate schema validation; diagnostic selection/defer records; queued investigation and five explicit unavailable pillar states; persistent jobs/events and bounded retry; exact-byte report digest and local review records; existing frontend validation and HTML draft; optional browser PDF printout; opt-in Terra Chat Completions reasoning on supplied evidence. The call budget defaults to zero.
-- **Partial:** SQLite lease recovery is not fenced; cancellation is not cooperative during work. Review actor labels are unauthenticated local assertions. The draft PDF includes expanded reader details, bound full Markdown and internal links to the companion-file/hash index. PDF generation is disabled by default in private staging; verify the target browser and each actual report before enabling it. Outputs are draft only, including after local approval. The reasoning task is not a research engine and does not establish evidence truth. No central token/rate spend controls exist.
-- **Missing:** integrated live feed collection and a complete set of independently verified concern groups; production gate qualification; real five-pillar producers, evidence/counterevidence synthesis and source-linked TL;DR authoring; production-verified authenticated sign-off; durable approved export; production publication and AgentKit. World ID device-grant and a publication outbox exist but require live validation and security review. No live model call or production deployment has been verified.
-
-
-Candidate v0.1 and report v0.2 are frozen shared contracts. The reader validates JSON schema, references and bundle hashes, including the optional `scooby.pillar-tldr/1` profile. Do not change the frozen schemas silently. See [architecture](architecture.md), [contract amendments](contract-amendments.md), [endpoint map](endpoint-schema-map.md), and [OpenAPI](openapi.json).
-
-## Owners and workstreams
-
-- **Backend integration (this checkout):** core lifecycle, worker orchestration, schemas, research integration, local draft generation and durable state.
-- **Discovery chat `01a1adf5-c90c-7ec0-9a93-8adb65d9aca6`:** source ingestion and verified screening; portable package imported under `modules/discovery`; not yet wired to the API.
-- **Investigation chat `01a1adf5-caef-7e50-9fac-5e344c5a169a`:** five-pillar research and producer interfaces; case producer is invoked by the bounded worker; incomplete coverage remains explicit.
-- **Frontend chat `01a1adf5-cdb8-78e0-b887-625f6ca4e941`:** portable reader/build export and contributor handoff/interface proposal only.
-- **Another human teammate:** post-report publication and World ID/AgentKit human sign-off. Implemented in `publication/` on top of this seam (fake-issuer tested; live run pending); see the section below. See [workstreams](docs/workstreams.md) and the [human teammate handoff](docs/post-report-handoff.md) for the seam and exact continuation.
-
-Use separate topic branches and pull requests for workstreams. `main` is the integration checkpoint; coordinate shared contracts and review/publication interfaces before merging. Avoid concurrent edits to the same integration checkout. The case worker reconciles configured discovery snapshots and invokes the bounded investigation producer; live qualification and World confirmation still require real evidence and configuration.
-
-## Run locally
-
-Requires Python 3.11. In a shell at the repository root:
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m uvicorn app:app --host 127.0.0.1 --port 8000
-```
-
-In a second shell, activate the same environment and run `python -m huey.bin.huey_consumer worker.huey -w 1`. Stop each with Ctrl+C. Open `http://127.0.0.1:8000/docs` for the local OpenAPI UI. The vendored reader is the default; `SCOOBY_FRONTEND_DIR` may point to another compatible reader. `SCOOBY_DATA` selects local state; default is the ignored `data/` directory. Set `SCOOBY_BROWSER` to a local headless Chromium-compatible executable for draft PDF. No browser means explicit PDF unavailable. Set secrets in the environment, never in Git. `SCOOBY_MODEL_CALL_BUDGET` defaults to zero; live model calls require a separately authorized bounded budget.
-
-Verify with `python -m pytest -q tests`, `python tests/smoke_worker.py`, `python -m unittest discover -s vendor/reader -p test_export.py -v`, and the discovery tests in its README with `SCOOBY_CANDIDATE_SCHEMA` set to the absolute path of `schemas/candidate.schema.json`. `tests/smoke_worker.py` starts and stops its own local worker. Tests use a historical SHIB fixture and a mock model, not live research. `tests/historical-bundle` is a small historical compatibility fixture, not an assessment; its original local source path was redacted and its hashes recomputed for portability.
-
-## Draft, approval and publication
-
-The operator may render a **pending-review draft** before sign-off. The generated manifest and banner bind the report ID/version and exact report digest; the draft PDF includes expanded reader details and bound full Markdown. A local review receipt records a digest and decision but has no authenticated identity. The separate publication module implements a World ID device-grant and an optional outbox, tested with a fake issuer. Neither this draft nor a local unauthenticated receipt authorizes publication. Live validation and security review remain required.
-
-See [HANDOFF.md](HANDOFF.md) for exact next steps and current limitations. The publication module has optional transaction code, disabled by default.
-
-
-## Admin World ID checkpoints
-
-Both human checkpoints are admin functions ([charter](docs/scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md), [implementation](docs/admin-world-checkpoints.md)). An admin is an enrolled reviewer holding a server-side scope (`case_investigation`, `report_review`, `publication`). Admins sign in with World and get a short bearer session; every checkpoint then needs its own fresh World confirmation by that same admin, bound to the exact action.
-
-- **Checkpoint 1 (Go for investigation):** the case bridge (backend PR #12) starts a run only through `authorize_case_admin`, and its case-checkpoint routes need a `case_investigation` session.
-- **Checkpoint 2 (report sign-off):** `/web/v1/admin/reviews` lists every installed report version. Approve, reject or revise binds the exact report, evidence and render digests, and changed bytes or a new version need a fresh sign-off. Consumers see only `admin_review` on `GET /reports`; `SCOOBY_REPORT_RELEASE=approved` lists only approved versions.
-- **Not publication:** a report approval starts no research and publishes nothing. It is only a precondition for the separate publication sign-off and explicit publish request below.
-
-## Publication and World ID Agent Pass
-
-`publication/` implements the protected action from [docs/post-report-handoff.md](docs/post-report-handoff.md): publishing a reviewed report version with `ReportRegistry.publish` on Sepolia after a fresh World authentication and a backend-created, single-use receipt bound to those bytes, followed by a separate explicit publish request. Read [the plan](docs/publication-plan.md), [decisions](docs/publication-decisions.md) and [demo runbook](docs/publication-demo.md).
-
-- **Sign-off:** OIDC Device Authorization Grant against World (`private_key_jwt`, RS256, essential `acr`). The backend starts it, and the reviewer enters the code shown on the web `/approve/[id]` page in World App. ID tokens are validated against JWKS, and the reviewer must be an allowlisted `(iss, sub)`. The backend receipt binds the exact `scooby.publication-target/1` digest; the World ID token authenticates the person and does not itself sign or display the report or its approval.
-- **Publish:** an explicit operator call consumes the receipt and has the attestor key sign `approvalDigest`. It queues a row in a fenced outbox drained by a separate publisher process; `tx_hash` is persisted before broadcast, and reconciliation uses `usedNonce`.
-- **Off by default:** nothing broadcasts unless `SCOOBY_PUBLISH_ENABLED=true` and the publisher key equals `ReportRegistry.publisher()` (RPC check). Live chains also need the operator to type a confirmation.
+Use Python 3.11, install `requirements.txt`, then start the API and a separate worker on the **same persistent** `SCOOBY_DATA` directory:
 
 ```bash
-python -m uvicorn app:app --host 127.0.0.1 --port 8000          # API incl. /publication/v1 and /web/v1
-python -m publication.publisher                                 # fenced outbox publisher (separate process)
-python -m publication.cli enroll --name alice                   # reviewer device login -> allowlist
-python -m publication.cli list | disable --name alice | enable --name alice
-python -m publication.cli publish-confirm --target <target_id>  # explicit publish request
-python -m publication.cli reconcile                             # drive uncertain outbox rows
+python -m uvicorn app:app --host 127.0.0.1 --port 8000
+python -m huey.bin.huey_consumer worker.huey -w 1
 ```
 
-**Trust model (hackathon):** the backend holds two trusted keys. The attestor (`SCOOBY_ATTESTOR_KEY`, which is `report.reviewer`) signs only after a validated World approval. The publisher (`SCOOBY_PUBLISHER_KEY`, which is `ReportRegistry.publisher()`) only broadcasts. A compromised backend could sign without a human, and the production path is a reviewer-held or threshold key. **Revocation** before broadcast stops publication; after broadcast or confirmation it is recorded and the status shows `revoked`, but the onchain record cannot be undone.
+The Render blueprint currently starts the API only; it does not provision a worker. Configure an explicitly managed worker with access to the same durable storage before relying on queues or renders. `SCOOBY_BROWSER` enables optional PDF rendering. Set `SCOOBY_WEB_ORIGIN` to the exact trusted browser origin. CORS is not authentication.
 
-**Five-step judge demo:** deny, expire, non-reviewer, approve → tx, replay → spent. See [docs/publication-demo.md](docs/publication-demo.md).
+Scout collection is **off by default**. To enable the bounded worker path, configure `SCOOBY_SCOUT_ENABLED=true`, `SCOOBY_DISCOVERY_DB`, `SCOOBY_DISCOVERY_ROOT`, and explicit `SCOOBY_SCOUT_CYCLE_BUDGET` and `SCOOBY_SCOUT_HOURLY_BUDGET` (each 1–30); `SCOOBY_SCOUT_LIMIT_PER_CHAIN` limits each cycle. Collection has a five-minute minimum interval, persistent request reservations and 429 cooldown. Its quota is per discovery database, not account-wide; it excludes the separate refresh, LP and archive collectors. Local reconciliation alone is not live scouting. See [bounded scout](modules/discovery/BOUNDED-SCOUT.md).
 
-**Tests:** `python -m pytest -q tests` (fake World issuer). `tests/test_publication_anvil.py` additionally deploys `../SmartContracts` `ReportRegistry` on a local anvil when Foundry is installed.
+`SCOOBY_CASE_MODEL_MAX_CALLS` defaults to `0` and can be `1` only for an explicitly authorized case decision. `SCOOBY_MODEL_CALL_BUDGET` also defaults to `0` for the legacy reasoning path. Supply `OPENAI_API_KEY` securely only where an authorized model call is made. Other source integrations may use `SEARCHAPI_API_KEY` or optional `PUBLICNODE_TOKEN`; the bounded new-pool collector does not require either. Do not put keys or source URLs containing secrets in Git, logs or report packages.
 
+World configuration uses `WORLD_ISSUER`, `WORLD_CLIENT_ID`, a private PEM supplied through `WORLD_CLIENT_KEY_PATH`, and the configured accepted ACR/audience. Enroll named reviewers and scopes via the documented admin CLI or `SCOOBY_REVIEWERS`; do not treat World identity alone as permission. Set `SCOOBY_REPORT_RELEASE=approved` on the API for approved-only consumer access. The branch retires former open-review grants and quarantines attributable receipts; already submitted or confirmed chain transactions cannot be undone by local revocation and require separate reconciliation. Publication stays disabled unless explicitly configured and authorized.
 
-## Reference report import and rendering
+## Reports and storage
 
-A separately scoped reference track can import an operator-supplied v0.1 candidate, record a diagnostic selection, create a run, validate a frozen-v0.2 research bundle with the current IRC reader, and enqueue a local review draft. Artifacts include `index.html`, `report.md`, `report.pdf` when browser rendering succeeds, and a manifest binding their SHA-256 to the exact report bytes. This imports an authored or produced bundle: the worker does not independently perform research, certify a mechanism, establish production gate qualification, authenticate a reviewer or publish. Source provenance, date, replay/live/mocked status and known public labels must be explicit. See `docs/reference-integration.md`.
+`SCOOBY_DATA` contains SQLite state, copied bundles and generated artifacts. A fresh deployment has no authored reports. [Seed restore](docs/report-seed-restore.md) is an explicit private CLI that verifies selected seed identities and hashes, requires approved-only configuration, and queues renders; it does not restore authenticated approvals, perform research or publish. Seed content must be transferred separately and kept out of the image and Git. A worker must share the same persistent volume. Restored drafts remain private pending exact-version admin approval, even if the release setting later changes.
+
+Candidate v0.1 and report v0.2 are frozen contracts. The reader and native package preserve hashes and evidence lineage; HTML, Markdown and optional PDF are derived drafts. Inspect per-pillar status and source limitations rather than treating a partial report as complete. See [architecture](architecture.md), [endpoint map](endpoint-schema-map.md), [native package contract](docs/native-package-contract.md), and [deployment](DEPLOYMENT.md).
+
+Run `python -m pytest -q` for the backend suite. Tests use synthetic identities and issuers, not real World authorization, on-chain publication or validation of source truth.
