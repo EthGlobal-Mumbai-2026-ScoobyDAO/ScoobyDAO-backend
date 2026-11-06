@@ -2,7 +2,7 @@
 
 ## ACTIVE STATE
 
-Social and contract analysis adapters are implemented as local, unwired boundaries; see `docs/social-contract-adapters.md`. Reddit requires an already-approved app and a compliant deletion lifecycle before durable use. Contract source findings are hypotheses until source provenance, runtime state and execution are reviewed. No live Reddit calls were made through these adapters and no model calls were made. A separate no-credential diagnostic returned HTTP 403; its cause is unknown and it returned no data.
+Social and contract analysis adapters are implemented as local, unwired boundaries; see `docs/social-contract-adapters.md`. SearchApi is the selected Reddit provider; it uses a server-side key and a provisional configurable 365-day social lookback. A deletion lifecycle must be reviewed before durable use. Contract source findings are hypotheses until provenance, runtime state and execution are reviewed. Two live scouting calls returned seven dated unresolved context leads each; a RAY-specific call returned HTTP 200 with a provider-declared error of unknown cause. No model calls were made.
 
 This package is a bounded local prototype to integrate into the new backend. Chain ID plus token address is the input. It captures source responses, optionally runs the user's original 50-reconstruction VAE, and emits a v0.2 report, Markdown, evidence and TL;DR sidecar for the existing reader. It does not implement all five research producers, Terra synthesis, authenticated human review, a discovery gate, PDF generation or publication. A direct-token request should be authorized by the backend; discovery must enforce its separate verified gate and selection. Do not deploy as a production service.
 
@@ -44,4 +44,4 @@ Backend owns queue/actor state, discovery and human review. It must isolate work
 
 ## Social and contract investigation adapters
 
-`reddit_search.search_leads`, `reddit_search.collect`, and `reddit_search.summarize` provide bounded OAuth-only source capture and auditable literal-language counts. `contract_analysis.rpc_plan`, `from_pinned_capture`, `source_from_sourcify`, and `analyze` support identity-bound code navigation with explicit proxy, provenance and live-verdict gaps. See `docs/social-contract-adapters.md` for exact contracts, Reddit access retirement and mandatory deletion-lifecycle caveats. These are not wired into backend jobs or immutable reports.
+`reddit_search.search_leads`, `reddit_search.collect`, and `reddit_search.summarize` provide bounded SearchApi-backed source capture and auditable literal-language counts. `contract_analysis.rpc_plan`, `from_pinned_capture`, `source_from_sourcify`, and `analyze` support identity-bound code navigation with explicit proxy, provenance and live-verdict gaps. See `docs/social-contract-adapters.md` for exact contracts, Reddit access retirement and mandatory deletion-lifecycle caveats. These are not wired into backend jobs or immutable reports.

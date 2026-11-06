@@ -21,7 +21,7 @@ STAMP = int(datetime(2020, 1, 5, tzinfo=timezone.utc).timestamp())
 def test_no_approved_reddit_app_is_unavailable_and_makes_no_request():
     def never(_request):
         raise AssertionError('network must not be used')
-    result = reddit.collect(CANDIDATE, WINDOW, reddit.RedditCredentials('id', 'secret', 'agent', False),
+    result = reddit.collect_reddit_oauth(CANDIDATE, WINDOW, reddit.RedditCredentials('id', 'secret', 'agent', False),
                             transport=httpx.MockTransport(never))
     assert result['status'] == 'unavailable' and result['coverage']['requests'] == 0
     assert result['observations'] == [] and result['interpretation'] is None
@@ -49,7 +49,7 @@ def test_bounded_reddit_search_paginates_attributes_redacts_and_counts():
         comment = {'name': 't1_def', 'body': 'not a scam, actually promising', 'created_utc': STAMP,
                    'permalink': '/r/example/comments/abc/title/def/'}
         return httpx.Response(200, json=[{}, {'data': {'children': [{'kind': 't1', 'data': comment}]}}])
-    result = reddit.collect(CANDIDATE, WINDOW, reddit.RedditCredentials('id', 'secret', 'test-agent', True),
+    result = reddit.collect_reddit_oauth(CANDIDATE, WINDOW, reddit.RedditCredentials('id', 'secret', 'test-agent', True),
                             max_requests=5, max_posts=10, max_comments=2, transport=httpx.MockTransport(send))
     assert result['status'] == 'partial' and len(requests) == 4
     assert [x['attribution'] for x in result['observations']] == ['address_mentioned', 'comment_on_attributed_post']
@@ -64,12 +64,12 @@ def test_reddit_failure_and_alias_rules_are_explicit():
     creds = reddit.RedditCredentials('id', 'secret', 'test-agent', True)
     def rate_limited(request):
         return httpx.Response(429)
-    result = reddit.collect(CANDIDATE, WINDOW, creds, transport=httpx.MockTransport(rate_limited))
+    result = reddit.collect_reddit_oauth(CANDIDATE, WINDOW, creds, transport=httpx.MockTransport(rate_limited))
     assert result['status'] == 'unavailable' and result['coverage']['requests'] == 1
     with pytest.raises(ValueError):
-        reddit.collect({**CANDIDATE, 'project_alias': 'RAY', 'alias_evidence_url': 'https://example.org'}, WINDOW, creds)
+        reddit.collect_reddit_oauth({**CANDIDATE, 'project_alias': 'RAY', 'alias_evidence_url': 'https://example.org'}, WINDOW, creds)
     with pytest.raises(ValueError):
-        reddit.collect({**CANDIDATE, 'project_alias': 'Project Ray'}, WINDOW, creds)
+        reddit.collect_reddit_oauth({**CANDIDATE, 'project_alias': 'Project Ray'}, WINDOW, creds)
 
 
 def test_reddit_lead_search_keeps_unresolved_identifiers_and_zero_votes():
@@ -83,7 +83,7 @@ def test_reddit_lead_search_keeps_unresolved_identifiers_and_zero_votes():
         post = {'name': 't3_abc', 'title': f'Possible rug in {ADDR}', 'selftext': 'Do your own research',
                 'created_utc': STAMP, 'permalink': '/r/CryptoCurrency/comments/abc/title/'}
         return httpx.Response(200, json={'data': {'after': None, 'children': [{'data': post}]}})
-    result = reddit.search_leads('rugpull', ['CryptoCurrency'], WINDOW,
+    result = reddit.search_leads_reddit_oauth('rugpull', ['CryptoCurrency'], WINDOW,
                                  reddit.RedditCredentials('id', 'secret', 'agent', True),
                                  transport=httpx.MockTransport(send))
     lead = result['observations'][0]
@@ -92,7 +92,7 @@ def test_reddit_lead_search_keeps_unresolved_identifiers_and_zero_votes():
     assert lead['extracted_identifiers'] == [{'kind': 'evm_address', 'value': ADDR, 'chain_id': None}]
     assert lead['attribution'] == 'unresolved' and lead['verified_concern_votes'] == 0
     assert 'private-token' not in str(result) and lead['fetched_at'] and lead['content_sha256']
-    missing = reddit.search_leads('honeypot', ['CryptoCurrency'], WINDOW, None, transport=httpx.MockTransport(send))
+    missing = reddit.search_leads_reddit_oauth('honeypot', ['CryptoCurrency'], WINDOW, None, transport=httpx.MockTransport(send))
     assert missing['status'] == 'unavailable' and missing['coverage']['requests'] == 0
 
 
@@ -101,7 +101,7 @@ def test_reddit_rate_limit_stops_without_retries():
     def send(request):
         calls.append(request)
         return httpx.Response(200, json={'access_token': 'test'}, headers={'x-ratelimit-remaining': '0.0', 'x-ratelimit-reset': '45'})
-    result = reddit.search_leads('honeypot', ['CryptoCurrency'], WINDOW,
+    result = reddit.search_leads_reddit_oauth('honeypot', ['CryptoCurrency'], WINDOW,
                                  reddit.RedditCredentials('id', 'secret', 'agent', True),
                                  transport=httpx.MockTransport(send))
     assert result['status'] == 'unavailable' and len(calls) == 1
@@ -119,7 +119,7 @@ def test_shared_lead_example_is_explicitly_synthetic_and_unresolved():
 
 @pytest.mark.parametrize('http_status', [401, 403, 429])
 def test_reddit_authorization_failures_leave_scopes_unvisited(http_status):
-    result = reddit.search_leads('honeypot', ['Example', 'ExampleTwo'], WINDOW,
+    result = reddit.search_leads_reddit_oauth('honeypot', ['Example', 'ExampleTwo'], WINDOW,
         reddit.RedditCredentials('id', 'secret', 'agent', True),
         transport=httpx.MockTransport(lambda request: httpx.Response(http_status)))
     assert result['status'] == 'unavailable'
@@ -134,7 +134,7 @@ def test_reddit_cursor_loop_fails_closed_without_infinite_requests():
         if request.url.host == 'www.reddit.com':
             return httpx.Response(200, json={'access_token': 'test'})
         return httpx.Response(200, json={'data': {'after': 't3_same', 'children': []}})
-    result = reddit.search_leads('honeypot', ['Example', 'ExampleTwo'], WINDOW,
+    result = reddit.search_leads_reddit_oauth('honeypot', ['Example', 'ExampleTwo'], WINDOW,
         reddit.RedditCredentials('id', 'secret', 'agent', True), transport=httpx.MockTransport(send))
     assert result['status'] == 'unavailable' and len(calls) == 3
     assert [s['state'] for s in result['coverage']['scopes']] == ['failed', 'not_started']

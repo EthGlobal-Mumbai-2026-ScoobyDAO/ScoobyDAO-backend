@@ -30,7 +30,7 @@ class RedditCredentials:
     approved: bool = False
 
 
-def credentials_from_environment() -> RedditCredentials | None:
+def reddit_oauth_credentials_from_environment() -> RedditCredentials | None:
     """Load names only when caller explicitly attests existing app approval."""
     if os.getenv('SCOOBY_REDDIT_APPROVED', '').strip().lower() != 'true':
         return None
@@ -73,7 +73,7 @@ def _request(client, coverage, max_requests, method, url, **kwargs):
     return response.json()
 
 
-def search_leads(query: str, subreddits: list[str], window: dict, credentials: RedditCredentials | None,
+def search_leads_reddit_oauth(query: str, subreddits: list[str], window: dict, credentials: RedditCredentials | None,
                  *, max_requests: int = 5, max_posts: int = 40,
                  transport: httpx.BaseTransport | None = None) -> dict:
     """Bounded subreddit search for unverified leads, independent of token analysis.
@@ -205,7 +205,7 @@ def summarize(observations: list[dict]) -> dict:
                             'Counts reflect supplied excerpts, not people, independent posts, or market-wide opinion.']}
 
 
-def collect(candidate: dict, window: dict, credentials: RedditCredentials | None, *,
+def collect_reddit_oauth(candidate: dict, window: dict, credentials: RedditCredentials | None, *,
             max_requests: int = 5, max_posts: int = 25, max_comments: int = 20,
             transport: httpx.BaseTransport | None = None) -> dict:
     """Capture explicitly attributed observations. Counts include OAuth and comment reads.
@@ -342,3 +342,26 @@ def collect(candidate: dict, window: dict, credentials: RedditCredentials | None
         result['status'] = 'partial' if result['observations'] else 'unavailable'
     result['interpretation'] = summarize(result['observations'])
     return result
+
+
+def search_leads(query, subreddits, window, credentials, *, max_requests=1, max_posts=40,
+                 time_period='any_time', cancelled=None, transport=None):
+    """Selected SearchApi provider; direct Reddit OAuth is a separate explicit function."""
+    from .searchapi_reddit import search
+    return search(query, subreddits, window, credentials, max_requests=max_requests,
+                  max_posts=max_posts, time_period=time_period, cancelled=cancelled, transport=transport)
+
+
+def credentials_from_environment():
+    """Read SearchApi credentials for the selected provider."""
+    from .searchapi_reddit import credentials_from_environment as load_credentials
+    return load_credentials()
+
+
+def collect(candidate, window, credentials, *, max_requests=1, max_posts=25, max_comments=20,
+            subreddits=None, time_period='any_time', cancelled=None, transport=None):
+    """Selected SearchApi candidate-context boundary; no hidden OAuth fallback."""
+    from .searchapi_reddit import collect as searchapi_collect
+    return searchapi_collect(candidate, window, credentials, max_requests=max_requests,
+        max_posts=max_posts, max_comments=max_comments, subreddits=subreddits,
+        time_period=time_period, cancelled=cancelled, transport=transport)
