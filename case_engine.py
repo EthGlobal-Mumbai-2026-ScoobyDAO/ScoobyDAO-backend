@@ -9,18 +9,26 @@ if str(DISCOVERY) not in sys.path: sys.path.insert(0,str(DISCOVERY))
 import review_queue
 SCHEMA=json.loads((ROOT/'schemas'/'candidate.schema.json').read_text(encoding='utf-8-sig'))
 MAX_BYTES=5_000_000
-AUTO_BUDGET={'max_source_requests':0,'max_model_calls':0}
+def policy_budget():
+ # Server-owned policy; defaults to no paid calls. Existing decisions never inherit changes.
+ value=os.getenv('SCOOBY_CASE_MODEL_MAX_CALLS','0').strip()
+ if value not in ('0','1'):raise ValueError('SCOOBY_CASE_MODEL_MAX_CALLS must be 0 or 1')
+ return {'max_source_requests':0,'max_model_calls':int(value)}
 
 def _policy_sources():
  manifest={p.name:digest(p.read_bytes()) for p in sorted(DISCOVERY.glob('*.py')) if not p.name.startswith('test_')}
  manifest['case_engine.py']=digest(Path(__file__).read_bytes());manifest['candidate.schema.json']=digest((ROOT/'schemas'/'candidate.schema.json').read_bytes())
+ # Bind the model stage code and its static prompt/schema to the policy source snapshot.
+ for relative in ('case_jobs.py','case_model.py','modules/investigation/model_reasoning.py','modules/investigation/reasoning_v2/output.schema.json','modules/investigation/reasoning_v2/analyst-v2.txt','modules/investigation/reasoning_v2/legacy-math-v1.txt'):
+  source=ROOT/relative
+  if source.is_file():manifest[relative]=digest(source.read_bytes())
  return manifest
 _LOADED_POLICY_SOURCES=_policy_sources()
 def policy_digest():
  # A running process must not attest to newly edited source it has not loaded.
  manifest=_policy_sources()
  if manifest!=_LOADED_POLICY_SOURCES: raise RuntimeError('policy source changed; restart the process')
- return digest(dumps({'policy':review_queue.POLICY,'sources':manifest,'threshold':4,'age_seconds':3600}).encode())
+ return digest(dumps({'policy':review_queue.POLICY,'sources':manifest,'threshold':4,'age_seconds':3600,'budget':policy_budget()}).encode())
 
 def collect_evidence(record,root):
  root=Path(root).resolve(); data={};total=0
@@ -85,7 +93,7 @@ def ingest_record(record,source_root):
  if cid!=str(identity['chain_id'])+':'+identity['address'].lower(): raise ValueError('candidate identity mismatch')
  evidence=collect_evidence(record,source_root);policy=policy_digest();assessment=evaluate(record,evidence);assessment.pop('as_of',None)
  # Assessment is recomputed; ignore eligibility/score supplied by sources.
- valid,count,gate_expiry=verified_gate(assessment,evidence)
+ valid,count,gate_expiry=verified_gate(assessment,evidence);budget=policy_budget()
  snap=digest(dumps({'record':record,'evidence':evidence,'policy':policy,'assessment':assessment}).encode());case=digest(cid.encode()); t=now();state='auto_queued' if valid else 'awaiting_human' if count>0 else 'monitoring'
  with db() as c:
   c.execute('BEGIN IMMEDIATE')
@@ -96,8 +104,8 @@ def ingest_record(record,source_root):
   c.execute('INSERT INTO cases VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET current_snapshot=excluded.current_snapshot,state=excluded.state,updated=excluded.updated',(case,cid,snap,state,t))
   if old and old['current_snapshot']!=snap:c.execute("UPDATE case_challenges SET state='superseded' WHERE case_id=? AND state='pending'",(case,))
   if valid and not existing_run:
-   did=digest(dumps({'case':case,'snapshot':snap,'policy':policy,'action':'auto_research','budget':AUTO_BUDGET}).encode())
-   c.execute('INSERT OR IGNORE INTO case_decisions VALUES(?,?,?,?,?,?,?,?)',(did,case,snap,policy,'auto_research',dumps(AUTO_BUDGET),None,t))
+   did=digest(dumps({'case':case,'snapshot':snap,'policy':policy,'action':'auto_research','budget':budget}).encode())
+   c.execute('INSERT OR IGNORE INTO case_decisions VALUES(?,?,?,?,?,?,?,?)',(did,case,snap,policy,'auto_research',dumps(budget),None,t))
    job(c,'case_start',did,'case-start:'+did)
   c.execute('INSERT INTO case_events(case_id,kind,detail,created) VALUES(?,?,?,?)',(case,'assessed',state,t))
  return case
@@ -127,7 +135,8 @@ def start_decision(decision_id):
   if not d: raise ValueError('decision not found')
   snap=c.execute('SELECT * FROM case_snapshots WHERE id=?',(d['snapshot_id'],)).fetchone();case=c.execute('SELECT * FROM cases WHERE id=?',(d['case_id'],)).fetchone()
   if d['run_id']: return d['run_id']
-  if d['budget']!=dumps(AUTO_BUDGET) or d['id']!=digest(dumps({'case':d['case_id'],'snapshot':d['snapshot_id'],'policy':d['policy_digest'],'action':d['action'],'budget':AUTO_BUDGET}).encode()):raise ValueError('decision budget or binding tampered')
+  budget=json.loads(d['budget'])
+  if budget!=policy_budget() or d['budget']!=dumps(budget) or d['id']!=digest(dumps({'case':d['case_id'],'snapshot':d['snapshot_id'],'policy':d['policy_digest'],'action':d['action'],'budget':budget}).encode()):raise ValueError('decision budget or binding tampered')
   if case['current_snapshot']!=snap['id'] or snap['expires']<=now() or policy_digest()!=snap['policy_digest']: raise ValueError('snapshot or policy stale')
   record=json.loads(snap['record']); evidence=json.loads(snap['evidence'])
   if digest(dumps({'record':record,'evidence':evidence,'policy':snap['policy_digest'],'assessment':json.loads(snap['assessment'])}).encode())!=snap['id']: raise ValueError('snapshot tampered')
@@ -138,7 +147,8 @@ def start_decision(decision_id):
   c.execute('BEGIN IMMEDIATE')
   d=c.execute('SELECT * FROM case_decisions WHERE id=?',(decision_id,)).fetchone();case=c.execute('SELECT * FROM cases WHERE id=?',(d['case_id'],)).fetchone();current=c.execute('SELECT * FROM case_snapshots WHERE id=?',(d['snapshot_id'],)).fetchone()
   if d['run_id']:return d['run_id']
-  if d['budget']!=dumps(AUTO_BUDGET) or d['id']!=digest(dumps({'case':d['case_id'],'snapshot':d['snapshot_id'],'policy':d['policy_digest'],'action':d['action'],'budget':AUTO_BUDGET}).encode()):raise ValueError('decision budget or binding tampered')
+  budget=json.loads(d['budget'])
+  if budget!=policy_budget() or d['budget']!=dumps(budget) or d['id']!=digest(dumps({'case':d['case_id'],'snapshot':d['snapshot_id'],'policy':d['policy_digest'],'action':d['action'],'budget':budget}).encode()):raise ValueError('decision budget or binding tampered')
   other=c.execute("SELECT id FROM investigations WHERE candidate_id=? AND status!='reference_only' LIMIT 1",(record['candidate_id'],)).fetchone()
   if other: raise ValueError('candidate already has research run; explicit supersession required')
   if case['current_snapshot']!=snap['id'] or current['expires']<=now() or policy_digest()!=snap['policy_digest'] or (current['record'],current['evidence'],current['policy_digest'],current['assessment'])!=(snap['record'],snap['evidence'],snap['policy_digest'],snap['assessment']): raise ValueError('binding changed')

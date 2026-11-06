@@ -80,7 +80,7 @@ def poll(attempt_id,world):
     if not admin_allowed:c.execute("UPDATE case_world_attempts SET state='denied' WHERE id=?",(attempt_id,))
     elif existing:c.execute("UPDATE case_world_attempts SET state='superseded' WHERE id=?",(attempt_id,))
     else:
-     candidate=json.loads(snap['record']);selection=ident();run=ident();budget={'max_source_requests':0,'max_model_calls':0};decision=digest(dumps({'case':case['id'],'snapshot':snap['id'],'policy':snap['policy_digest'],'action':'human_research','budget':budget,'challenge':ch['id']}).encode())
+     candidate=json.loads(snap['record']);selection=ident();run=ident();budget=__import__('case_engine').policy_budget();decision=digest(dumps({'case':case['id'],'snapshot':snap['id'],'policy':snap['policy_digest'],'action':'human_research','budget':budget,'challenge':ch['id']}).encode())
      c.execute('INSERT OR IGNORE INTO candidates VALUES(?,?,?)',(case['candidate_id'],dumps(candidate),now()))
      c.execute('INSERT INTO selections VALUES(?,?,?,?,?,?,?)',(selection,case['candidate_id'],'diagnostic_exception','world-id','Case-scoped World ID confirmed; final report approval separate',now(),'case-human:'+ch['id']))
      c.execute('INSERT INTO investigations VALUES(?,?,?,?,?,?)',(run,case['candidate_id'],selection,'queued',now(),'case-human-run:'+ch['id']))

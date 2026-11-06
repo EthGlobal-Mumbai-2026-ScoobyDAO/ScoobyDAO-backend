@@ -410,7 +410,7 @@ def refresh_cases(x:CaseScan,idempotency_key:str=Header(None)):
  signal();return {'job_id':jid,'status':'queued','scope':'configured local discovery store; no network calls'}
 def case_policy_digest():
  try:return __import__('case_engine').policy_digest()
- except (OSError,RuntimeError):err(503,'Case policy source changed or is unavailable; restart after review')
+ except (OSError,RuntimeError,ValueError):err(503,'Case policy source or budget configuration changed or is unavailable; restart after review')
 def scouting_clues(record,captured):
  evidence={e['id']:e for e in record.get('evidence',[])};clues=[]
  for trigger in record.get('triggers',[]):

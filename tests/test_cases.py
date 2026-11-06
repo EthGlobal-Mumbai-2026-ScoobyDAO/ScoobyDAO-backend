@@ -301,3 +301,13 @@ def test_world_identity_alone_never_authorizes_admin_case_start(tmp_path):
   assert client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt').status_code==503
   with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==0
  finally:app.dependency_overrides.pop(get_world_optional,None)
+
+
+def test_model_policy_budget_defaults_zero_and_cannot_widen_existing_decision(tmp_path,monkeypatch):
+ monkeypatch.delenv('SCOOBY_CASE_MODEL_MAX_CALLS',raising=False);monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));case=case_engine.ingest_record(with_sources(record(1950),tmp_path),tmp_path)
+ with db() as c:decision=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();assert json.loads(decision['budget'])=={'max_source_requests':0,'max_model_calls':0}
+ monkeypatch.setenv('SCOOBY_CASE_MODEL_MAX_CALLS','1')
+ with pytest.raises(ValueError,match='budget|stale'):case_engine.start_decision(decision['id'])
+ with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==0
+ monkeypatch.setenv('SCOOBY_CASE_MODEL_MAX_CALLS','2')
+ with pytest.raises(ValueError,match='must be 0 or 1'):case_engine.policy_budget()

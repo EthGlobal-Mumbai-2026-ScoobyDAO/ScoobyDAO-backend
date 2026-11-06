@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from store import DATA, db, now, digest, dumps, job, event, PILLARS
 
-def run_case(run_id, producer=None):
+def run_case(run_id, producer=None, model_client=None):
  import case_engine
  with db() as c:
   run=c.execute('SELECT * FROM investigations WHERE id=?',(run_id,)).fetchone()
@@ -15,7 +15,7 @@ def run_case(run_id, producer=None):
   if not snap or not case or snap['candidate_id']!=run['candidate_id'] or snap['expires']<=now() or case['current_snapshot']!=snap['id'] or case_engine.policy_digest()!=decision['policy_digest'] or snap['policy_digest']!=decision['policy_digest']:raise ValueError('authorization binding expired or changed')
   if digest(dumps({'record':json.loads(snap['record']),'evidence':json.loads(snap['evidence']),'policy':snap['policy_digest'],'assessment':json.loads(snap['assessment'])}).encode())!=snap['id']:raise ValueError('snapshot integrity failure')
   budget=json.loads(decision['budget'])
-  if budget!={'max_source_requests':0,'max_model_calls':0}:raise ValueError('unauthorized budget')
+  if budget!=case_engine.policy_budget() or set(budget)!={'max_source_requests','max_model_calls'} or budget['max_source_requests']!=0 or budget['max_model_calls'] not in (0,1):raise ValueError('unauthorized budget')
   if decision['action'] not in ('auto_research','human_research'):raise ValueError('unsupported authorization')
   binding={'case':case['id'],'snapshot':snap['id'],'policy':snap['policy_digest'],'action':decision['action'],'budget':budget}
   if decision['action']=='human_research':
@@ -38,7 +38,11 @@ def run_case(run_id, producer=None):
   if out.is_symlink() or not out.is_dir():raise ValueError('unsafe bundle path')
   doc=json.loads((out/'report.json').read_bytes());sha=digest((out/'report.json').read_bytes());contract_validate.verify_digest(out,sha)
   result={'state':'partial','bundle_path':str(out),'report_id':doc['report_id'],'report_version':doc['report_version'],'report_sha256':sha,'pillar_status':{k:v['status'] for k,v in doc['pillars'].items()}}
- else:result=producer(descriptor,out,max_source_requests=budget['max_source_requests'],captured_snapshot={'record':json.loads(snap['record']),'evidence':json.loads(snap['evidence'])},cancelled=cancelled)
+ else:
+  options={'max_source_requests':budget['max_source_requests'],'captured_snapshot':{'record':json.loads(snap['record']),'evidence':json.loads(snap['evidence'])},'cancelled':cancelled}
+  from case_model import Ledger,OUTPUT_CAP,CONTEXT_CAP
+  ledger=Ledger(run_id,decision['id'],snap['id']);options.update(max_model_calls=budget['max_model_calls'],model_client=model_client,max_model_output_tokens=OUTPUT_CAP,max_model_context_chars=CONTEXT_CAP,stage_callback=ledger,reasoning_checkpoint=ledger.checkpoint() if budget['max_model_calls'] else None)
+  result=producer(descriptor,out,**options)
  if result.get('state') in ('blocked','cancelled'):
   with db() as c:
    c.execute('BEGIN IMMEDIATE');current=c.execute('SELECT status FROM investigations WHERE id=?',(run_id,)).fetchone()
