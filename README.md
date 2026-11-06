@@ -1,5 +1,7 @@
 # Scooby DAO backend — ACTIVE STATE
 
+Checkpoint: **6 November 2026 IST**. A fresh clone passed 2 backend, 21 discovery, 7 investigation and 2 reader tests, plus the worker smoke test. [GitHub CI run 42178733491](https://github.com/EthGlobal-Mumbai-2026-ScoobyDAO/ScoobyDAO-backend/actions/runs/42178733491) succeeded.
+
 This repository is an **early local integration scaffold**, not a live or production research service. It contains the FastAPI operator API, a Huey/SQLite worker, frozen candidate/report schemas, and a vendored frontend reader. It can import and validate a research bundle and render a visibly pending local draft. It does not yet run continuous discovery, verify the four-concern gate, conduct five-pillar research, generate a report/TL;DR, authenticate human reviewers, or publish reports.
 
 ## What works and what remains
@@ -33,7 +35,7 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 
 In a second shell, activate the same environment and run `python -m huey.bin.huey_consumer worker.huey -w 1`. Stop each with Ctrl+C. Open `http://127.0.0.1:8000/docs` for the local OpenAPI UI. The vendored reader is the default; `SCOOBY_FRONTEND_DIR` may point to another compatible reader. `SCOOBY_DATA` selects local state; default is the ignored `data/` directory. Set `SCOOBY_BROWSER` to a local headless Chromium-compatible executable for draft PDF. No browser means explicit PDF unavailable. Set secrets in the environment, never in Git. `SCOOBY_MODEL_CALL_BUDGET` defaults to zero; live model calls require a separately authorized bounded budget.
 
-Verify with `python -m pytest -q tests`, `python tests/smoke_worker.py`, `python -m unittest discover -s vendor/reader -p test_export.py -v`, and the discovery tests in its README with `SCOOBY_CANDIDATE_SCHEMA` set to the absolute path of `schemas/candidate.schema.json`. The latter starts and stops its own local worker. Tests use a historical SHIB fixture and a mock model, not live research. `tests/historical-bundle` is a small historical compatibility fixture, not an assessment; its original local source path was redacted and its hashes recomputed for portability.
+Verify with `python -m pytest -q tests`, `python tests/smoke_worker.py`, `python -m unittest discover -s vendor/reader -p test_export.py -v`, and the discovery tests in its README with `SCOOBY_CANDIDATE_SCHEMA` set to the absolute path of `schemas/candidate.schema.json`. `tests/smoke_worker.py` starts and stops its own local worker. Tests use a historical SHIB fixture and a mock model, not live research. `tests/historical-bundle` is a small historical compatibility fixture, not an assessment; its original local source path was redacted and its hashes recomputed for portability.
 
 ## Draft, approval and publication
 

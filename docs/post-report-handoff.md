@@ -4,7 +4,7 @@ Status: **design proposal for a human teammate; not implemented.** Start on a se
 
 ## Current starting point
 
-Read the backend README, HANDOFF, `architecture.md`, `endpoint-schema-map.md`, `app.py`, `store.py`, `worker.py`, and OpenAPI first. It currently imports and validates a report bundle with the frontend builder, exposes `GET /reports/{id}/{version}`, records local review assertions at `POST /reports/{id}/{version}/review`, and queues a draft render at `POST /reports/{id}/{version}/render`. All identities and review receipts are unauthenticated; approved export is not implemented. Worker jobs are at-least-once with expiring leases and no fencing; do not attach an external publish side effect to that worker unchanged. Report v0.2 and candidate v0.1 are frozen. The reader source is supplied separately in `repo-export/`; avoid machine-specific `SCOOBY_FRONTEND_DIR` paths.
+Read the backend README, HANDOFF, `architecture.md`, `endpoint-schema-map.md`, `app.py`, `store.py`, `worker.py`, and OpenAPI first. It currently imports and validates a report bundle with the frontend builder, exposes `GET /reports/{id}/{version}`, records local review assertions at `POST /reports/{id}/{version}/review`, and queues a draft render at `POST /reports/{id}/{version}/render`. All identities and review receipts are unauthenticated; approved export is not implemented. Worker jobs are at-least-once with expiring leases and no fencing; do not attach an external publish side effect to that worker unchanged. Report v0.2 and candidate v0.1 are frozen. The reader source is vendored in `vendor/reader/`; avoid machine-specific `SCOOBY_FRONTEND_DIR` paths.
 
 ## Boundary and lifecycle proposal
 

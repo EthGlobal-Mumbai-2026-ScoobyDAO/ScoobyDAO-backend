@@ -15,6 +15,8 @@
 
 ## Evidence and limitations
 
+Checkpoint: **6 November 2026 IST**. A fresh clone passed 2 backend, 21 discovery, 7 investigation and 2 reader tests, plus the worker smoke test. [GitHub CI run 42178733491](https://github.com/EthGlobal-Mumbai-2026-ScoobyDAO/ScoobyDAO-backend/actions/runs/42178733491) succeeded.
+
 Prior local test: two pytest cases passed, a separate worker processed an empty bounded scan and was stopped, and a historical reader generated a seven-page PDF via isolated headless Edge (page one inspected at reading size; all pages as thumbnails). The PDF omitted collapsed sections. Model transport was mocked; no live API call, billable infrastructure, or new token research occurred. No real feed, human authentication, complete long-form PDF, production reliability or deployment is claimed. The BLISS one-off diagnostic is not gate-qualified and remains separate.
 
 Source-of-truth schema digests: candidate `9a45955834e66c9a86f8f0e8cd7eb915e03517ee6e601d1c24570bc687ed530b`; report `8a5f793dce8c75c18c3ee8ade4c26e76fe51ee489173ff59299ad85b5963bf55`. The reader's copy of the report schema must match. Record any future accepted version explicitly rather than changing these bytes.
