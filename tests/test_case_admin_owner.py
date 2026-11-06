@@ -37,3 +37,36 @@ def test_public_gate_case_preflight_and_guard(monkeypatch):
  assert client.post('/scouting/cases/refresh',json={'limit':1}).status_code==404
  headers['Origin']='https://untrusted.invalid'
  assert client.options('/scouting/cases/test/challenge',headers=headers).status_code==400
+
+def test_world_checkpoint_binds_initiating_session_end_to_end(tmp_path,monkeypatch):
+ from types import SimpleNamespace
+ from fastapi.testclient import TestClient
+ from app import app
+ from publication.deps import get_world_optional
+ from publication.world import DeviceStart,Tokens
+ from admin_support import session_headers
+ from test_cases import record,with_sources,result
+ import store,case_engine,case_world
+ monkeypatch.setattr(store,'DB',tmp_path/'case.sqlite');store.init()
+ monkeypatch.setenv('SCOOBY_PUBLIC_GATE','true')
+ monkeypatch.setattr(case_engine,'evaluate',lambda record,evidence:result(1,record))
+ case=case_engine.ingest_record(with_sources(record(15555),tmp_path),tmp_path)
+ a=session_headers('owner-test','alice','case_investigation');b=session_headers('owner-test','bob','case_investigation')
+ class FakeWorld:
+  config=SimpleNamespace(accepted_acr=('synthetic',))
+  def start_device(self,_):return DeviceStart(device_code='test-only',user_code='TEST',verification_uri='https://world.example',expires_in=100,interval=0)
+  def poll(self,_):return Tokens('synthetic')
+  def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='owner-test',sub='alice')
+  def authorize_case_admin(self,identity,binding):return True
+ app.dependency_overrides[get_world_optional]=lambda:FakeWorld()
+ try:
+  c=TestClient(app);revision=c.get('/scouting/cases/'+case).json()['snapshot_digest']
+  ch=c.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':revision},headers={**a,'Idempotency-Key':'same-owner-test'}).json()['challenge_id']
+  assert c.post('/scouting/challenges/'+ch+'/world-attempt',headers=b).status_code==403
+  attempt=c.post('/scouting/challenges/'+ch+'/world-attempt',headers=a).json()['attempt_id']
+  assert c.get('/scouting/world-attempts/'+attempt,headers=b).status_code==403
+  assert c.post('/scouting/world-attempts/'+attempt+'/cancel',headers=b).status_code==403
+  result=c.get('/scouting/world-attempts/'+attempt,headers=a);assert result.status_code==200 and result.json()['state']=='approved'
+  assert c.get('/scouting/world-attempts/'+attempt,headers=a).json()['run_id']==result.json()['run_id']
+ finally:
+  app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
