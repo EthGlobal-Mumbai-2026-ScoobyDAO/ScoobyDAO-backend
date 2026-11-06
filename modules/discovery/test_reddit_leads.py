@@ -72,6 +72,96 @@ class RedditLeadTests(unittest.TestCase):
         self.assertEqual(result['leads'], [])
         self.assertEqual(result['coverage']['removed_observations'], 1)
 
+    def test_seven_outside_window_rows_are_not_fresh_leads(self):
+        items = []
+        for index in range(7):
+            item = copy.deepcopy(self.result['observations'][0])
+            item['id'] = f't3_stale{index}'
+            item['url'] = f'https://reddit.com/r/CryptoScams/comments/stale{index}/'
+            item['observed_at'] = (self.now - dt.timedelta(days=32 + index)).isoformat()
+            items.append(item)
+        self.result['observations'] = items
+        self.result['coverage']['posts_examined'] = 7
+        output = self.adapt()
+        self.assertEqual(output['status'], 'empty')
+        self.assertEqual(output['reason'], 'no_eligible_matches')
+        self.assertEqual(output['coverage']['outside_window_observations'], 7)
+        self.assertEqual(output['leads'], [])
+
+    def test_searchapi_provider_exclusions_and_opaque_cursor(self):
+        result = copy.deepcopy(self.result)
+        result['provider'] = 'searchapi.io'
+        result['observations'] = []
+        result['coverage'].update(requests=1, posts_examined=7, max_requests=1, complete=False,
+                                  reason='outside_window_only', excluded={'outside_window':7},
+                                  scopes=[{'subreddit':'CryptoScams','state':'truncated','next_cursor':'opaque:provider-token'}])
+        output = self.adapt(result)
+        self.assertEqual(output['leads'], [])
+        self.assertEqual(output['coverage']['provider_excluded']['outside_window'], 7)
+        self.assertEqual(output['coverage']['unsearched_scope'], ['cryptoscams'])
+        self.assertTrue(output['coverage']['scopes'][0]['next_cursor_available'])
+        self.assertIsNone(output['coverage']['scopes'][0]['next_cursor'])
+        self.assertNotIn('opaque:provider-token', json.dumps(output))
+        result['coverage']['excluded']['outside_window'] = 8
+        with self.assertRaises(ValueError): self.adapt(result)
+
+    def test_searchapi_metadata_only_dated_context_is_unresolved(self):
+        result = copy.deepcopy(self.result)
+        result['provider'] = 'searchapi.io'
+        result['coverage'].update(requests=1, max_requests=1, complete=False, excluded={},
+                                  scopes=[{'subreddit':'CryptoScams','state':'truncated','has_next_page':True}])
+        item = result['observations'][0]
+        item['source_mode'] = 'dated_social_context'
+        for field in ('query', 'excerpt', 'content_sha256'):
+            item.pop(field)
+        output = self.adapt(result)
+        self.assertEqual(len(output['leads']), 1)
+        self.assertIsNone(output['leads'][0]['candidate_id'])
+        self.assertIsNone(output['leads'][0]['identifiers']['chain_hint'])
+        self.assertEqual(output['leads'][0]['verified_concern_votes'], 0)
+        self.assertTrue(output['coverage']['scopes'][0]['next_cursor_available'])
+
+    def test_365_day_window_keeps_dated_older_posts_as_context(self):
+        result = copy.deepcopy(self.result)
+        result['provider'] = 'searchapi.io'
+        result['window']['start'] = (self.now - dt.timedelta(days=365)).isoformat()
+        result['window']['end'] = (self.now - dt.timedelta(seconds=1)).isoformat()
+        result['coverage'].update(requests=1, posts_examined=7, max_requests=1, excluded={})
+        posts = []
+        for index, age in enumerate((41, 60, 90, 120, 180, 250, 356)):
+            item = copy.deepcopy(result['observations'][0])
+            item['id'] = f't3_historic{index}'
+            item['url'] = f'https://reddit.com/r/CryptoScams/comments/historic{index}/'
+            item['observed_at'] = (self.now - dt.timedelta(days=age)).isoformat()
+            posts.append(item)
+        result['observations'] = posts
+        output = self.adapt(result)
+        self.assertEqual(output['coverage']['outside_window_observations'], 0)
+        refs = output['leads'][0]['references']
+        self.assertEqual(len(refs), 7)
+        self.assertTrue(all(r['context'] == 'historical_context' and r['age_seconds'] > 31 * 86400 for r in refs))
+        self.assertIsNone(output['leads'][0]['candidate_id'])
+        self.assertEqual(output['leads'][0]['verified_concern_votes'], 0)
+
+    def test_searchapi_consumer_rechecks_provider_window(self):
+        result = copy.deepcopy(self.result)
+        result['provider'] = 'searchapi.io'
+        result['coverage'].update(requests=1, max_requests=1, excluded={})
+        item = result['observations'][0]
+        item['observed_at'] = (self.now - dt.timedelta(days=60)).isoformat()
+        output = self.adapt(result)
+        self.assertEqual(output['leads'], [])
+        self.assertEqual(output['coverage']['outside_window_observations'], 1)
+
+    def test_missing_and_future_timestamps_are_excluded(self):
+        for field, value in [('observed_at', None), ('observed_at', 'not-a-time'),
+                             ('fetched_at', (self.now + dt.timedelta(seconds=1)).isoformat())]:
+            with self.subTest(field=field):
+                result = copy.deepcopy(self.result); result['observations'][0][field] = value
+                output = self.adapt(result)
+                self.assertEqual(output['leads'], [])
+                self.assertEqual(output['coverage']['invalid_time_observations'], 1)
+
     def test_incomplete_scope_and_cursor_are_reported_without_claiming_resume(self):
         self.result['coverage']['complete'] = False
         self.result['coverage']['scopes'][0].update(state='truncated', next_cursor='t3_abc123')
@@ -86,7 +176,6 @@ class RedditLeadTests(unittest.TestCase):
         for field, value in [('url', 'https://evil.example/r/CryptoScams/comments/abc123/'),
                              ('url', 'https://reddit.com/r/other/comments/abc123/'),
                              ('url', 'https://reddit.com/r/CryptoScams/comments/abc123/?token=secret'),
-                             ('observed_at', '2026-11-06T01:00:00+00:00'),
                              ('verified_concern_votes', 1)]:
             with self.subTest(field=field):
                 result = copy.deepcopy(self.result); result['observations'][0][field] = value

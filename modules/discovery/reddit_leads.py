@@ -40,7 +40,7 @@ def _post(url, allowlist):
 
 
 def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post_ids=(),
-          max_capture_age=3600, max_post_age=604800):
+          max_capture_age=3600, max_post_age=31536000):
     """Normalize a bounded search into transient, unverified, deletion-aware leads.
 
     `removed_post_ids` must come from the backend's authorized deletion/removal
@@ -49,6 +49,9 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
     """
     if not isinstance(result, dict) or result.get('profile') != PROFILE:
         raise ValueError('unsupported search provider profile')
+    provider = result.get('provider', 'reddit_oauth')
+    if provider not in ('reddit_oauth', 'searchapi.io'):
+        raise ValueError('unsupported search provider')
     if (not isinstance(allowed_subreddits, (list, tuple, set)) or not 1 <= len(allowed_subreddits) <= 3
             or any(not isinstance(x, str) or not re.fullmatch(r'[A-Za-z0-9_]{2,21}', x) for x in allowed_subreddits)):
         raise ValueError('one to three configured subreddit names required')
@@ -60,7 +63,7 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
     if not isinstance(query, str) or query not in allowed_queries:
         raise ValueError('query outside configured search policy')
     if (type(max_capture_age) is not int or not 1 <= max_capture_age <= 3600
-            or type(max_post_age) is not int or not 1 <= max_post_age <= 604800):
+            or type(max_post_age) is not int or not 1 <= max_post_age <= 31536000):
         raise ValueError('invalid transient retention bounds')
     if (not isinstance(removed_post_ids, (list, tuple, set))
             or any(not isinstance(x, str) or not re.fullmatch(r't3_[a-z0-9]{1,12}', x) for x in removed_post_ids)):
@@ -74,7 +77,7 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
     if not isinstance(now, dt.datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise ValueError('timezone-aware current time required')
     now = now.astimezone(dt.timezone.utc)
-    if end <= start or end - start > dt.timedelta(days=31) or end > now:
+    if end <= start or end - start > dt.timedelta(days=365) or end > now:
         raise ValueError('invalid or future search window')
     status, observations, coverage = result.get('status'), result.get('observations'), result.get('coverage')
     if (status not in ('partial', 'unavailable') or not isinstance(observations, list)
@@ -84,25 +87,40 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
         raise ValueError('unavailable source cannot contain observations')
     calls, examined, complete = coverage.get('requests'), coverage.get('posts_examined'), coverage.get('complete')
     max_calls, max_posts, scopes = coverage.get('max_requests'), coverage.get('max_posts'), coverage.get('scopes')
-    if (type(max_calls) is not int or not 2 <= max_calls <= 5 or type(max_posts) is not int or not 1 <= max_posts <= 40
+    minimum_calls = 1 if provider == 'searchapi.io' else 2
+    if (type(max_calls) is not int or not minimum_calls <= max_calls <= 5 or type(max_posts) is not int or not 1 <= max_posts <= 40
             or type(calls) is not int or not 0 <= calls <= max_calls or type(examined) is not int
             or not 0 <= examined <= max_posts or type(complete) is not bool or len(observations) > examined
-            or (status == 'unavailable' and complete) or not isinstance(scopes, list) or not 1 <= len(scopes) <= 3):
+            or (status == 'unavailable' and complete) or not isinstance(scopes, list) or not 1 <= len(scopes) <= 3
+            or (provider == 'searchapi.io' and examined > 7 * calls)):
         raise ValueError('invalid source coverage')
     scope_rows, seen_scopes = [], set()
     for scope in scopes:
         if not isinstance(scope, dict) or not isinstance(scope.get('subreddit'), str):
             raise ValueError('invalid source scope')
         name, state, cursor = scope['subreddit'].lower(), scope.get('state'), scope.get('next_cursor')
-        if (name not in allowed or name in seen_scopes or state not in ('exhausted', 'truncated', 'failed', 'not_started')
-                or (cursor is not None and (not isinstance(cursor, str) or not re.fullmatch(r't3_[a-z0-9]{1,12}', cursor)))
-                or (state in ('exhausted', 'not_started') and cursor is not None)):
+        has_next_page = scope.get('has_next_page', cursor is not None)
+        if (name not in allowed or name in seen_scopes or state not in ('exhausted', 'truncated', 'failed', 'not_started', 'cancelled')
+                or type(has_next_page) is not bool
+                or (cursor is not None and (not isinstance(cursor, str) or not cursor or len(cursor) > 4096))
+                or (provider == 'reddit_oauth' and cursor is not None and not re.fullmatch(r't3_[a-z0-9]{1,12}', cursor))
+                or (cursor is not None and not has_next_page)
+                or (state in ('exhausted', 'not_started') and (cursor is not None or has_next_page))):
             raise ValueError('invalid source scope')
         seen_scopes.add(name)
-        scope_rows.append({'subreddit': name, 'state': state, 'next_cursor': cursor})
+        # SearchApi page tokens are opaque and must not leak through frontend/log DTOs.
+        scope_rows.append({'subreddit': name, 'state': state,
+                           'next_cursor': cursor if provider == 'reddit_oauth' else None,
+                           'next_cursor_available': has_next_page})
     if complete != all(scope['state'] == 'exhausted' for scope in scope_rows):
         raise ValueError('inconsistent source completeness')
-    seen, groups, expired_count, removed_count = {}, {}, 0, 0
+    excluded = coverage.get('excluded', {}) if provider == 'searchapi.io' else {}
+    excluded_keys = ('outside_window', 'future', 'missing_or_invalid_date', 'wrong_subreddit', 'invalid_source', 'duplicate')
+    if (not isinstance(excluded, dict) or any(type(excluded.get(k, 0)) is not int or excluded.get(k, 0) < 0 for k in excluded_keys)
+            or sum(excluded.get(k, 0) for k in excluded_keys) > examined):
+        raise ValueError('invalid provider exclusion counts')
+    provider_excluded = {key: excluded.get(key, 0) for key in excluded_keys}
+    seen, groups, expired_count, removed_count, outside_count, invalid_time_count = {}, {}, 0, 0, 0, 0
     for item in observations:
         if not isinstance(item, dict):
             raise ValueError('search post observation required')
@@ -110,14 +128,26 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
         if community not in seen_scopes:
             raise ValueError('post outside requested source scope')
         fullname = 't3_' + post_id
+        metadata_only = provider == 'searchapi.io' and item.get('source_mode') == 'dated_social_context'
         if (item.get('id') != fullname or str(item.get('subreddit', '')).lower() != community
-                or item.get('query') != query or item.get('attribution') != 'unresolved'
+                or item.get('query', query if metadata_only else None) != query or item.get('attribution') != 'unresolved'
                 or type(item.get('verified_concern_votes')) is not int or item['verified_concern_votes'] != 0):
             raise ValueError('provider post identity, query, or attribution mismatch')
-        observed, fetched = _stamp(item.get('observed_at')), _stamp(item.get('fetched_at'))
+        try:
+            observed, fetched = _stamp(item.get('observed_at')), _stamp(item.get('fetched_at'))
+        except (ValueError, TypeError, OverflowError):
+            invalid_time_count += 1
+            continue
+        if not end <= fetched <= now:
+            invalid_time_count += 1
+            continue
+        if not start <= observed < end:
+            outside_count += 1
+            continue
         text, digest = item.get('excerpt'), item.get('content_sha256')
-        if (not start <= observed < end or not end <= fetched <= now or not isinstance(text, str)
-                or not text.strip() or len(text) > 400 or not isinstance(digest, str)
+        if metadata_only and text is None and digest is None:
+            text = ''
+        elif (not isinstance(text, str) or not text.strip() or len(text) > 400 or not isinstance(digest, str)
                 or not re.fullmatch(r'[0-9a-f]{64}', digest)):
             raise ValueError('invalid post observation')
         identifiers = item.get('extracted_identifiers')
@@ -143,9 +173,12 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
         if expiry <= now:
             expired_count += 1
             continue
+        age_seconds = int((now - observed).total_seconds())
         reference = {'post_id': fullname, 'url': url, 'subreddit': community,
                      'observed_at': observed.isoformat(), 'fetched_at': fetched.isoformat(),
-                     'expires_at': expiry.isoformat(), 'query': query}
+                     'expires_at': expiry.isoformat(), 'age_seconds': age_seconds,
+                     'context': 'historical_context' if age_seconds > 31 * 86400 else 'recent_context',
+                     'query': query}
         prior = seen.get(fullname)
         signature = (community, observed, digest)
         if prior is not None:
@@ -164,16 +197,24 @@ def adapt(result, *, allowed_subreddits, allowed_queries, now=None, removed_post
                            'references': [], 'reason': 'unverified_social_allegation', 'verified_concern_votes': 0}
         groups[key]['references'].append(reference)
     source_state = ('unavailable' if status == 'unavailable' else
-                    'empty' if not observations and complete else 'partial')
-    return {'profile': 'scooby.reddit-discovery-leads/1-proposal', 'status': source_state,
+                    'empty' if not groups and complete else 'partial')
+    provider_reason = coverage.get('reason')
+    reason_allowlist = {'missing_searchapi_key', 'authentication_denied', 'rate_limited', 'cancelled', 'timeout',
+                        'http_error', 'malformed_response', 'provider_error', 'transport_error',
+                        'bounded_or_unsearched_scope', 'outside_window_only', 'success_empty', 'success'}
+    provider_reason = provider_reason if isinstance(provider_reason, str) and provider_reason in reason_allowlist else None
+    return {'profile': 'scooby.reddit-discovery-leads/1-proposal', 'provider': provider, 'status': source_state,
+            'provider_reason': provider_reason,
             'query': query, 'window': {'start': start.isoformat(), 'end': end.isoformat()},
             'coverage': {'requests': calls, 'posts_examined': examined, 'complete': complete,
                          'scopes': scope_rows,
                          'unsearched_scope': [scope['subreddit'] for scope in scope_rows if scope['state'] != 'exhausted'],
                          'cursor_input_supported': False,
-                         'expired_observations': expired_count, 'removed_observations': removed_count},
+                         'expired_observations': expired_count, 'removed_observations': removed_count,
+                         'outside_window_observations': outside_count, 'invalid_time_observations': invalid_time_count,
+                         'provider_excluded': provider_excluded},
             'reason': 'provider_unavailable' if source_state == 'unavailable' else
-                      'no_matching_posts' if source_state == 'empty' else 'unverified_partial_search',
+                      'no_eligible_matches' if source_state == 'empty' else 'unverified_partial_search',
             'leads': sorted(groups.values(), key=lambda x: x['lead_id'])}
 
 
@@ -201,7 +242,7 @@ def resolve_identity(lead, candidate_record, evidence_root, *, now=None, removed
         raise ValueError('source is removed or expired')
     for reference in lead['references']:
         observed, fetched, expiry = (_stamp(reference.get(key)) for key in ('observed_at', 'fetched_at', 'expires_at'))
-        if fetched > now or observed > fetched or expiry > min(fetched + dt.timedelta(hours=1), observed + dt.timedelta(days=7)):
+        if fetched > now or observed > fetched or expiry > min(fetched + dt.timedelta(hours=1), observed + dt.timedelta(days=365)):
             raise ValueError('invalid source lifetime')
     candidate = candidate_record.get('identity', {})
     if candidate.get('chain_id') != chain or candidate.get('address') != addresses[0]:
