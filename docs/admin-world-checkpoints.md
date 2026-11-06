@@ -108,6 +108,8 @@ Reviewers holding `report_review` are the subject-matter experts (SMEs). With `S
 
 **Reviewers on a host without a persistent disk.** `SCOOBY_REVIEWERS` (a JSON list of `{label, iss, sub, scopes, enabled}`) is reapplied at API startup: each listed `(iss, sub)` is upserted with exactly the listed scopes; unlisted reviewers are untouched; invalid JSON loads nobody and logs no subject. Produce an entry from a real World enrollment with `python -m publication.cli export-reviewer --name <label>` and store it as a host secret. Being listed never approves anything; each decision still needs its own World confirmation.
 
+**Open review (`SCOOBY_OPEN_REVIEW=true`).** No reviewer list: any World ID whose login passes validation (`WORLD_ACCEPTED_ACR`, Orb by default) becomes a reviewer on its first admin login and holds `report_review` and `publication`, so it can view unreleased reports, approve, reject, revise and revoke, and sign off publication. `case_investigation` is never granted this way. Every decision still needs its own fresh World confirmation by the same person. Reviewers added this way are labelled `open-review:<hash>`; their open grants count only while the setting is on, and at startup with it off they are disabled. A reviewer an operator disabled stays disabled. Turning it off and listing named SMEs in `SCOOBY_REVIEWERS` restricts review without a code change. Off by default.
+
 ## Setup and walkthrough
 
 1. Configure World as in [publication-demo.md](publication-demo.md) step 1. Run the API (`python -m uvicorn app:app --host 127.0.0.1 --port 8000`).
