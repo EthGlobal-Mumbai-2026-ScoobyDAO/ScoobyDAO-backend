@@ -2110,6 +2110,22 @@
         }
       }
     },
+    "/scouting/social-candidate-status": {
+      "get": {
+        "summary": "Scouting Social Candidate Status",
+        "operationId": "scouting_social_candidate_status_scouting_social_candidate_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/scouting/sources": {
       "get": {
         "summary": "Scouting Sources",

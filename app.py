@@ -468,9 +468,8 @@ def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke'
  with db() as c:getrow(c,'SELECT id FROM case_challenges WHERE id=?',(challenge_id,))
  err(503,'Authenticated human verification adapter is not configured')
 
-def social_context():
+def social_context_file(path):
  # Explicitly configured local metadata only. Read on demand; never copy into the database or reports.
- path=os.getenv('SCOOBY_SOCIAL_CONTEXT_FILE','').strip()
  unavailable={'leads':[],'status':'unavailable','reason':'No current bounded SearchApi metadata is configured.','provider':'searchapi.io'}
  if not path:return unavailable
  try:
@@ -492,6 +491,30 @@ def social_context():
    leads.append({'id':ident,'url':url,'subreddit':sub,'observed_at':observed.isoformat(),'fetched_at':fetched.isoformat(),'age_days':round((current-observed).total_seconds()/86400,2),'source_mode':'dated_social_context','attribution':'unresolved','verified_concern_votes':0})
   return {'leads':leads,'status':'partial','provider':'searchapi.io','reason':'Historical context only; attribution unresolved and research integration incomplete. Metadata expires 24 hours after fetch.','coverage':{'posts_examined':len(leads),'complete':False},'storage':'read-only external metadata; not persisted by backend'}
  except (OSError,ValueError,TypeError,KeyError,AttributeError,OverflowError):return unavailable
+
+def social_context():
+ paths=[p for p in (os.getenv('SCOOBY_SOCIAL_CONTEXT_FILES','') or os.getenv('SCOOBY_SOCIAL_CONTEXT_FILE','')).split(os.pathsep) if p.strip()][:3]
+ results=[social_context_file(p.strip()) for p in paths];good=[r for r in results if r['status']=='partial'];leads=[];seen=set()
+ for result in good:
+  for lead in result['leads']:
+   if lead['id'] not in seen:leads.append(lead);seen.add(lead['id'])
+ return {'leads':leads,'status':'partial' if good else 'unavailable','provider':'searchapi.io','reason':'Historical context only; attribution unresolved and research integration incomplete.' if good else 'No current bounded SearchApi metadata is configured.','coverage':{'configured_feeds':len(paths),'available_feeds':len(good),'complete':False},'storage':'read-only external metadata; not persisted by backend'}
+
+def candidate_social_status():
+ path=os.getenv('SCOOBY_SOCIAL_CANDIDATE_STATUS_FILE','').strip()
+ if not path:return []
+ try:
+  p=Path(path)
+  if p.stat().st_size>262144:raise ValueError('metadata too large')
+  data=json.loads(p.read_text(encoding='utf-8-sig'));candidate=data['candidate_id'];end=datetime.datetime.fromisoformat(data['window']['end'].replace('Z','+00:00'));age=(datetime.datetime.now(datetime.timezone.utc)-end).total_seconds()
+  chain,address=candidate.split(':',1)
+  if data['profile']!='scooby.reddit-evidence/1' or data['provider']!='searchapi.io' or data['coverage']['reason']!='provider_error' or data['observations'] or chain not in ('1','8453') or len(address)!=42 or not address.startswith('0x') or any(c not in '0123456789abcdefABCDEF' for c in address[2:]) or not 0<=age<=86400:raise ValueError('unsupported status')
+  return [{'candidate_id':candidate,'status':'unavailable','reason':'provider_error','interpretation':'unavailable','observation_count':0}]
+ except (OSError,ValueError,TypeError,KeyError,AttributeError,OverflowError):return []
+
+@app.get('/scouting/social-candidate-status')
+def scouting_social_candidate_status():
+ return {'candidate_queries':candidate_social_status(),'provider':'searchapi.io'}
 
 @app.get('/scouting/sources')
 def scouting_sources():

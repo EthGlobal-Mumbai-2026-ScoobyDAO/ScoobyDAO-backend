@@ -13,7 +13,7 @@ BASE=Path(__file__).parent
 
 @pytest.fixture(autouse=True)
 def isolated_state(tmp_path,monkeypatch):
- monkeypatch.delenv('SCOOBY_SOCIAL_CONTEXT_FILE',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'case-state.sqlite3');store.init()
+ monkeypatch.delenv('SCOOBY_SOCIAL_CONTEXT_FILE',raising=False);monkeypatch.delenv('SCOOBY_SOCIAL_CONTEXT_FILES',raising=False);monkeypatch.delenv('SCOOBY_SOCIAL_CANDIDATE_STATUS_FILE',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'case-state.sqlite3');store.init()
 
 def record(n):
  d=json.loads((BASE/'candidate.json').read_text(encoding='utf-8-sig'));d['mode']='live';d['identity']['address']='0x'+format(n,'040x');d['candidate_id']='1:'+d['identity']['address'];d['identity']['symbol']='SYNTHETIC';d['selection']={'status':'not_selected','selected_by':None,'selected_at':None,'reason':None};d['state']='monitoring';d['evidence']=[];return d
@@ -199,3 +199,14 @@ def test_social_context_is_transient_unresolved_and_expires(tmp_path,monkeypatch
  with db() as c:assert c.execute('SELECT count(*) FROM cases').fetchone()[0]==0
  item['fetched_at']=(stamp-datetime.timedelta(days=2)).isoformat();source.write_text(json.dumps({'profile':'scooby.reddit-leads/1','provider':'searchapi.io','observations':[item]}));assert client.get('/scouting/leads').json()['leads']==[]
  source.unlink();assert client.get('/scouting/leads').json()['status']=='unavailable'
+
+
+def test_social_feeds_and_candidate_failure_are_independent(tmp_path,monkeypatch):
+ stamp=datetime.datetime.now(datetime.timezone.utc).isoformat();paths=[]
+ for name in ('first','second'):
+  item={'id':'t3_'+name,'url':'https://www.reddit.com/r/Test/comments/'+name+'/post/','subreddit':'Test','observed_at':stamp,'fetched_at':stamp};p=tmp_path/(name+'.json');p.write_text(json.dumps({'profile':'scooby.reddit-leads/1','provider':'searchapi.io','observations':[item]}));paths.append(str(p))
+ monkeypatch.setenv('SCOOBY_SOCIAL_CONTEXT_FILES',os.pathsep.join(paths));p=tmp_path/'candidate.json';candidate='1:0x'+'a'*40
+ p.write_text(json.dumps({'profile':'scooby.reddit-evidence/1','provider':'searchapi.io','candidate_id':candidate,'window':{'end':stamp},'coverage':{'reason':'provider_error'},'observations':[]}));monkeypatch.setenv('SCOOBY_SOCIAL_CANDIDATE_STATUS_FILE',str(p))
+ feeds=client.get('/scouting/leads').json();assert feeds['status']=='partial' and len(feeds['leads'])==2 and feeds['coverage']['available_feeds']==2
+ status=client.get('/scouting/social-candidate-status').json()['candidate_queries'];assert status==[{'candidate_id':candidate,'status':'unavailable','reason':'provider_error','interpretation':'unavailable','observation_count':0}]
+ Path(paths[1]).unlink();feeds=client.get('/scouting/leads').json();assert feeds['status']=='partial' and len(feeds['leads'])==1 and feeds['coverage']['available_feeds']==1

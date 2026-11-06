@@ -48,4 +48,4 @@ OpenAPI DTOs are implementation-owned. Frozen candidate v0.1 and report v0.2 are
 
 ## Case orchestration (runtime proposal)
 
-`GET /scouting/cases` (alias `/cases`), `GET /scouting/cases/{id}`, `GET /scouting/schema`, `GET /scouting/sources`, `GET /scouting/leads`; `POST /scouting/cases/refresh`; `POST /scouting/cases/{id}/challenge`; `GET /scouting/challenges/{id}`. Human continuation/deny/revoke/revise remain unavailable (503) until a verifier exists. `POST /reference-runs` is a no-research reference import lane. See `docs/case-orchestration.md`.
+`GET /scouting/cases` (alias `/cases`), `GET /scouting/cases/{id}`, `GET /scouting/schema`, `GET /scouting/sources`, `GET /scouting/leads`, `GET /scouting/social-candidate-status`; `POST /scouting/cases/refresh`; `POST /scouting/cases/{id}/challenge`; `GET /scouting/challenges/{id}`. Human continuation/deny/revoke/revise remain unavailable (503) until a verifier exists. `POST /reference-runs` is a no-research reference import lane. See `docs/case-orchestration.md`.
