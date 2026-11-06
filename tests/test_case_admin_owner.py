@@ -25,3 +25,15 @@ def test_challenge_owner_is_bound_to_exact_active_admin_session():
             assert error.value.status_code==403
         admin.revoke_scope(c,p.iss,p.sub,'case_investigation','test')
         with pytest.raises(HTTPException):case_world.require_owner(c,'owner-ch',p)
+
+def test_public_gate_case_preflight_and_guard(monkeypatch):
+ from fastapi.testclient import TestClient
+ import app as module
+ monkeypatch.setenv('SCOOBY_PUBLIC_GATE','true')
+ client=TestClient(module.app)
+ headers={'Origin':'http://localhost:5173','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'authorization,content-type,idempotency-key'}
+ assert client.options('/scouting/cases/test/challenge',headers=headers).status_code==200
+ assert client.post('/scouting/cases/test/challenge',json={'expected_revision':'0'*64}).status_code==401
+ assert client.post('/scouting/cases/refresh',json={'limit':1}).status_code==404
+ headers['Origin']='https://untrusted.invalid'
+ assert client.options('/scouting/cases/test/challenge',headers=headers).status_code==400

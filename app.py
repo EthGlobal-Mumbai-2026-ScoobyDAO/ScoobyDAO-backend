@@ -476,11 +476,11 @@ if web_origin:
 class CaseWebCORS(CORSMiddleware):
  async def __call__(self,scope,receive,send):
   path=scope.get('path','')
-  if scope['type']=='http' and ((path.startswith('/scouting/cases/') and path.endswith('/challenge')) or path.startswith('/scouting/challenges/') or path.startswith('/scouting/world-attempts/') or (path.startswith('/investigations/') and path.endswith('/resume'))):
+  if scope['type']=='http' and ((path.startswith('/scouting/cases/') and path.endswith('/challenge')) or path.startswith('/scouting/challenges/') or path.startswith('/scouting/world-attempts/') or (path.startswith('/investigations/') and (path.endswith('/resume') or path.endswith('/events')))):
    await super().__call__(scope,receive,send)
   else:await self.app(scope,receive,send)
 if web_origin:
- app.add_middleware(CaseWebCORS,allow_origins=[web_origin],allow_methods=['GET','POST'],allow_headers=['Content-Type','Idempotency-Key'])
+ app.add_middleware(CaseWebCORS,allow_origins=[web_origin],allow_methods=['GET','POST'],allow_headers=['Content-Type','Authorization','Idempotency-Key'])
 
 class CaseScan(BaseModel):
  limit: int = Field(default=10,ge=1,le=25)
@@ -710,8 +710,14 @@ PUBLIC_PREFIXES=('/web/v1/','/publication/v1/')
 # Public report library, GET/HEAD only: list, per-version artifacts, packages and rendered files.
 import re as _re
 PUBLIC_LIBRARY=_re.compile(r'^/(reports|reports/[^/]+/[^/]+/artifacts|packages/[0-9a-f]{64}(/.+)?|artifacts/[^/]+/.+)$')
+SCOUT_READ=_re.compile(r'^/scouting/(?:cases(?:/[^/]+)?|schema)$')
+CASE_AUTH=_re.compile(r'^/scouting/(?:cases/[^/]+/challenge|challenges/[^/]+(?:/(?:world-attempt|continue|deny|revoke|revise))?|world-attempts/[^/]+(?:/cancel)?)$')
+CASE_PROGRESS=_re.compile(r'^/investigations/[^/]+/(?:events|resume)$')
 def _public_path(path,method='GET'):
  if path in PUBLIC_EXACT or path.startswith(PUBLIC_PREFIXES): return True
+ if method in ('GET','HEAD') and SCOUT_READ.fullmatch(path) and path!='/scouting/cases/refresh': return True
+ if method in ('GET','POST','OPTIONS') and CASE_AUTH.fullmatch(path): return True
+ if method in ('GET','POST','OPTIONS') and CASE_PROGRESS.fullmatch(path): return True
  return method in ('GET','HEAD') and bool(PUBLIC_LIBRARY.match(path))
 class PublicGate:
  def __init__(self, app): self.app=app

@@ -303,7 +303,7 @@ class AdminWorldClient(WorldClient):
 GUARDED_ROUTES = (
     (re.compile(r'^/scouting/cases/[^/]+/challenge/?$'), 'case_investigation'),
     (re.compile(r'^/scouting/(?:challenges|world-attempts)(?:/|$)'), 'case_investigation'),
-    (re.compile(r'^/investigations/[^/]+/resume/?$'), 'case_investigation'),
+    (re.compile(r'^/investigations/[^/]+/(?:resume|events)/?$'), 'case_investigation'),
 )
 
 
