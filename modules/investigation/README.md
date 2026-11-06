@@ -57,3 +57,5 @@ Backend owns queue/actor state, discovery and human review. It must isolate work
 ## Graph token-level history
 
 An optional source-typed, offline Graph `tokenDayDatas` replay path preserves raw pages and binds its separately captured VAE output to the same token-level history. It does not relabel the data as GeckoTerminal selected-pool candles or choose a VaR horizon. See `docs/case-research-producer.md` for arguments, provenance checks and limitations.
+
+Captured Honeypot.is replay accepts only the exact HTTPS token and chain request and requires the response token, chain, pair address and token membership to match the candidate and separately selected pool. The raw bytes and hash remain in the bundle; mismatches are excluded. Provider flag, simulation, bounded holder counts and simulated tax are attributed observations. Conflicting GoPlus and Honeypot.is flags are linked as unresolved counterevidence, not independent on-chain proof, a gate vote or a safety verdict. No request to Honeypot.is is made by replay.

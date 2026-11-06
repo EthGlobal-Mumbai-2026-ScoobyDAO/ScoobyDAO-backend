@@ -52,6 +52,7 @@ def captured_snapshot(payloads):
     record['mode'] = 'synthetic_demo'; record['evidence'] = []
     urls = {'market': f'https://api.dexscreener.com/token-pairs/v1/ethereum/{ADDR}',
             'security': f'https://api.gopluslabs.io/api/v1/token_security/1?contract_addresses={ADDR}',
+            'honeypot_is': f'https://api.honeypot.is/v2/IsHoneypot?address={ADDR}&chainID=1',
             'source': f'https://sourcify.dev/server/v2/contract/1/{ADDR}?fields=all',
             'pools': 'https://api.geckoterminal.com/api/v2/networks/eth/new_pools?page=1',
             'daily': f'https://api.geckoterminal.com/api/v2/networks/eth/pools/{POOL}/ohlcv/day?currency=usd&token=base&aggregate=1&include_empty_intervals=false'}
@@ -67,6 +68,34 @@ def captured_snapshot(payloads):
 def case(route, suffix='1'):
     return {'case_id': 'case' + suffix, 'run_id': 'run' + suffix, 'candidate_id': CANDIDATE,
             'mode': 'synthetic_demo', 'authorization': {'route': route, 'reference_id': 'auth' + suffix}}
+
+
+@pytest.mark.parametrize('mismatch', [None, 'pool', 'token', 'chain'])
+def test_captured_honeypot_provider_disagreement_is_identity_and_pool_bound(tmp_path, mismatch):
+    payloads = source_payloads()
+    other = '0x' + '78' * 20
+    hp = {'token': {'address': ADDR}, 'chain': {'id': '1'}, 'pairAddress': POOL,
+          'pair': {'chainId': '1', 'pair': {'address': POOL, 'token0': ADDR, 'token1': other}},
+          'simulationSuccess': True, 'honeypotResult': {'isHoneypot': True},
+          'simulationResult': {'buyTax': 0, 'sellTax': 0}, 'holderAnalysis': {'successful': '524', 'failed': '20'}}
+    if mismatch == 'pool': hp['pairAddress'] = other
+    if mismatch == 'token': hp['token']['address'] = other
+    if mismatch == 'chain': hp['chain']['id'] = '8453'
+    payloads['honeypot_is'] = hp
+    output = tmp_path / 'bundle'
+    result = run_case(case('automatic_policy'), output, max_source_requests=0,
+                      captured_snapshot=captured_snapshot(payloads))
+    report = verify_digest(output, result['report_sha256'])
+    pillar = report['pillars']['onchain']
+    claims = {c['id']: c for c in pillar['claims']}
+    if mismatch:
+        assert 'honeypot-is-flag' not in claims
+        assert 'honeypot_is' not in {e['id'] for e in report['evidence']}
+    else:
+        assert claims['honeypot-is-flag']['contradiction_claim_ids'] == ['provider-is_honeypot']
+        assert claims['provider-is_honeypot']['counterevidence_ids'] == ['honeypot_is']
+        assert any('conflicting' in issue for issue in pillar['quality_issues'])
+        assert {m['id']: m['value'] for m in pillar['measurements']}['honeypot_is_holders_failed'] == 20
 
 
 @pytest.mark.parametrize('route', ['automatic_policy', 'world_confirmed'])
