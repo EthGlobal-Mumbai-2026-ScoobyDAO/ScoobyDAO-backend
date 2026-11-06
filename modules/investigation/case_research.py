@@ -6,6 +6,8 @@ This module does not authorize a case, run a model, or write to any remote servi
 from __future__ import annotations
 
 import csv
+import base64
+import binascii
 import datetime as dt
 import hashlib
 import json
@@ -14,9 +16,10 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, parse_qs
 
 import httpx
+from jsonschema import Draft202012Validator
 
 from . import contract_analysis, contract_validate, history
 from .legacy_source_port import producer as legacy_producer
@@ -43,6 +46,105 @@ def _number(value):
         return n if math.isfinite(n) else None
     except (ValueError, TypeError, OverflowError):
         return None
+
+
+def _replay_sources(snapshot: dict, candidate_id: str, input_mode: str):
+    """Validate the backend's immutable discovery record and path→base64 snapshot."""
+    if not isinstance(snapshot, dict) or set(snapshot) != {'record', 'evidence'}:
+        raise ValueError('captured snapshot requires record and evidence')
+    record, files = snapshot['record'], snapshot['evidence']
+    if not isinstance(record, dict) or not isinstance(files, dict) or len(files) > 100:
+        raise ValueError('invalid captured snapshot')
+    schema = json.loads((Path(__file__).resolve().parents[2] / 'schemas' / 'candidate.schema.json').read_bytes())
+    Draft202012Validator(schema).validate(record)
+    identity = record['identity']; chain = identity['chain_id']; address = identity['address'].lower()
+    if (record['candidate_id'] != candidate_id or f'{chain}:{address}' != candidate_id
+            or record['mode'] != input_mode):
+        raise ValueError('captured candidate identity or mode mismatch')
+    refs = {}
+    for e in record['evidence']:
+        name, sha = e.get('source'), e.get('sha256')
+        if not isinstance(name, str) or not re.fullmatch(r'snapshots/[0-9a-f]{64}\.json', name) or e.get('id') != sha or name != f'snapshots/{sha}.json':
+            continue
+        if name in refs:
+            raise ValueError('duplicate captured evidence reference')
+        refs[name] = e
+    if not set(files) <= set(refs):
+        raise ValueError('captured bytes lack a candidate evidence reference')
+    network, gecko = NETWORKS[chain]; captured = {}; ignored = []; total = 0
+    for name, encoded in sorted(files.items()):
+        if not isinstance(encoded, str) or len(encoded) > 7_000_000:
+            raise ValueError('invalid or oversized captured evidence')
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError('invalid captured evidence encoding') from None
+        total += len(raw); e = refs[name]
+        if total > 5_000_000 or _sha(raw) != e['sha256']:
+            raise ValueError('captured evidence byte limit or digest mismatch')
+        allowed_kind = {'live': {'live_observation'}, 'historical_replay': {'historical_fixture', 'live_observation'},
+                        'synthetic_demo': {'synthetic'}}[input_mode]
+        if e.get('kind') not in allowed_kind:
+            ignored.append({'sha256': e['sha256'], 'reason': 'evidence_kind_incompatible_with_candidate_mode'}); continue
+        if b'reddit' in raw.lower() or b'redd.it' in raw.lower():
+            raise ValueError('social content cannot enter immutable replay bundles')
+        try:
+            doc = json.loads(raw, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('non-finite JSON')))
+        except (ValueError, TypeError):
+            raise ValueError('captured evidence is not valid JSON') from None
+        limits = e.get('limitations', [])
+        urls = [x[len('Request URL: '):] for x in limits if isinstance(x, str) and x.startswith('Request URL: ')]
+        if len(urls) != 1:
+            ignored.append({'sha256': e['sha256'], 'reason': 'unsupported_or_missing_source_url'}); continue
+        url = urls[0]
+        try:
+            parsed = urlsplit(url); params = parse_qs(parsed.query, keep_blank_values=True)
+        except ValueError:
+            ignored.append({'sha256': e['sha256'], 'reason': 'invalid_source_url'}); continue
+        if parsed.scheme != 'https' or parsed.fragment or parsed.username or parsed.password:
+            ignored.append({'sha256': e['sha256'], 'reason': 'untrusted_source_url'}); continue
+        path = parsed.path.lower(); host = parsed.netloc.lower(); kind = None; meta = {}
+        if host == 'api.dexscreener.com' and path == f'/token-pairs/v1/{network}/{address}' and not params:
+            kind = 'market'
+        elif host == 'api.gopluslabs.io' and path == f'/api/v1/token_security/{chain}' and params == {'contract_addresses': [address]}:
+            kind = 'security'
+        elif host == 'sourcify.dev' and path == f'/server/v2/contract/{chain}/{address}' and params in ({}, {'fields': ['all']}):
+            kind = 'source'
+        elif host == 'api.geckoterminal.com' and path in (f'/api/v2/networks/{gecko}/new_pools', f'/api/v2/networks/{gecko}/tokens/{address}/pools') and params in ({}, {'page': ['1']}):
+            kind = 'pools'
+        elif host == 'api.geckoterminal.com':
+            match = re.fullmatch(f'/api/v2/networks/{gecko}/pools/(0x[0-9a-f]{{40}})/ohlcv/day', path)
+            if (match and set(params) <= {'aggregate', 'limit', 'currency', 'token', 'include_empty_intervals'}
+                    and params.get('token') in (['base'], ['quote']) and params.get('currency') == ['usd']
+                    and params.get('aggregate') == ['1'] and params.get('include_empty_intervals') == ['false']):
+                kind = 'daily'; meta = {'pool': match.group(1), 'side': params['token'][0]}
+        if not kind:
+            ignored.append({'sha256': e['sha256'], 'reason': 'unsupported_source_or_identity'}); continue
+        fetched = e.get('fetched_at')
+        observed = e.get('observed_at')
+        order_time = -1.0
+        if fetched is not None:
+            try:
+                t = dt.datetime.fromisoformat(fetched.replace('Z', '+00:00'))
+                if t.tzinfo is None or t.utcoffset() is None or t > dt.datetime.now(dt.timezone.utc):
+                    raise ValueError('invalid capture time')
+                order_time = t.timestamp()
+            except (ValueError, TypeError, AttributeError):
+                raise ValueError('captured evidence has invalid or future fetched_at') from None
+        if observed is not None:
+            try:
+                t = dt.datetime.fromisoformat(observed.replace('Z', '+00:00'))
+                if t.tzinfo is None or t.utcoffset() is None or t > dt.datetime.now(dt.timezone.utc):
+                    raise ValueError('invalid observation time')
+            except (ValueError, TypeError, AttributeError):
+                raise ValueError('captured evidence has invalid or future observed_at') from None
+        rec = {'name': kind, 'url': url, 'status': 'captured', 'fetched_at': fetched, 'observed_at': e.get('observed_at'),
+               'block_number': e.get('block_number'), 'sha256': e['sha256'], 'origin_snapshot_id': e['id'],
+               'transport_mode': 'captured_snapshot', 'evidence_mode': 'historical_replay', '_order_time': order_time, **meta}
+        old = captured.get(kind)
+        if old is None or (order_time, e['sha256']) > (old[2]['_order_time'], old[2]['sha256']):
+            captured[kind] = (doc, raw, rec)
+    return captured, ignored
 
 
 def _legacy_model(model_dir: Path, candidate: str, daily_sha256: str | None):
@@ -76,14 +178,16 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
              transport: httpx.BaseTransport | None = None, legacy_model_dir: str | Path | None = None,
              pinned_contract_capture: dict | None = None, legacy_capture_root: str | Path | None = None,
              legacy_records: dict | None = None, vae_config: dict | None = None,
-             vae_runner=None, cancelled=None) -> dict:
+             vae_runner=None, captured_snapshot: dict | None = None, cancelled=None) -> dict:
     """Research one backend-authorized case and atomically assemble a report bundle.
 
     `case` contains case_id, run_id, candidate_id, mode and an authorization reference
     with route `automatic_policy` or `world_confirmed` and reference_id. This validates
     shape, not authorization. The backend must verify/consume authorization before calling.
     `max_source_requests` bounds all HTTP GET attempts; default zero makes no source call.
-    Inject MockTransport for synthetic tests. Retry uses a new run/output directory.
+    `captured_snapshot` accepts the backend's immutable record and base64 evidence; it
+    requires a zero source budget, makes no HTTP calls and preserves source timestamps.
+    Inject MockTransport for synthetic network tests. Retry uses a new output directory.
     """
     case_id, run_id, candidate_id = case.get('case_id'), case.get('run_id'), case.get('candidate_id')
     if not all(isinstance(x, str) and _ID.fullmatch(x) for x in (case_id, run_id)):
@@ -102,10 +206,12 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
     mode = case.get('mode', 'live')
     if mode not in ('live', 'synthetic_demo', 'historical_replay'):
         raise ValueError('invalid evidence mode')
-    if mode != 'live' and transport is None and max_source_requests:
-        raise ValueError('synthetic or historical mode requires injected source transport')
     if isinstance(max_source_requests, bool) or not isinstance(max_source_requests, int) or not 0 <= max_source_requests <= 5:
         raise ValueError('source request budget must be an integer between zero and five')
+    if captured_snapshot is not None and (max_source_requests != 0 or transport is not None):
+        raise ValueError('captured replay requires zero source budget and no HTTP transport')
+    if mode != 'live' and transport is None and max_source_requests:
+        raise ValueError('synthetic or historical mode requires injected source transport')
     if vae_config is not None:
         if legacy_model_dir is not None or not isinstance(vae_config, dict):
             raise ValueError('choose either legacy model artifacts or an explicit VAE execution configuration')
@@ -118,8 +224,28 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
     if not output.parent.is_dir():
         raise ValueError('output parent must already exist')
     started = dt.datetime.now(dt.timezone.utc).isoformat()
-    attempts = []; captured = {}; stops = []
-    with httpx.Client(transport=transport, timeout=15, follow_redirects=False, headers={'User-Agent': 'ScoobyDAO-research/1.0'}) as client:
+    attempts = []; captured = {}; stops = []; replay_ignored = []; network, gecko = NETWORKS[chain]
+    if cancelled and cancelled():
+        return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                'source_attempts': attempts, 'reason': 'cancelled_before_source_read'}
+    if captured_snapshot is not None:
+        captured, replay_ignored = _replay_sources(captured_snapshot, candidate_id, mode)
+        mode = 'synthetic_demo' if mode == 'synthetic_demo' else 'historical_replay'
+        market, security, source, pools = (captured.get(k, (None,))[0] for k in ('market', 'security', 'source', 'pools'))
+        chosen = None; candles = None
+        if isinstance(pools, dict):
+            try:
+                chosen, _ = history.select_pool(pools, chain, address)
+            except (ValueError, KeyError, TypeError, AttributeError):
+                stops.append('no_identity_matched_pool')
+        if 'daily' in captured:
+            daily_rec = captured['daily'][2]
+            if chosen and (daily_rec['pool'], daily_rec['side']) == (chosen['address'], chosen['side']):
+                candles = captured['daily'][0]
+            else:
+                stops.append('captured_daily_pool_or_side_mismatch'); captured.pop('daily')
+    else:
+      with httpx.Client(transport=transport, timeout=15, follow_redirects=False, headers={'User-Agent': 'ScoobyDAO-research/1.0'}) as client:
         def fetch(name, url):
             if cancelled and cancelled():
                 stops.append('cancelled'); return None
@@ -142,7 +268,6 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                 record['status'] = 'unavailable'; record['reason'] = 'source_http_transport_or_format_failure'
                 return None
 
-        network, gecko = NETWORKS[chain]
         market = fetch('market', f'https://api.dexscreener.com/token-pairs/v1/{network}/{address}')
         security = fetch('security', f'https://api.gopluslabs.io/api/v1/token_security/{chain}?'+urlencode({'contract_addresses': address}))
         source = fetch('source', f'https://sourcify.dev/server/v2/contract/{chain}/{address}?fields=all')
@@ -154,7 +279,7 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             except (ValueError, KeyError, TypeError, AttributeError):
                 stops.append('no_identity_matched_pool')
         if chosen:
-            url = f'https://api.geckoterminal.com/api/v2/networks/{gecko}/pools/{chosen["address"]}/ohlcv/day?'+urlencode({'aggregate': 1, 'limit': 1000, 'currency': 'usd', 'token': chosen['side']})
+            url = f'https://api.geckoterminal.com/api/v2/networks/{gecko}/pools/{chosen["address"]}/ohlcv/day?'+urlencode({'aggregate': 1, 'limit': 1000, 'currency': 'usd', 'token': chosen['side'], 'include_empty_intervals': 'false'})
             candles = fetch('daily', url)
     if 'cancelled' in stops:
         return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
@@ -167,7 +292,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         pair = next((x for x in market if isinstance(x, dict) and str(x.get('chainId', '')).lower() == network
                      and isinstance(x.get('baseToken'), dict) and str(x['baseToken'].get('address', '')).lower() == address), None)
         if pair: valid['market'] = captured['market']
-    sec = security.get('result', {}).get(address) if isinstance(security, dict) and isinstance(security.get('result'), dict) else None
+    sec = security.get('result', {}).get(address) if (isinstance(security, dict) and security.get('code') in (1, '1')
+        and isinstance(security.get('result'), dict)) else None
     if isinstance(sec, dict) and sec: valid['security'] = captured['security']
     if isinstance(source, dict) and str(source.get('address', '')).lower() == address and str(source.get('chainId')) == str(chain):
         valid['source'] = captured['source']
@@ -202,7 +328,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             legacy = None; stops.append('legacy_pillar_capture_rejected')
     if not valid and analysis is None and not (legacy and any(legacy[k]['status'] == 'partial' for k in ('microstructure', 'onchain'))):
         return {'state': 'blocked', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
-                'source_attempts': attempts, 'reason': 'no_identity_bound_source_evidence', 'limitations': stops}
+                'source_attempts': attempts, 'reason': 'no_identity_bound_source_evidence',
+                'replay_sources': 0, 'replay_ignored': replay_ignored, 'limitations': stops}
 
     model = None
     if legacy_model_dir is not None:
@@ -247,10 +374,12 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         def add_evidence(name, raw, record, kind='live_observation'):
             rel = f'evidence/{name}.json'; (root / rel).write_bytes(raw)
             evidence.append({'id': name, 'path': rel, 'sha256': _sha(raw), 'kind': kind,
-                'observed_at': None, 'fetched_at': record.get('fetched_at'), 'block_number': None,
+                'observed_at': record.get('observed_at'), 'fetched_at': record.get('fetched_at'), 'block_number': record.get('block_number'),
                 'window': dict(EMPTY_WINDOW), 'coverage': 'Bounded identity-checked source response.',
                 'limitations': ['Provider response and identity assertions require independent verification.']})
-            ledger.append({'id': name, 'url': record.get('url'), 'fetched_at': record.get('fetched_at'), 'sha256': _sha(raw)})
+            ledger.append({'id': name, 'url': record.get('url'), 'fetched_at': record.get('fetched_at'),
+                           'sha256': _sha(raw), 'origin_snapshot_id': record.get('origin_snapshot_id'),
+                           'transport_mode': record.get('transport_mode')})
         for name, (_, raw, rec) in valid.items():
             kind = {'synthetic_demo': 'synthetic', 'historical_replay': 'historical_observation', 'live': 'live_observation'}[mode]
             add_evidence(name, raw, rec, kind)
@@ -398,7 +527,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             'artifacts': [], 'review': {'status': 'pending', 'reviewer': None, 'reviewed_at': None,
                 'reviewed_version': None, 'content_sha256': None, 'authentication': 'none'},
             'limitations': ['Bounded source snapshots may be incomplete or taken at different times.',
-                            'No paid model interpretation, final report approval or publication was performed.']}
+                            'No paid model interpretation, final report approval or publication was performed.']
+                            + (['Replayed captured evidence retains its original timestamps; this is not fresh source collection.'] if captured_snapshot is not None else [])}
         tldr = {'profile': 'scooby.pillar-tldr/1', 'report_id': report_id, 'report_version': version, 'pillars': {}}
         lines = ['# Investigation report — pending review', '', f'Case {case_id}; candidate `{candidate_id}`; run {run_id}.', '']
         for name, p in pillars.items():
@@ -419,7 +549,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             lines.extend('- ' + q for q in p['quality_issues']); lines.append('')
         (root / 'report.md').write_text('\n'.join(lines), encoding='utf-8')
         (root / 'pillar-tldr.json').write_bytes(_bytes(tldr))
-        (root / 'source-ledger.json').write_bytes(_bytes({'candidate_id': candidate_id, 'sources': ledger, 'attempts': attempts, 'limits': stops}))
+        (root / 'source-ledger.json').write_bytes(_bytes({'candidate_id': candidate_id, 'sources': ledger, 'attempts': attempts,
+                                                           'limits': stops, 'replay_ignored': replay_ignored}))
         (root / 'case-lineage.json').write_bytes(_bytes({'case_id': case_id, 'run_id': run_id, 'candidate_id': candidate_id,
                                                          'authorization_route': auth['route'], 'authorization_reference_id': auth['reference_id']}))
         for kind, filename, mime in [('markdown', 'report.md', 'text/markdown'), ('pillar_tldr', 'pillar-tldr.json', 'application/json'),
@@ -438,4 +569,6 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         os.rename(root, output)
     return {'state': 'partial', 'bundle_path': str(output), 'case_id': case_id, 'run_id': run_id,
             'report_id': report_id, 'report_version': version, 'report_sha256': _sha(raw),
-            'pillar_status': {k: v['status'] for k, v in pillars.items()}, 'source_attempts': attempts, 'limitations': stops}
+            'pillar_status': {k: v['status'] for k, v in pillars.items()}, 'source_attempts': attempts,
+            'replay_sources': len(valid) if captured_snapshot is not None else 0,
+            'replay_ignored': replay_ignored, 'limitations': stops}

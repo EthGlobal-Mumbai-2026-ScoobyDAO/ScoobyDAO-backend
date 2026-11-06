@@ -1,5 +1,6 @@
 """Synthetic case-to-report tests; all providers are mocked and no model is called."""
 import csv
+import base64
 import hashlib
 import importlib.util
 import json
@@ -24,7 +25,7 @@ def source_payloads():
     return {
         'market': [{'chainId': 'ethereum', 'pairAddress': POOL, 'baseToken': {'address': ADDR, 'symbol': 'SYNTH'},
                     'liquidity': {'usd': 700}, 'volume': {'h24': 1200}}],
-        'security': {'result': {ADDR: {'is_open_source': '1', 'is_honeypot': '0'}}},
+        'security': {'code': 1, 'result': {ADDR: {'is_open_source': '1', 'is_honeypot': '0'}}},
         'source': {'chainId': '1', 'address': ADDR, 'runtimeMatch': 'match'},
         'pools': {'data': [{'attributes': {'address': POOL}, 'relationships': {
             'base_token': {'data': {'id': 'eth_' + ADDR}}, 'quote_token': {'data': {'id': 'eth_0x' + '56' * 20}}}}]},
@@ -43,6 +44,24 @@ def mock_provider(payloads, calls):
         else: name = 'pools'
         return httpx.Response(200, content=json.dumps(payloads[name]).encode(), headers={'content-type': 'application/json'})
     return httpx.MockTransport(send)
+
+
+def captured_snapshot(payloads):
+    record = json.loads((Path(__file__).parent / 'candidate.json').read_text(encoding='utf-8-sig'))
+    record['candidate_id'] = CANDIDATE; record['identity'].update(chain_id=1, address=ADDR, symbol='SYNTH')
+    record['mode'] = 'synthetic_demo'; record['evidence'] = []
+    urls = {'market': f'https://api.dexscreener.com/token-pairs/v1/ethereum/{ADDR}',
+            'security': f'https://api.gopluslabs.io/api/v1/token_security/1?contract_addresses={ADDR}',
+            'source': f'https://sourcify.dev/server/v2/contract/1/{ADDR}?fields=all',
+            'pools': 'https://api.geckoterminal.com/api/v2/networks/eth/new_pools?page=1',
+            'daily': f'https://api.geckoterminal.com/api/v2/networks/eth/pools/{POOL}/ohlcv/day?currency=usd&token=base&aggregate=1&include_empty_intervals=false'}
+    files = {}; timestamp = '2020-01-01T00:00:00+00:00'
+    for name, doc in payloads.items():
+        raw = json.dumps(doc).encode(); sha = hashlib.sha256(raw).hexdigest(); path = 'snapshots/' + sha + '.json'
+        record['evidence'].append({'id': sha, 'source': path, 'sha256': sha, 'observed_at': None,
+            'fetched_at': timestamp, 'block_number': None, 'kind': 'synthetic', 'limitations': ['Request URL: ' + urls[name]]})
+        files[path] = base64.b64encode(raw).decode('ascii')
+    return {'record': record, 'evidence': files}
 
 
 def case(route, suffix='1'):
@@ -129,6 +148,80 @@ def test_wrong_identity_and_missing_authorization_are_rejected_before_network(tm
     payloads['pools'] = {'data': []}; calls = []
     result = run_case(case('automatic_policy'), tmp_path / 'c', max_source_requests=5, transport=mock_provider(payloads, calls))
     assert result['state'] == 'blocked' and not (tmp_path / 'c').exists()
+
+
+def test_captured_replay_requires_zero_network_and_retains_hashes_and_time(tmp_path, monkeypatch):
+    from modules.investigation import case_research
+    snapshot = captured_snapshot(source_payloads())
+    monkeypatch.setattr(case_research.httpx, 'Client', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('no HTTP client allowed')))
+    output = tmp_path / 'captured'
+    result = run_case(case('world_confirmed'), output, captured_snapshot=snapshot)
+    assert result['state'] == 'partial' and result['source_attempts'] == [] and result['replay_sources'] == 5
+    report = verify_digest(output, result['report_sha256'])
+    assert report['mode'] == 'synthetic_demo'
+    assert all(e['fetched_at'] == '2020-01-01T00:00:00+00:00' for e in report['evidence'])
+    ledger = json.loads((output / 'source-ledger.json').read_bytes())
+    assert all(x['origin_snapshot_id'] == x['sha256'] and x['transport_mode'] == 'captured_snapshot' for x in ledger['sources'])
+    assert report['pillars']['statistical_risk']['status'] == 'unavailable'
+
+
+def test_captured_replay_rejects_tampering_identity_and_unbound_bytes(tmp_path):
+    snapshot = captured_snapshot(source_payloads()); name = next(iter(snapshot['evidence']))
+    snapshot['evidence'][name] = base64.b64encode(b'{}').decode()
+    with pytest.raises(ValueError, match='digest mismatch'):
+        run_case(case('automatic_policy'), tmp_path / 'bad-hash', captured_snapshot=snapshot)
+    snapshot = captured_snapshot(source_payloads())
+    snapshot['record']['candidate_id'] = '1:0x' + 'aa' * 20
+    with pytest.raises(ValueError, match='identity or mode mismatch'):
+        run_case(case('automatic_policy'), tmp_path / 'bad-identity', captured_snapshot=snapshot)
+    snapshot = captured_snapshot(source_payloads())
+    snapshot['evidence']['snapshots/' + '0' * 64 + '.json'] = base64.b64encode(b'{}').decode()
+    with pytest.raises(ValueError, match='lack a candidate evidence reference'):
+        run_case(case('automatic_policy'), tmp_path / 'unbound', captured_snapshot=snapshot)
+    with pytest.raises(ValueError, match='requires zero source budget'):
+        run_case(case('automatic_policy'), tmp_path / 'budget', captured_snapshot=snapshot, max_source_requests=1)
+
+
+def test_captured_replay_rejects_daily_with_mismatched_pool(tmp_path):
+    snapshot = captured_snapshot(source_payloads())
+    for e in snapshot['record']['evidence']:
+        if '/ohlcv/day?' in e['limitations'][0]:
+            e['limitations'][0] = e['limitations'][0].replace(POOL, '0x' + 'ab' * 20)
+    result = run_case(case('automatic_policy'), tmp_path / 'mismatched-pool', captured_snapshot=snapshot)
+    assert result['state'] == 'partial' and result['pillar_status']['technical_health'] == 'unavailable'
+    assert 'captured_daily_pool_or_side_mismatch' in result['limitations']
+
+
+def test_captured_daily_without_explicit_no_fill_is_not_used(tmp_path):
+    snapshot = captured_snapshot(source_payloads())
+    for e in snapshot['record']['evidence']:
+        if '/ohlcv/day?' in e['limitations'][0]:
+            e['limitations'][0] = e['limitations'][0].replace('&include_empty_intervals=false', '')
+    result = run_case(case('automatic_policy'), tmp_path / 'unknown-fill', captured_snapshot=snapshot)
+    assert result['pillar_status']['technical_health'] == 'unavailable'
+    assert any(x['reason'] == 'unsupported_source_or_identity' for x in result['replay_ignored'])
+
+
+def test_live_capture_replay_is_historical_and_rejects_synthetic_evidence(tmp_path):
+    snapshot = captured_snapshot(source_payloads()); snapshot['record']['mode'] = 'live'
+    request = {**case('automatic_policy'), 'mode': 'live'}
+    blocked = run_case(request, tmp_path / 'synthetic-kind', captured_snapshot=snapshot)
+    assert blocked['state'] == 'blocked' and not (tmp_path / 'synthetic-kind').exists()
+    for e in snapshot['record']['evidence']:
+        e['kind'] = 'live_observation'
+    result = run_case(request, tmp_path / 'historical', captured_snapshot=snapshot)
+    report = verify_digest(tmp_path / 'historical', result['report_sha256'])
+    assert report['mode'] == 'historical_replay' and result['source_attempts'] == []
+    assert all(x['kind'] == 'historical_observation' for x in report['evidence'])
+
+
+def test_provider_error_code_does_not_become_security_finding(tmp_path):
+    payloads = source_payloads(); payloads['security']['code'] = 0
+    result = run_case(case('automatic_policy'), tmp_path / 'provider-error',
+                      captured_snapshot=captured_snapshot(payloads))
+    report = verify_digest(tmp_path / 'provider-error', result['report_sha256'])
+    assert 'security' not in {x['id'] for x in report['evidence']}
+    assert all('security provider' not in x['statement'] for x in report['pillars']['onchain']['claims'])
 
 
 def test_legacy_metrics_require_exact_candidate_candles_and_50_reconstructions(tmp_path):
