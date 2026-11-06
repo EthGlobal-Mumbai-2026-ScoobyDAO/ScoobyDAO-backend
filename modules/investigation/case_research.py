@@ -114,7 +114,7 @@ def _replay_sources(snapshot: dict, candidate_id: str, input_mode: str):
         elif host == 'api.geckoterminal.com' and path in (f'/api/v2/networks/{gecko}/new_pools', f'/api/v2/networks/{gecko}/tokens/{address}/pools') and params in ({}, {'page': ['1']}):
             kind = 'pools'
         elif host == 'api.geckoterminal.com':
-            match = re.fullmatch(f'/api/v2/networks/{gecko}/pools/(0x[0-9a-f]{{40}})/ohlcv/day', path)
+            match = re.fullmatch(f'/api/v2/networks/{gecko}/pools/(0x(?:[0-9a-f]{{40}}|[0-9a-f]{{64}}))/ohlcv/day', path)
             if (match and set(params) <= {'aggregate', 'limit', 'currency', 'token', 'include_empty_intervals'}
                     and params.get('token') in (['base'], ['quote']) and params.get('currency') == ['usd']
                     and params.get('aggregate') == ['1'] and params.get('include_empty_intervals') == ['false']):
@@ -510,7 +510,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             claim('fundamentals', 'market-symbol', f'The market provider identifies the base token symbol as {symbol}.', 'market', 'Ticker alone does not establish project identity or social attribution.')
         elif gecko_row:
             attrs = gecko_row['attributes']
-            claim('microstructure', 'gecko-pool', f'GeckoTerminal returned an identity-matched {chosen["side"]}-token pool {chosen["address"]}.', 'pools', 'A provider snapshot is not executable market-wide liquidity.')
+            pool_kind = 'provider-reported Uniswap v4 pool ID' if chosen.get('identifier_type') == 'provider_reported_uniswap_v4_pool_id' else 'pool'
+            claim('microstructure', 'gecko-pool', f'GeckoTerminal returned an identity-matched {chosen["side"]}-token {pool_kind} {chosen["address"]}.', 'pools', 'A provider snapshot is not independently verified or executable market-wide liquidity.')
             measurement('microstructure', 'liquidity_usd', attrs.get('reserve_in_usd'), 'USD', 'pools', 'GeckoTerminal reported pool reserve snapshot')
             volume = attrs.get('volume_usd') if isinstance(attrs.get('volume_usd'), dict) else {}
             measurement('microstructure', 'volume_24h_usd', volume.get('h24'), 'USD', 'pools', 'GeckoTerminal reported 24-hour pool volume')
