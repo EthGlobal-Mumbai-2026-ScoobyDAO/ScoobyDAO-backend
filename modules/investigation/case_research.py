@@ -436,6 +436,13 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             volume = pair.get('volume') if isinstance(pair.get('volume'), dict) else {}
             measurement('microstructure', 'liquidity_usd', liquidity.get('usd'), 'USD', 'market', 'DEX Screener reported pool liquidity snapshot')
             measurement('microstructure', 'volume_24h_usd', volume.get('h24'), 'USD', 'market', 'DEX Screener reported 24-hour pool volume')
+            measurement('microstructure', 'price_usd', pair.get('priceUsd'), 'USD per token', 'market', 'DEX Screener reported token price snapshot')
+            txns = pair.get('txns') if isinstance(pair.get('txns'), dict) else {}
+            daily_txns = txns.get('h24') if isinstance(txns.get('h24'), dict) else {}
+            for field in ('buys', 'sells'):
+                measurement('microstructure', 'provider_24h_' + field, daily_txns.get(field), 'provider-reported transactions', 'market', 'DEX Screener reported 24-hour pool transactions; not a holder-specific execution test')
+            changes = pair.get('priceChange') if isinstance(pair.get('priceChange'), dict) else {}
+            measurement('microstructure', 'provider_price_change_24h', changes.get('h24'), 'percent', 'market', 'DEX Screener reported 24-hour pool price change')
             claim('fundamentals', 'market-symbol', f'The market provider identifies the base token symbol as {symbol}.', 'market', 'Ticker alone does not establish project identity or social attribution.')
         elif gecko_row:
             attrs = gecko_row['attributes']
@@ -446,11 +453,52 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             if symbol != 'UNKNOWN' and 'daily' in valid:
                 claim('fundamentals', 'gecko-symbol', f'The candle provider identifies the token symbol as {symbol}.', 'daily', 'Ticker alone does not establish project identity or social attribution.')
         if sec:
+            # Exact bounded provider assertions: source attribution is not proof of
+            # executable fees, address ownership, or locked balances. Values remain
+            # decimal strings to avoid losing precision in financial source data.
+            def source_decimal(value):
+                value = str(value)
+                return value if re.fullmatch(r'-?(?:0|[1-9][0-9]{0,29})(?:\.[0-9]{1,40})?', value) else None
+            def source_address(value):
+                return value.lower() if isinstance(value, str) and re.fullmatch(r'0x(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})', value) else None
+            entries = sec.get('dex') if isinstance(sec.get('dex'), list) else []
+            for index, row in enumerate(entries[:20]):
+                if not isinstance(row, dict): continue
+                address_field = source_address(row.get('pair'))
+                fee = source_decimal(row.get('pool_fee'))
+                liquidity = source_decimal(row.get('liquidity'))
+                if address_field and (fee is not None or liquidity is not None):
+                    parts = [f'The security provider reports pool {address_field}']
+                    if fee is not None: parts.append(f'pool_fee = {fee}')
+                    if liquidity is not None: parts.append(f'liquidity = {liquidity} (provider units unspecified)')
+                    claim('microstructure', f'provider-pool-{index+1}', '; '.join(parts) + '.', 'security',
+                          'Provider pool listing, fee and liquidity require independent pool-state and route verification.')
+            entries = sec.get('holders') if isinstance(sec.get('holders'), list) else []
+            for index, row in enumerate(entries[:20]):
+                if not isinstance(row, dict): continue
+                address_field = source_address(row.get('address'))
+                fraction = source_decimal(row.get('percent'))
+                if address_field and fraction is not None:
+                    parts = [f'The security provider reports holder {address_field}', f'supply fraction = {fraction}']
+                    tag = row.get('tag')
+                    if isinstance(tag, str) and re.fullmatch(r'[A-Za-z0-9 _.-]{1,40}', tag): parts.append(f'tag = {tag}')
+                    locked = row.get('is_locked')
+                    if type(locked) is int and locked in (0, 1): parts.append(f'is_locked = {locked}')
+                    claim('onchain', f'provider-holder-{index+1}', '; '.join(parts) + '.', 'security',
+                          'Provider labels, supply fraction and lock status do not establish ownership or future behavior.')
             for key in ('is_open_source', 'is_proxy', 'is_mintable', 'transfer_pausable', 'is_honeypot'):
                 if key in sec and isinstance(sec[key], (str, int, bool)):
                     claim('onchain', 'provider-'+key, f'The security provider reports {key} = {sec[key]}.', 'security', 'Provider field is not independent proof of current contract behavior.')
         if 'source' in valid:
             claim('onchain', 'source-status', f'The source provider reports runtime match status: {source.get("runtimeMatch", "unknown")}.', 'source', 'Provider match does not establish safety, current state or sell behavior.')
+            verified_at = source.get('verifiedAt')
+            if isinstance(verified_at, str) and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z', verified_at):
+                try:
+                    dt.datetime.strptime(verified_at, '%Y-%m-%dT%H:%M:%SZ')
+                except ValueError:
+                    pass
+                else:
+                    claim('onchain', 'source-verified-at', f'The source provider reports a verification timestamp of {verified_at}.', 'source', 'The provider timestamp is not independent evidence of current contract behavior.')
         if analysis:
             seen_categories = set()
             for finding in analysis.get('findings', []):
@@ -665,6 +713,6 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             'report_id': report_id, 'report_version': version, 'report_sha256': _sha(raw),
             'pillar_status': {k: v['status'] for k, v in pillars.items()}, 'source_attempts': attempts,
             'model_status': model['status'], 'model_calls': model['calls'],
-            'model_usage': model.get('usage'),
+            'model_usage': model.get('usage'), 'model_detail': model.get('detail'),
             'replay_sources': len(valid) if captured_snapshot is not None else 0,
             'replay_ignored': replay_ignored, 'limitations': stops}
