@@ -1,0 +1,105 @@
+{
+  "version": "reference-claims/1",
+  "as_of": "2026-11-06",
+  "claims": [
+    {
+      "claim_id": "C01",
+      "case_id": "squid-bsc-2021",
+      "claim": "SQUID proxy and sell restrictions",
+      "source_ids": [
+        "S1",
+        "S2"
+      ],
+      "confidence": "moderate",
+      "caveat": "Security investigator + independent analyst; exact contract implementation and sell rules not replayed.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C02",
+      "case_id": "anubis-ethereum-2021",
+      "claim": "Bootstrap pool creator held and redeemed LP position",
+      "source_ids": [
+        "S3",
+        "S4"
+      ],
+      "confidence": "moderate",
+      "caveat": "Chainalysis interpretation; independent explorer decoding blocked; intent disputed.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C03",
+      "case_id": "lunayield-solana-2021",
+      "claim": "Solana project and apparent exit",
+      "source_ids": [
+        "S5",
+        "S6",
+        "S17"
+      ],
+      "confidence": "moderate",
+      "caveat": "Original investigators cited; scope of recoveries not resolved.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C04",
+      "case_id": "meerkat-bsc-2021",
+      "claim": "Proxy upgrades and subsequent vault withdrawal",
+      "source_ids": [
+        "S7",
+        "S8",
+        "S9"
+      ],
+      "confidence": "moderate",
+      "caveat": "Downstream case studies rely in part on common incident analysis; key compromise remains possible.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C05",
+      "case_id": "bald-base-2023",
+      "claim": "Base BALD identity and liquidity removal",
+      "source_ids": [
+        "S10",
+        "S11",
+        "S12"
+      ],
+      "confidence": "moderate",
+      "caveat": "Linked chain transaction unavailable to reader; amounts represent different possible windows.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C06",
+      "case_id": "bald-base-2023",
+      "claim": "Developer denied market sales and acknowledged two-sided liquidity activity",
+      "source_ids": [
+        "S10"
+      ],
+      "confidence": "moderate",
+      "caveat": "Reported contemporaneous statement; source link to original social post not separately reviewed.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C07",
+      "case_id": "magnate-base-2023",
+      "claim": "Base oracle change and lending-asset withdrawal",
+      "source_ids": [
+        "S12",
+        "S13"
+      ],
+      "confidence": "moderate",
+      "caveat": "Quill attributes oracle mechanism; separate report describes drain; no RPC replay.",
+      "claim_type": "source_attributed_historical_claim"
+    },
+    {
+      "claim_id": "C08",
+      "case_id": "bald-base-2023",
+      "claim": "Best token-oriented Base replay candidate for this bounded comparison",
+      "source_ids": [
+        "S10",
+        "S11",
+        "S12"
+      ],
+      "confidence": "moderate",
+      "caveat": "Selection inference, not admission to discovery or proof of a sell trap.",
+      "claim_type": "selection_inference"
+    }
+  ]
+}
