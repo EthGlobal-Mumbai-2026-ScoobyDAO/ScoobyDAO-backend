@@ -39,7 +39,7 @@ def test_inline_key_wins_over_a_broken_path(monkeypatch):
 
 def test_key_file(monkeypatch, tmp_path):
     f = tmp_path / 'k.pem'
-    f.write_text(RSA_PEM)
+    f.write_bytes(RSA_PEM.encode())
     monkeypatch.setenv('WORLD_CLIENT_KEY_PATH', str(f))
     assert world_config().private_key_pem == RSA_PEM.encode()
 
@@ -52,10 +52,10 @@ def test_missing_key_settings_and_file(monkeypatch):
         world_config()
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason='root can read any file')
+@pytest.mark.skipif(getattr(os, 'geteuid', lambda: 0)() == 0, reason='root can read any file')
 def test_unreadable_file_is_reported_as_permissions(monkeypatch, tmp_path):
     f = tmp_path / 'k.pem'
-    f.write_text(RSA_PEM)
+    f.write_bytes(RSA_PEM.encode())
     f.chmod(0)
     monkeypatch.setenv('WORLD_CLIENT_KEY_PATH', str(f))
     try:
@@ -71,3 +71,4 @@ def test_invalid_or_non_rsa_key_never_echoes_material(monkeypatch, value):
     with pytest.raises(ConfigError) as e:
         world_config()
     assert 'WORLD_CLIENT_KEY' in str(e.value) and 'BEGIN' not in str(e.value) and 'not a key' not in str(e.value)
+

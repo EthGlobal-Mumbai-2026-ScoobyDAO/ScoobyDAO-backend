@@ -42,6 +42,13 @@ class Review(BaseModel):
  sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
 @app.get('/health')
 def health(): return {'status':'ok','scope':'local operator only','production_authentication':False}
+@app.get('/health/ready')
+def readiness():
+ required=os.getenv('SCOOBY_EMBEDDED_WORKER','').strip().lower() in ('1','true','yes','on')
+ with db() as c: heartbeat=c.execute("SELECT seen FROM heartbeats WHERE name='worker'").fetchone()
+ fresh=bool(heartbeat and 0<=now()-heartbeat['seen']<150)
+ if required and not fresh: err(503,'Embedded worker heartbeat unavailable or stale')
+ return {'status':'ready','embedded_worker_required':required,'worker_fresh':fresh}
 @app.get('/status')
 def status():
  with db() as c:
@@ -704,7 +711,7 @@ def scouting_schema():
 # /health, the /web/v1 adapter and /publication/v1 (whose writes require the operator bearer token). Every
 # other route, including /docs and /openapi.json, requires `Authorization: Bearer $SCOOBY_OPERATOR_TOKEN`.
 # Without a configured token those routes are closed. This is a stopgap, not the reviewed gateway in DEPLOYMENT.md.
-PUBLIC_EXACT=frozenset({'/health'})
+PUBLIC_EXACT=frozenset({'/health','/health/ready'})
 PUBLIC_PREFIXES=('/web/v1/','/publication/v1/')
 # Public report library, GET/HEAD only: list, per-version artifacts, packages and rendered files.
 import re as _re
