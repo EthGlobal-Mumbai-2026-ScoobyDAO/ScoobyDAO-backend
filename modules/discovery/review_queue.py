@@ -1,12 +1,12 @@
 """HITL queue: eligible live candidates only; evidence-bound verifier results."""
 import argparse, datetime as dt, hashlib, html, json, math, os, re, sqlite3, sys, tempfile
 from pathlib import Path
-import discovery, live_pilot
+import discovery, live_pilot, lp_concentration, market_activity
 
 GROUP_NAMES={'G01':'Control','G02':'Transfer restrictions','G03':'Holder concentration','G04':'Liquidity removal control','G05':'Execution depth','G06':'Liquidity shape','G07':'LP concentration','G08':'Venue divergence','G09':'Market activity','G10':'Statistical stress','G11':'Trend','G12':'Indicator extremes'}
 # Only code-reviewed metric-specific functions go here. Provider hints, database status strings,
 # and arbitrary operator attestations cannot register a verifier or create a vote.
-VERIFIERS={}
+VERIFIERS={'G07':lp_concentration.verify,'G09':market_activity.verify}
 POLICY='pilot-concerns-v1'
 
 def evidence_check(record, root, evidence_ids, as_of, max_age_seconds):
@@ -39,7 +39,7 @@ def assess(record,root,as_of,verifiers=None,max_age_seconds=3600):
   if verifier and group not in live_pilot.HELD:
    try:
     r=verifier(record,root,as_of)
-    if not isinstance(r,dict) or not isinstance(r.get('triggered'),bool) or not isinstance(r.get('detail'),str) or not r['detail'].strip() or not isinstance(r.get('measurements'),list):raise ValueError('invalid verifier output')
+    if not isinstance(r,dict) or 'triggered' not in r or (r['triggered'] is not None and not isinstance(r['triggered'],bool)) or not isinstance(r.get('detail'),str) or not r['detail'].strip() or not isinstance(r.get('measurements'),list):raise ValueError('invalid verifier output')
     if not r['measurements']:raise ValueError('a concrete measurement is required')
     for measurement in r['measurements']:
      if not isinstance(measurement,dict) or not isinstance(measurement.get('label','Value'),str) or not isinstance(measurement.get('unit',''),str):raise ValueError('invalid measurement metadata')
@@ -47,7 +47,7 @@ def assess(record,root,as_of,verifiers=None,max_age_seconds=3600):
      if value is not None and not isinstance(value,(str,int,float,bool)):raise ValueError('invalid measurement value')
      if isinstance(value,float) and not math.isfinite(value):raise ValueError('non-finite measurement')
     e=evidence_check(record,root,r.get('evidence_ids'),as_of,max_age_seconds)
-    row.update(status='triggered' if r['triggered'] else 'not_triggered',votes=int(r['triggered']),detail=r['detail'],measurements=r['measurements'],evidence=e)
+    row.update(status='unknown' if r['triggered'] is None else 'triggered' if r['triggered'] else 'not_triggered',votes=int(r['triggered'] is True),detail=r['detail'],measurements=r['measurements'],evidence=e)
    except (ValueError,KeyError,TypeError,OSError,OverflowError) as exc:row.update(status='unknown',detail='Verification unavailable: '+str(exc))
   groups.append(row)
  count=sum(x['votes'] for x in groups)

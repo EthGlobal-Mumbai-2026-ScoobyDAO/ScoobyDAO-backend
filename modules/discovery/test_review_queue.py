@@ -30,9 +30,13 @@ class QueueTests(unittest.TestCase):
   db=sqlite3.connect(self.db);self.assertEqual(db.execute('SELECT count(*) FROM candidates').fetchone()[0],6);db.close()
  def test_provider_hints_and_database_status_never_qualify(self):
   q=rq.queue(self.db,self.root,self.asof);self.assertEqual(q['qualified_count'],0);self.assertEqual(q['monitored_count'],1)
-  self.assertNotIn(self.key,rq.html_page(q));self.assertIn('not been evaluated',rq.html_page(q))
+  self.assertNotIn(self.key,rq.html_page(q));self.assertIn('No candidates have passed the gate',rq.html_page(q))
  def test_tampered_or_stale_evidence_fails_closed(self):
   path=self.root/'snapshots'/(self.digest+'.json');path.write_text('altered');self.assertEqual(rq.queue(self.db,self.root,self.asof,self.verifiers(4))['qualified_count'],0)
   path.write_bytes(b'{"synthetic":"test"}');later=self.asof+dt.timedelta(hours=2)
   self.assertEqual(rq.queue(self.db,self.root,later,self.verifiers(4))['qualified_count'],0)
+ def test_partial_concern_is_unknown_but_shows_evidence_and_measurement(self):
+  def partial(record,root,asof):return {'triggered':None,'detail':'Volume is unavailable','measurements':[{'label':'Price change','value':'5','unit':'%'}],'evidence_ids':[self.digest]}
+  item=rq.assess(self.record,self.root,self.asof,{'G09':partial});group=next(g for g in item['groups'] if g['id']=='G09')
+  self.assertEqual(group['status'],'unknown');self.assertEqual(group['votes'],0);self.assertEqual(item['evaluated_count'],0);self.assertEqual(group['measurements'][0]['value'],'5');self.assertEqual(group['evidence'][0]['id'],self.digest)
 if __name__=='__main__':unittest.main(verbosity=2)

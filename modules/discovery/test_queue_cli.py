@@ -6,8 +6,8 @@ class QueueCliTests(unittest.TestCase):
    root=Path(tmp);cmd=[sys.executable,str(Path(__file__).with_name('live_pilot.py')),'--db',str(root/'db.sqlite'),'--output',str(root),'--budget','0']
    p=subprocess.run(cmd,text=True,capture_output=True,encoding='utf-8',check=True)
    summary=json.loads(p.stdout);self.assertEqual(summary['calls'],0);self.assertEqual(summary['qualified'],0)
-   q=json.loads((root/'review-queue.json').read_text());self.assertEqual(q['metric_verifiers_enabled'],0)
-   self.assertIn('not been evaluated',(root/'review-queue.html').read_text())
+   q=json.loads((root/'review-queue.json').read_text());self.assertEqual(q['metric_verifiers_enabled'],2)
+   self.assertIn('No candidates have passed the gate',(root/'review-queue.html').read_text())
  def test_no_selection_bypasses_queue(self):
   with tempfile.TemporaryDirectory() as tmp:
    import discovery
