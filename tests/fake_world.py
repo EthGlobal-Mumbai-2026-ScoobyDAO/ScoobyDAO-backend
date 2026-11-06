@@ -186,6 +186,8 @@ class FakeWorld:
             return httpx.Response(400, json={'error': 'slow_down'})
         if step == 'denied':
             return httpx.Response(400, json={'error': 'access_denied'})
+        if step == 'denied_detail':
+            return httpx.Response(400, json={'error': 'access_denied', 'error_description': 'account does not meet the requested acr\x07'})
         if step == 'expired':
             return httpx.Response(400, json={'error': 'expired_token'})
         if step == 'invalid_grant':

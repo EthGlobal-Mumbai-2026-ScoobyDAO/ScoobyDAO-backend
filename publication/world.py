@@ -67,7 +67,8 @@ class SlowDown: pass
 
 
 @dataclass(frozen=True)
-class Denied: pass
+class Denied:
+    detail: str = ''  # issuer error_description, if any (safe to log)
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ class Tokens:
 class Error:
     code: str
     terminal: bool  # True: end the attempt (503, invalid_grant, invalid_client...). False: back off and retry.
+    detail: str = ''
 
 
 PollResult = Pending | SlowDown | Denied | Expired | Tokens | Error
@@ -167,9 +169,13 @@ class WorldClient:
         values = list(accepted or self.config.accepted_acr)
         return json.dumps({'id_token': {'acr': {'essential': True, 'values': values}}}, separators=(',', ':'))
 
-    def start_device(self, accepted_acr: tuple[str, ...] | None = None) -> DeviceStart:
+    def start_device(self, accepted_acr: tuple[str, ...] | None = None, *, request_acr: bool = True) -> DeviceStart:
+        """request_acr=False omits the `claims` extension so World applies the client's registered accepted
+        accounts (diagnostics only). The ID token's acr is still validated against our accepted list."""
         d = self.discovery()
-        form = {'scope': 'openid', 'claims': self.acr_claims(accepted_acr), **self._auth_form(d.device_authorization_endpoint)}
+        form = {'scope': 'openid', **self._auth_form(d.device_authorization_endpoint)}
+        if request_acr:
+            form['claims'] = self.acr_claims(accepted_acr)
         try:
             r = self._http.post(d.device_authorization_endpoint, data=form)
         except httpx.HTTPError as e:
@@ -177,7 +183,7 @@ class WorldClient:
         if r.status_code == 429:
             raise WorldError('device authorization rate limited (429); retry after Retry-After')
         if r.status_code != 200:
-            raise WorldError(f'device authorization failed: HTTP {r.status_code} {_oauth_error(r)}')
+            raise WorldError(f'device authorization failed: HTTP {r.status_code} {_oauth_error(r)} {_oauth_description(r)}'.rstrip())
         body = _json(r)
         try:
             out = DeviceStart(device_code=str(body['device_code']), user_code=str(body['user_code']),
@@ -215,10 +221,10 @@ class WorldClient:
         if code == 'slow_down':
             return SlowDown()
         if code == 'access_denied':
-            return Denied()
+            return Denied(_oauth_description(r))
         if code == 'expired_token':
             return Expired()
-        return Error(code or f'http_{r.status_code}', terminal=True)
+        return Error(code or f'http_{r.status_code}', terminal=True, detail=_oauth_description(r))
 
     # ------------------------------------------------------------------ id token
     def validate_id_token(self, id_token: str, *, started_at: float, accepted_acr: tuple[str, ...]) -> Identity:
@@ -264,7 +270,8 @@ class WorldClient:
         if auth_time < started_at - AUTH_TIME_SKEW or auth_time > now + AUTH_TIME_SKEW:
             raise TokenInvalid('auth_time outside this attempt')
         if claims['acr'] not in accepted_acr:
-            raise TokenInvalid('acr not accepted')
+            acr = claims['acr'] if isinstance(claims['acr'], str) else type(claims['acr']).__name__
+            raise TokenInvalid(f'acr not accepted ({"".join(c for c in acr if c.isprintable())[:120]})')
         amr = claims['amr']
         if not isinstance(amr, list) or not all(isinstance(a, str) for a in amr) or not amr:
             raise TokenInvalid('amr missing or malformed')
@@ -304,3 +311,14 @@ def _oauth_error(r: httpx.Response) -> str:
         return e if isinstance(e, str) else ''
     except ValueError:
         return ''
+
+
+def _oauth_description(r: httpx.Response) -> str:
+    """The issuer's error_description, trimmed to printable text for logs and operator output."""
+    try:
+        d = r.json().get('error_description')
+    except ValueError:
+        return ''
+    if not isinstance(d, str):
+        return ''
+    return ''.join(ch for ch in d if ch.isprintable())[:300]

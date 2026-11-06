@@ -18,6 +18,13 @@ python tests/smoke_worker.py
    python scripts/world_jwk.py secrets/world_client_key.pem --kid scooby-2026-11   # paste the JWKS into the portal
    ```
    Set `WORLD_ISSUER`, `WORLD_CLIENT_ID`, `WORLD_CLIENT_KEY_PATH`, `WORLD_CLIENT_KEY_ID`.
+
+   **Sandbox.** The sandbox is a separate registration with its own client ID; the same JWKS can be uploaded. Its discovery matches production for everything this client uses (checked 2026-11-06). Sandbox World IDs come from the sandbox World ID app (ask a World ID integration contact; iOS via TestFlight; "Add proof of human" → "Manual verify", allow about an hour) and do not prove a real Orb-verified person. Keep a separate `SCOOBY_DATA` so sandbox reviewers never mix with production ones; they would not match anyway, because reviewers are keyed by `(iss, sub)`.
+   ```bash
+   set -a; . ./.env.sandbox; set +a        # WORLD_ISSUER=https://sandbox.auth.world.org, SCOOBY_DATA=./data/sandbox
+   python -m publication.cli world-check    # prints the environment and checks discovery; starts no login
+   python -m publication.cli enroll --name alice
+   ```
 2. **Keys and funding.** Create two Sepolia EOAs: the publisher, which must be `ReportRegistry.publisher()` for `0x805d681383f580403b979bf1d017cff045dc7ebd` (if it isn't, deploy a new registry with your publisher and update `SCOOBY_REPORT_REGISTRY`), and the attestor. Fund only the publisher with Sepolia ETH. Set `SCOOBY_PUBLISHER_KEY`, `SCOOBY_ATTESTOR_KEY`, `SCOOBY_RPC_URL`, `SCOOBY_RESOLVER`, `SCOOBY_ADJUDICATOR`, `SCOOBY_OPERATOR_TOKEN`.
 3. **Enroll reviewers** (each does a World App login once):
    ```bash
