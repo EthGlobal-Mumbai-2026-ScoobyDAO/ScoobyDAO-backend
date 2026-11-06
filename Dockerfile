@@ -1,5 +1,5 @@
 FROM python:3.11-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SCOOBY_DATA=/data SCOOBY_BROWSER=/usr/bin/chromium
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SCOOBY_DATA=/data
 RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-dejavu-core && rm -rf /var/lib/apt/lists/* && useradd --create-home --uid 10001 scooby && mkdir /data && chown scooby:scooby /data
 WORKDIR /app
 COPY requirements.txt ./

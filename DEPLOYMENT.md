@@ -40,7 +40,7 @@ The native research adapter uses `NEXT_PUBLIC_REPORT_API_URL` for this backend's
 
 ## Private single-host staging package
 
-`Dockerfile` and `compose.yaml` define one API and one Huey worker sharing a named `/data` volume. Compose binds the host port only to `127.0.0.1:8000`. A non-root user owns the data directory. The image installs Chromium and DejaVu fonts; target rendering and browser sandbox behavior still need verification. CORS defaults to `http://localhost:3000`, and the model-call budget is zero. Docker network peers can reach the container, so the host and Docker daemon must be trusted. This is not an internet-facing authorization boundary.
+`Dockerfile` and `compose.yaml` define one API and one Huey worker sharing a named `/data` volume. Compose binds the host port only to `127.0.0.1:8000`. A non-root user owns the data directory. The image installs Chromium and DejaVu fonts; target rendering and browser sandbox behavior still need verification. CORS defaults to `http://localhost:3000`, the model-call budget is zero, and PDF generation is disabled by default. Docker network peers can reach the container, so the host and Docker daemon must be trusted. This is not an internet-facing authorization boundary.
 
 ```sh
 docker compose build
@@ -51,7 +51,7 @@ curl --fail http://127.0.0.1:8000/status
 docker compose exec -T worker python /app/ops/worker_health.py
 ```
 
-The API check is process-only. The worker heartbeat can take two minutes to appear. Use a synthetic bundle to smoke-test rendering, hashes and CORS on the target. Stop with `docker compose stop`; do not remove the data volume. With both processes stopped, identify the actual named volume using `docker volume ls` and `docker volume inspect`, take an encrypted, access-controlled backup of its complete contents through a read-only mount, and test restoration to a separate empty volume. For example, after creating a workspace `backups` directory and replacing `<actual-volume>` with the inspected volume name:
+The API check is process-only. The worker heartbeat can take two minutes to appear. First validate Chromium sandbox, fonts and rendering on the target. Then explicitly set `SCOOBY_BROWSER=/usr/bin/chromium` when starting Compose and use a synthetic bundle to smoke-test rendering, hashes and CORS. The current PDF removes links, including internal navigation; it is a draft with known portability limitations until the separately owned PDF adapter is reviewed. Stop with `docker compose stop`; do not remove the data volume. With both processes stopped, identify the actual named volume using `docker volume ls` and `docker volume inspect`, take an encrypted, access-controlled backup of its complete contents through a read-only mount, and test restoration to a separate empty volume. For example, after creating a workspace `backups` directory and replacing `<actual-volume>` with the inspected volume name:
 
 ```sh
 docker run --rm -v <actual-volume>:/data:ro -v "$(pwd)/backups:/backup" alpine tar -czf /backup/scooby-data.tar.gz -C /data .

@@ -5,7 +5,7 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       SCOOBY_DATA: /data
-      SCOOBY_BROWSER: /usr/bin/chromium
+      SCOOBY_BROWSER: ${SCOOBY_BROWSER:-}
       SCOOBY_WEB_ORIGIN: ${SCOOBY_WEB_ORIGIN:-http://localhost:3000}
       SCOOBY_MODEL_CALL_BUDGET: "0"
     volumes:
@@ -20,7 +20,7 @@ services:
     command: ["python", "-m", "huey.bin.huey_consumer", "worker.huey", "-w", "1"]
     environment:
       SCOOBY_DATA: /data
-      SCOOBY_BROWSER: /usr/bin/chromium
+      SCOOBY_BROWSER: ${SCOOBY_BROWSER:-}
       SCOOBY_MODEL_CALL_BUDGET: "0"
     volumes:
       - scooby-data:/data
