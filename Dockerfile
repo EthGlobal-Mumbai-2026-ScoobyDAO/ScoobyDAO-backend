@@ -8,6 +8,7 @@ COPY --chown=scooby:scooby app.py store.py worker.py provider.py ./
 COPY --chown=scooby:scooby schemas ./schemas
 COPY --chown=scooby:scooby vendor/reader ./vendor/reader
 COPY --chown=scooby:scooby ops ./ops
+COPY --chown=scooby:scooby publication ./publication
 USER scooby
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

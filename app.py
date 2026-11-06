@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from jsonschema import Draft202012Validator
 from store import ROOT, DATA, db, ident, now, dumps, digest, row, job, event, PILLARS
 from worker import wake
-app=FastAPI(title='Scooby DAO local operator API',version='0.1.0',description='Local-only prototype. Identities and review receipts are not authenticated.')
+app=FastAPI(title='Scooby DAO local operator API',version='0.1.0',description='Local-only prototype. Local review receipts are unauthenticated; World ID integration requires live verification.')
 web_origin=os.getenv('SCOOBY_WEB_ORIGIN','').strip()
 if web_origin:
  if not (web_origin.startswith('http://') or web_origin.startswith('https://')) or '*' in web_origin or web_origin.endswith('/'):

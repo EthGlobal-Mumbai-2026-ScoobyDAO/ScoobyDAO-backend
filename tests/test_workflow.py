@@ -2,7 +2,7 @@ import json, os, tempfile
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
-os.environ['SCOOBY_DATA']=tempfile.mkdtemp(prefix='scooby-test-')
+os.environ.setdefault('SCOOBY_DATA', tempfile.mkdtemp(prefix='scooby-test-'))
 os.environ['SCOOBY_WEB_ORIGIN']='http://localhost:5173'
 os.environ['SCOOBY_FRONTEND_DIR']=str(Path(__file__).resolve().parent.parent/'vendor'/'reader')
 from fastapi.testclient import TestClient

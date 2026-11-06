@@ -74,6 +74,15 @@ class FakeSender:
 
 @pytest.fixture
 def env(monkeypatch, tmp_path):
+    # Each publication test gets its own database; its temporary bundles must not
+    # pollute the existing workflow tests after pytest removes their directories.
+    import store
+    from publication import db as publication_db
+    monkeypatch.setattr(store, 'DB', tmp_path / 'state.sqlite3')
+    monkeypatch.setattr(store, 'DATA', tmp_path)
+    monkeypatch.setitem(globals(), 'DATA', tmp_path)
+    store.init()
+    publication_db.init()
     clock = Clock(real_now())
     monkeypatch.setattr(service, 'now', clock)
     monkeypatch.setattr(publisher, 'now', clock)

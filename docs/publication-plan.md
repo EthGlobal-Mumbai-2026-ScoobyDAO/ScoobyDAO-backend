@@ -32,3 +32,5 @@ The fake World issuer (`httpx.MockTransport`) verifies our client assertions and
 ## Not in scope
 
 IDKit/REP badges, AgentKit/AgentBook, live Sepolia publishing, app registration and funding keys (human steps, see `publication-demo.md`).
+
+**Security boundary:** World device-grant authentication does not display or sign a report or decision. The backend binds the authenticated identity to a target receipt; that association alone is not cryptographic proof of informed approval. Review the consent and operator-access model before use. Live World and chain behavior remain unverified; publishing is disabled by default.
