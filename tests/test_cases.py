@@ -262,14 +262,16 @@ def test_world_attempt_cancel_expiry_and_supersession_never_start_work(tmp_path,
   def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic',sub='synthetic')
  app.dependency_overrides[get_world_optional]=lambda:FakeWorld()
  try:
-  for n,how in ((1920,'cancel'),(1921,'expire'),(1922,'supersede')):
+  for n,how in ((1920,'cancel'),(1921,'expire'),(1922,'supersede'),(1923,'nonce')):
    case=case_engine.ingest_record(with_sources(record(n),tmp_path),tmp_path);revision=client.get('/scouting/cases/'+case).json()['snapshot_digest'];ch=client.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':revision},headers={'Idempotency-Key':'neg-'+str(n)}).json();aid=client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt').json()['attempt_id']
    if how=='cancel':assert client.post('/scouting/world-attempts/'+aid+'/cancel').json()['state']=='cancelled'
    elif how=='expire':
     with db() as c:c.execute('UPDATE case_world_attempts SET expires=? WHERE id=?',(now()-1,aid))
     assert client.get('/scouting/world-attempts/'+aid).json()['state']=='expired'
    else:
-    with db() as c:c.execute("UPDATE case_challenges SET state='superseded' WHERE id=?",(ch['challenge_id'],))
+    with db() as c:
+     if how=='nonce':c.execute("UPDATE case_challenges SET nonce='tampered' WHERE id=?",(ch['challenge_id'],))
+     else:c.execute("UPDATE case_challenges SET state='superseded' WHERE id=?",(ch['challenge_id'],))
     assert client.get('/scouting/world-attempts/'+aid).json()['state']=='superseded'
    assert client.get('/scouting/world-attempts/'+aid).json()['state']!='approved'
   with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==0

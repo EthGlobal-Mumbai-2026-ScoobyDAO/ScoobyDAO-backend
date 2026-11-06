@@ -142,3 +142,12 @@ def test_publication_cors_does_not_widen_operator_routes():
  assert client.options('/web/v1/reports/example/approve',headers=headers).status_code == 200
  assert client.options('/publication/v1/targets',headers=headers).status_code == 400
  assert client.options('/investigations',headers=headers).status_code == 400
+
+
+def test_case_action_cors_is_exact_and_does_not_open_other_writes():
+ headers={'Origin':'http://localhost:5173','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,idempotency-key'}
+ assert client.options('/scouting/cases/example/challenge',headers=headers).status_code==200
+ assert client.options('/scouting/world-attempts/example/cancel',headers=headers).status_code==200
+ assert client.options('/scouting/cases/refresh',headers=headers).status_code==400
+ assert client.options('/publication/v1/targets',headers=headers).status_code==400
+ headers['Origin']='http://untrusted.invalid';assert client.options('/scouting/cases/example/challenge',headers=headers).status_code==400
