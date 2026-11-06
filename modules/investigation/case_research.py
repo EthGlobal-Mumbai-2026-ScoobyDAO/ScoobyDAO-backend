@@ -109,6 +109,8 @@ def _replay_sources(snapshot: dict, candidate_id: str, input_mode: str):
             kind = 'market'
         elif host == 'api.gopluslabs.io' and path == f'/api/v1/token_security/{chain}' and params == {'contract_addresses': [address]}:
             kind = 'security'
+        elif host == 'api.honeypot.is' and path == '/v2/ishoneypot' and params == {'address': [address], 'chainID': [str(chain)]}:
+            kind = 'honeypot_is'
         elif host == 'sourcify.dev' and path == f'/server/v2/contract/{chain}/{address}' and params in ({}, {'fields': ['all']}):
             kind = 'source'
         elif host == 'api.geckoterminal.com' and path in (f'/api/v2/networks/{gecko}/new_pools', f'/api/v2/networks/{gecko}/tokens/{address}/pools') and params in ({}, {'page': ['1']}):
@@ -318,6 +320,32 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
     sec = security.get('result', {}).get(address) if (isinstance(security, dict) and security.get('code') in (1, '1')
         and isinstance(security.get('result'), dict)) else None
     if isinstance(sec, dict) and sec: valid['security'] = captured['security']
+    honeypot = captured.get('honeypot_is', (None,))[0]
+    if isinstance(honeypot, dict):
+        token_info = honeypot.get('token'); chain_info = honeypot.get('chain'); pair_info = honeypot.get('pair')
+        pair_info = pair_info.get('pair') if isinstance(pair_info, dict) else None
+        scan = honeypot.get('honeypotResult')
+        # If the provider returns pair token details, require them to agree with
+        # the selected GeckoTerminal pool relationship, not just its ID.
+        pair_tokens_match = True
+        if isinstance(pair_info, dict) and ('token0' in pair_info or 'token1' in pair_info):
+            actual = [pair_info.get('token0'), pair_info.get('token1')]
+            pool_row = next((row for row in pools.get('data', []) if isinstance(row, dict)
+                             and isinstance(row.get('attributes'), dict)
+                             and str(row['attributes'].get('address', '')).lower() == chosen['address']), None) if chosen and isinstance(pools, dict) else None
+            rel = pool_row.get('relationships', {}) if isinstance(pool_row, dict) else {}
+            provider_tokens = [rel.get(side, {}).get('data', {}).get('id') for side in ('base_token', 'quote_token')] if isinstance(rel, dict) else []
+            pair_tokens_match = (len(provider_tokens) == 2 and all(isinstance(x, str) and x.startswith(gecko+'_') for x in provider_tokens)
+                                 and all(isinstance(x, str) for x in actual)
+                                 and {x.lower() for x in actual} == {x[len(gecko)+1:].lower() for x in provider_tokens})
+        if (isinstance(token_info, dict) and isinstance(token_info.get('address'), str)
+                and token_info['address'].lower() == address and isinstance(chain_info, dict) and str(chain_info.get('id')) == str(chain)
+                and isinstance(pair_info, dict) and isinstance(pair_info.get('address'), str) and chosen
+                and pair_info['address'].lower() == chosen['address'] and pair_tokens_match and isinstance(scan, dict) and type(scan.get('isHoneypot')) is bool
+                and type(honeypot.get('simulationSuccess')) is bool):
+            valid['honeypot_is'] = captured['honeypot_is']
+        else:
+            honeypot = None; stops.append('honeypot_provider_identity_or_selected_pool_mismatch')
     if isinstance(source, dict) and str(source.get('address', '')).lower() == address and str(source.get('chainId')) == str(chain):
         valid['source'] = captured['source']
     graph_capture = None; graph_model = None; graph_summary = None
@@ -554,6 +582,42 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             for key in ('is_open_source', 'is_proxy', 'is_mintable', 'transfer_pausable', 'is_honeypot'):
                 if key in sec and isinstance(sec[key], (str, int, bool)):
                     claim('onchain', 'provider-'+key, f'The security provider reports {key} = {sec[key]}.', 'security', 'Provider field is not independent proof of current contract behavior.')
+        if 'honeypot_is' in valid:
+            scan = honeypot['honeypotResult']
+            flagged = scan['isHoneypot']
+            claim('onchain', 'honeypot-provider-verdict', f'The Honeypot.is provider reports isHoneypot = {str(flagged).lower()} for the selected pool.',
+                  'honeypot_is', 'A provider verdict is not independent proof of a holder-specific or universal restriction.')
+            claim('onchain', 'honeypot-provider-simulation', f'The Honeypot.is provider reports simulationSuccess = {str(honeypot["simulationSuccess"]).lower()} for its simulated trade.',
+                  'honeypot_is', 'Provider simulation outcome does not establish all holders, sizes, routes or future states.')
+            provider_summary = honeypot.get('summary')
+            flags = provider_summary.get('flags') if isinstance(provider_summary, dict) else None
+            if isinstance(flags, list):
+                for index, item in enumerate(flags[:10]):
+                    flag = item.get('flag') if isinstance(item, dict) else None
+                    if isinstance(flag, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,80}', flag):
+                        claim('onchain', f'honeypot-provider-flag-{index+1}', f'The Honeypot.is provider reports flag {flag} for the selected pool.',
+                              'honeypot_is', 'Provider flag is not independently verified; its underlying conditions and failure causes require review.')
+            holder = honeypot.get('holderAnalysis')
+            if isinstance(holder, dict):
+                def provider_count(value):
+                    if isinstance(value, bool) or not re.fullmatch(r'[0-9]{1,9}', str(value)): return None
+                    return int(value)
+                counts = {key: provider_count(holder.get(key)) for key in ('holders', 'successful', 'failed')}
+                if all(v is not None for v in counts.values()) and counts['successful'] + counts['failed'] == counts['holders']:
+                    for key in ('holders', 'successful', 'failed'):
+                        measurement('onchain', 'honeypot_holder_' + key, counts[key], 'provider-reported holder analyses',
+                                    'honeypot_is', 'Honeypot.is reported count; failure causes and independent reproducibility are not established')
+            simulation = honeypot.get('simulationResult')
+            if isinstance(simulation, dict):
+                for key in ('buyTax', 'sellTax'):
+                    measurement('onchain', 'honeypot_simulation_' + key, simulation.get(key), 'provider-reported percent',
+                                'honeypot_is', 'Honeypot.is reported simulated tax; not a universal execution quote')
+            if isinstance(sec, dict) and str(sec.get('is_honeypot')) in ('0', '1') and (str(sec['is_honeypot']) == '1') != flagged:
+                provider_claim = next(x for x in pillars['onchain']['claims'] if x['id'] == 'honeypot-provider-verdict')
+                goplus_claim = next((x for x in pillars['onchain']['claims'] if x['id'] == 'provider-is_honeypot'), None)
+                if goplus_claim:
+                    provider_claim['counterevidence_ids'].append('security'); goplus_claim['counterevidence_ids'].append('honeypot_is')
+                pillars['onchain']['quality_issues'].append('Honeypot.is and GoPlus provider verdicts conflict; route-, holder-, size- and state-specific independent investigation is required.')
         if 'source' in valid:
             claim('onchain', 'source-status', f'The source provider reports runtime match status: {source.get("runtimeMatch", "unknown")}.', 'source', 'Provider match does not establish safety, current state or sell behavior.')
             verified_at = source.get('verifiedAt')
