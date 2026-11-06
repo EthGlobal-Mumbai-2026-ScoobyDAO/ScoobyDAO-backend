@@ -1,5 +1,7 @@
 # Scooby DAO backend
 
+For the current six-case demonstration, separate seed package and remaining production integration work, see the [six-case production handoff](docs/six-case-production-handoff.md). The local preview and seed are not production releases.
+
 This branch integrates case orchestration, captured-source research, the report library, and two separate admin World ID checkpoints. See [LIVE-STATE.md](LIVE-STATE.md) for the current integration status and [admin checkpoints](docs/admin-world-checkpoints.md) for the authentication contract. The integration is under review in PR #22; do not assume it is deployed or merged until the repository confirms that state.
 
 A candidate is automatically queued only after four distinct, fresh, independently verified concern groups pass server-side revalidation. The available verifiers cover narrow G07 and G09 checks, not a complete twelve-group screening system. Provider hints do not count as votes. Actionable non-qualified cases require a scoped admin session and a separate World confirmation bound to the initiating session, candidate, snapshot and policy; stale or unavailable evidence does not authorize a run. Report sign-off and publication are separate actions. The checkpoints have synthetic-issuer coverage, but no live World end-to-end confirmation has been established.
