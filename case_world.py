@@ -11,6 +11,7 @@ from publication.world import Tokens, Pending, SlowDown, Denied, Expired, Error,
 _codes={}; _lock=threading.Lock()
 
 def fail(status,message): raise HTTPException(status,message)
+def admin_ready(world):return world is not None and callable(getattr(world,'authorize_case_admin',None))
 def public(c,a):
  ch=c.execute('SELECT * FROM case_challenges WHERE id=?',(a['challenge_id'],)).fetchone();case=c.execute('SELECT * FROM cases WHERE id=?',(ch['case_id'],)).fetchone()
  return {'attempt_id':a['id'],'challenge_id':ch['id'],'case_id':ch['case_id'],'candidate_id':case['candidate_id'],'snapshot_digest':ch['snapshot_id'],'policy_digest':ch['policy_digest'],'action':ch['action'],'nonce':ch['nonce'],'state':a['state'],'expires_at':a['expires'],'user_code':a['user_code'],'verification_uri':a['verification_uri'],'verification_uri_complete':a['verification_uri_complete'],'interval_seconds':a['interval'],'run_id':(c.execute("SELECT run_id FROM case_decisions WHERE case_id=? AND snapshot_id=? AND action='human_research'",(ch['case_id'],ch['snapshot_id'])).fetchone() or {'run_id':None})['run_id']}
@@ -27,7 +28,7 @@ def valid_binding(c,ch):
  return case,snap
 
 def start(challenge_id,world):
- if world is None:fail(503,'World ID case confirmation is not configured')
+ if not admin_ready(world):fail(503,'Case administrator authorization is not configured')
  with db() as c:
   ch=c.execute('SELECT * FROM case_challenges WHERE id=?',(challenge_id,)).fetchone()
   if not ch:fail(404,'Challenge not found')
@@ -73,8 +74,11 @@ def poll(attempt_id,world):
     if a['binding_hash']!=binding_hash(case,ch):fail(409,'Case authorization binding changed')
    except HTTPException:c.execute("UPDATE case_world_attempts SET state='superseded' WHERE id=?",(attempt_id,))
    else:
+    try:admin_allowed=admin_ready(world) and world.authorize_case_admin(identity,{'case_id':case['id'],'candidate_id':case['candidate_id'],'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'action':ch['action']}) is True
+    except Exception:admin_allowed=False
     existing=c.execute("SELECT id FROM investigations WHERE candidate_id=? AND status!='reference_only' LIMIT 1",(case['candidate_id'],)).fetchone()
-    if existing:c.execute("UPDATE case_world_attempts SET state='superseded' WHERE id=?",(attempt_id,))
+    if not admin_allowed:c.execute("UPDATE case_world_attempts SET state='denied' WHERE id=?",(attempt_id,))
+    elif existing:c.execute("UPDATE case_world_attempts SET state='superseded' WHERE id=?",(attempt_id,))
     else:
      candidate=json.loads(snap['record']);selection=ident();run=ident();budget={'max_source_requests':0,'max_model_calls':0};decision=digest(dumps({'case':case['id'],'snapshot':snap['id'],'policy':snap['policy_digest'],'action':'human_research','budget':budget,'challenge':ch['id']}).encode())
      c.execute('INSERT OR IGNORE INTO candidates VALUES(?,?,?)',(case['candidate_id'],dumps(candidate),now()))

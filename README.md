@@ -16,7 +16,7 @@ The [native package contract](docs/native-package-contract.md) binds report, sid
 
 ## Case orchestration workstream (proposed branch)
 
-The local case orchestration slice ranks source-grounded scouting cases, auto-starts only after four independently verified fresh groups, and supports a separate case-scoped World ID confirmation for human-authorized starts. Both use the same bounded investigation/report worker; resulting partial drafts appear in Reports and link to the Case. With the current zero-source budget, a run with no usable captured inputs is blocked without a report. World configuration and live evidence are required for a real journey; synthetic end-to-end tests are not live proof. See [case orchestration](docs/case-orchestration.md). Final report sign-off/publication is separate.
+The local case orchestration slice ranks source-grounded scouting cases, auto-starts only after four independently verified fresh groups, and has a separate case-scoped World ID attempt for administrator-authorized starts; it fails closed until a real admin authorization adapter is implemented. Both use the same bounded investigation/report worker; resulting partial drafts appear in Reports and link to the Case. With the current zero-source budget, a run with no usable captured inputs is blocked without a report. World configuration and live evidence are required for a real journey; synthetic end-to-end tests are not live proof. See [case orchestration](docs/case-orchestration.md). Final report sign-off/publication is separate.
 
 ## What works and what remains
 

@@ -235,6 +235,7 @@ def test_world_confirmation_atomically_starts_one_case_run(tmp_path,monkeypatch)
   config=SimpleNamespace(accepted_acr=('synthetic-test-acr',))
   outcome=Tokens('synthetic-token')
   def start_device(self,_):return DeviceStart(device_code='synthetic-device',user_code='TEST',verification_uri='https://world.example/verify',expires_in=100,interval=0)
+  def authorize_case_admin(self,identity,binding):return True
   def poll(self,_):return self.outcome
   def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic-issuer',sub='synthetic-human')
  world=FakeWorld();app.dependency_overrides[get_world_optional]=lambda:world
@@ -247,6 +248,8 @@ def test_world_confirmation_atomically_starts_one_case_run(tmp_path,monkeypatch)
   retry=client.post('/investigations/'+poll['run_id']+'/resume',headers={'Idempotency-Key':'retry-human'});assert retry.status_code==200;assert client.post('/investigations/'+poll['run_id']+'/resume',headers={'Idempotency-Key':'retry-human'}).json()==retry.json()
   case2=case_engine.ingest_record(with_sources(record(1912),tmp_path),tmp_path);rev=client.get('/scouting/cases/'+case2).json()['snapshot_digest'];ch2=client.post('/scouting/cases/'+case2+'/challenge',json={'expected_revision':rev},headers={'Idempotency-Key':'denied-test'}).json();aid2=client.post('/scouting/challenges/'+ch2['challenge_id']+'/world-attempt').json()['attempt_id'];world.outcome=Denied();assert client.get('/scouting/world-attempts/'+aid2).json()['state']=='denied'
   with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1
+  case3=case_engine.ingest_record(with_sources(record(1913),tmp_path),tmp_path);rev=client.get('/scouting/cases/'+case3).json()['snapshot_digest'];ch3=client.post('/scouting/cases/'+case3+'/challenge',json={'expected_revision':rev},headers={'Idempotency-Key':'not-admin-test'}).json();aid3=client.post('/scouting/challenges/'+ch3['challenge_id']+'/world-attempt').json()['attempt_id'];world.outcome=Tokens('synthetic-token');world.authorize_case_admin=lambda identity,binding:False;assert client.get('/scouting/world-attempts/'+aid3).json()['state']=='denied'
+  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1
  finally:app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
 
 
@@ -258,6 +261,7 @@ def test_world_attempt_cancel_expiry_and_supersession_never_start_work(tmp_path,
  class FakeWorld:
   config=SimpleNamespace(accepted_acr=('synthetic',))
   def start_device(self,_):return DeviceStart(device_code='synthetic',user_code='TEST',verification_uri='https://world.example',expires_in=100,interval=0)
+  def authorize_case_admin(self,identity,binding):return True
   def poll(self,_):return Tokens('synthetic')
   def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic',sub='synthetic')
  app.dependency_overrides[get_world_optional]=lambda:FakeWorld()
@@ -282,3 +286,18 @@ def test_concrete_provider_clue_prioritizes_review_without_gate_vote(tmp_path):
  d=record(1931);stamp=datetime.datetime.now(datetime.timezone.utc).isoformat();raw=json.dumps({'result':{d['identity']['address']:{'creator_percent':'1.000000'}}}).encode();sha=hashlib.sha256(raw).hexdigest();folder=tmp_path/'snapshots';folder.mkdir();(folder/(sha+'.json')).write_bytes(raw)
  d['evidence']=[{'id':sha,'source':'snapshots/'+sha+'.json','sha256':sha,'fetched_at':stamp,'observed_at':None,'block_number':None,'kind':'live_observation','limitations':['Request URL: https://api.gopluslabs.io/api/v1/token_security/1']}];case_engine.ingest_record(d,tmp_path);case_engine.ingest_record(record(1930),tmp_path)
  rows=client.get('/scouting/cases').json()['cases'];assert [x['candidate_id'] for x in rows]==[d['candidate_id'],record(1930)['candidate_id']];assert all(x['verified_triggered_count']==0 for x in rows)
+
+
+def test_world_identity_alone_never_authorizes_admin_case_start(tmp_path):
+ from types import SimpleNamespace
+ from publication.deps import get_world_optional
+ from publication.world import DeviceStart,Tokens
+ class HumanOnly:
+  config=SimpleNamespace(accepted_acr=('synthetic',))
+  def start_device(self,_):raise AssertionError('World must not be contacted without an admin authorizer')
+ app.dependency_overrides[get_world_optional]=lambda:HumanOnly()
+ try:
+  case=case_engine.ingest_record(record(1940),tmp_path);revision=client.get('/scouting/cases/'+case).json()['snapshot_digest'];ch=client.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':revision},headers={'Idempotency-Key':'no-admin'}).json()
+  assert client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt').status_code==503
+  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==0
+ finally:app.dependency_overrides.pop(get_world_optional,None)

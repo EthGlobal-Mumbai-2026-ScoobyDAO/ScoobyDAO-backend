@@ -35,6 +35,7 @@ def test_both_routes_generate_and_link_report_using_synthetic_dependencies(tmp_p
   class FakeWorld:
    config=SimpleNamespace(accepted_acr=('synthetic',))
    def start_device(self,_):return DeviceStart(device_code='synthetic',user_code='TEST',verification_uri='https://world.example',expires_in=100,interval=0)
+   def authorize_case_admin(self,identity,binding):return True
    def poll(self,_):return Tokens('synthetic')
    def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic',sub='synthetic')
   app.dependency_overrides[get_world_optional]=lambda:FakeWorld()
@@ -69,6 +70,7 @@ def test_case_journey_replays_bound_capture_with_zero_requests(tmp_path,monkeypa
   class FakeWorld:
    config=SimpleNamespace(accepted_acr=('synthetic',))
    def start_device(self,_):return DeviceStart(device_code='synthetic',user_code='TEST',verification_uri='https://auth.world.org/device',expires_in=100,interval=0)
+   def authorize_case_admin(self,identity,binding):return True
    def poll(self,_):return Tokens('synthetic')
    def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic',sub='synthetic')
   app.dependency_overrides[get_world_optional]=lambda:FakeWorld();rev=client.get('/scouting/cases/'+case).json()['snapshot_digest'];ch=client.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':rev},headers={'Idempotency-Key':'replay-challenge'}).json();aid=client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt').json()['attempt_id'];assert client.get('/scouting/world-attempts/'+aid).json()['state']=='approved'
