@@ -39,12 +39,14 @@ def init():
   CREATE TABLE IF NOT EXISTS cases(id TEXT PRIMARY KEY,candidate_id TEXT NOT NULL UNIQUE,current_snapshot TEXT NOT NULL REFERENCES case_snapshots(id),state TEXT NOT NULL,updated REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS case_decisions(id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id),snapshot_id TEXT NOT NULL REFERENCES case_snapshots(id),policy_digest TEXT NOT NULL,action TEXT NOT NULL,budget TEXT NOT NULL,run_id TEXT,created REAL NOT NULL,UNIQUE(case_id,snapshot_id,policy_digest,action));
   CREATE TABLE IF NOT EXISTS case_challenges(id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id),snapshot_id TEXT NOT NULL REFERENCES case_snapshots(id),policy_digest TEXT NOT NULL,action TEXT NOT NULL,nonce TEXT NOT NULL UNIQUE,state TEXT NOT NULL,expires REAL NOT NULL,created REAL NOT NULL,idem TEXT NOT NULL UNIQUE);
+  CREATE TABLE IF NOT EXISTS case_world_attempts(id TEXT PRIMARY KEY,challenge_id TEXT NOT NULL UNIQUE REFERENCES case_challenges(id),state TEXT NOT NULL,started REAL NOT NULL,expires REAL NOT NULL,interval REAL NOT NULL,next_poll REAL NOT NULL,user_code TEXT NOT NULL,verification_uri TEXT NOT NULL,verification_uri_complete TEXT,accepted_acr TEXT NOT NULL,binding_hash TEXT NOT NULL,subject_hash TEXT,created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS case_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,case_id TEXT NOT NULL,kind TEXT NOT NULL,detail TEXT NOT NULL,created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS case_scan_cursor(name TEXT PRIMARY KEY,position INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS case_sources(id TEXT PRIMARY KEY,status TEXT NOT NULL,detail TEXT NOT NULL,updated REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS case_leads(id TEXT PRIMARY KEY,provider TEXT NOT NULL,candidate_id TEXT,origin TEXT,created REAL NOT NULL,FOREIGN KEY(candidate_id) REFERENCES candidates(id));
   CREATE TABLE IF NOT EXISTS heartbeats(name TEXT PRIMARY KEY, seen REAL NOT NULL, detail TEXT NOT NULL);
   ''')
+  if 'binding_hash' not in {r['name'] for r in c.execute('PRAGMA table_info(case_world_attempts)')}:c.execute('ALTER TABLE case_world_attempts ADD COLUMN binding_hash TEXT')
   c.execute("INSERT OR IGNORE INTO case_sources VALUES('discovery','unavailable','Local discovery store not yet synchronized.',?)",(now(),))
   c.execute("INSERT OR IGNORE INTO case_sources VALUES('reddit','unavailable','No current social metadata configured; SearchApi access and durable retention are separate.',?)",(now(),))
 def row(r): return dict(r) if r else None

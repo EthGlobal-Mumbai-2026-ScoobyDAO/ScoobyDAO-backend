@@ -35,7 +35,7 @@ def test_discovery_reconcile_is_bounded_and_human_fails_closed(tmp_path,monkeypa
  monkeypatch.setenv('SCOOBY_DISCOVERY_DB',str(path));monkeypatch.setenv('SCOOBY_DISCOVERY_ROOT',str(tmp_path));monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(1,r))
  res=client.post('/scouting/cases/refresh',json={'limit':1},headers={'Idempotency-Key':'scan-701'});assert res.status_code==200
  assert worker.work_one();status=client.get('/jobs/'+res.json()['job_id']).json();assert status['state']=='done'
- body=client.get('/scouting/cases').json();assert body['schema_version']=='scouting-case-list/1';x=next(a for a in body['cases'] if a['candidate_id']==d['candidate_id']);assert x['lane']=='human_review_required' and x['continuation']['availability']=='unavailable'
+ body=client.get('/scouting/cases').json();assert body['schema_version']=='scouting-case-list/2';x=next(a for a in body['cases'] if a['candidate_id']==d['candidate_id']);assert x['lane']=='human_review_required' and x['continuation']['availability']=='unavailable'
  request={'expected_revision':x['snapshot_digest'],'action':'diagnostic_research'};a=client.post('/scouting/cases/'+x['case_id']+'/challenge',json=request,headers={'Idempotency-Key':'challenge-701'});assert a.status_code==200,a.text
  q=a.json();assert q['snapshot_digest']==x['snapshot_digest'] and q['candidate_id']==d['candidate_id'];assert client.post('/scouting/challenges/'+q['challenge_id']+'/continue').status_code==503
  with db() as c:c.execute('UPDATE case_challenges SET expires=? WHERE id=?',(now()-1,q['challenge_id']))
@@ -46,13 +46,16 @@ def test_discovery_reconcile_is_bounded_and_human_fails_closed(tmp_path,monkeypa
  assert client.post('/investigations',headers={'Idempotency-Key':'legacy-run-701'},json={'candidate_id':d['candidate_id'],'selection_id':s['id']}).status_code==403
 
 def test_mocked_auto_gate_dedup_and_tamper_fail_closed(tmp_path,monkeypatch):
+ import case_jobs
+ original=case_jobs.run_case
+ monkeypatch.setattr(case_jobs,'run_case',lambda run_id:original(run_id,producer=lambda *a,**kw:{'state':'blocked','bundle_path':None}))
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));d=with_sources(record(702),tmp_path);case=case_engine.ingest_record(d,tmp_path)
  with db() as c: decision=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();did=decision['id']
  run=case_engine.start_decision(did);assert case_engine.start_decision(did)==run
  assert worker.work_one() # duplicate actor message cannot create a second run
  assert worker.work_one() # bounded investigation task records unavailable producers
- assert client.get('/investigations/'+run).json()['status']=='incomplete'
- detail=client.get('/scouting/cases/'+case).json();assert detail['lane']=='unavailable' and detail['research']['status']=='incomplete'
+ assert client.get('/investigations/'+run).json()['status']=='blocked'
+ detail=client.get('/scouting/cases/'+case).json();assert detail['lane']=='unavailable' and detail['research']['status']=='blocked'
  assert len(detail['research']['pillars'])==5 and {x['status'] for x in detail['research']['pillars']}=={'unavailable'} and detail['research']['reason']
  with db() as c:
   assert c.execute('SELECT count(*) FROM investigations WHERE id=?',(run,)).fetchone()[0]==1
@@ -119,7 +122,7 @@ def test_periodic_sync_opt_in_and_backpressure(monkeypatch):
 def test_case_list_matches_runtime_schema(tmp_path,monkeypatch):
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(1,r));case_engine.ingest_record(with_sources(record(1909),tmp_path),tmp_path)
  from jsonschema import Draft202012Validator
- schema=json.loads((BASE.parent/'schemas/runtime/scouting-case-list-v1.schema.json').read_text(encoding='utf-8-sig'))
+ schema=json.loads((BASE.parent/'schemas/runtime/scouting-case-list-v2.schema.json').read_text(encoding='utf-8-sig'))
  Draft202012Validator(schema).validate(client.get('/scouting/cases').json())
 
 def test_human_attention_order_uses_verified_count_not_score(tmp_path,monkeypatch):
@@ -127,9 +130,9 @@ def test_human_attention_order_uses_verified_count_not_score(tmp_path,monkeypatc
  monkeypatch.setattr(case_engine,'evaluate',fake)
  for n in (711,712,713):case_engine.ingest_record(with_sources(record(n),tmp_path),tmp_path)
  rows=[x for x in client.get('/scouting/cases').json()['cases'] if int(x['identity']['address'],16) in (711,712,713)]
- assert [int(x['identity']['address'],16) for x in rows]==[712,711,713]
- assert [x['verified_triggered_count'] for x in rows]==[3,1,4]
- assert [x['lane'] for x in rows]==['human_review_required','human_review_required','auto_qualified']
+ assert [int(x['identity']['address'],16) for x in rows]==[713,712,711]
+ assert [x['verified_triggered_count'] for x in rows]==[4,3,1]
+ assert [x['lane'] for x in rows]==['auto_qualified','human_review_required','human_review_required']
 
 def test_new_snapshot_cannot_duplicate_existing_candidate_research(tmp_path,monkeypatch):
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));d=with_sources(record(714),tmp_path);case=case_engine.ingest_record(d,tmp_path)
@@ -220,4 +223,59 @@ def test_source_clues_are_separate_from_verified_gate(tmp_path,monkeypatch):
  clues=scouting_clues(d,{source:base64.b64encode(raw).decode()});assert len(clues)==4 and all(x['verification'].startswith('unverified_') for x in clues);assert '100%' in clues[1]['description'] and '11' in clues[2]['description']
  assert len(scouting_clues(d,{}))==1
  folder=tmp_path/'snapshots';folder.mkdir();(folder/(sha+'.json')).write_bytes(raw);case=case_engine.ingest_record(d,tmp_path);view=client.get('/scouting/cases/'+case).json()
- assert view['verified_triggered_count']==0 and view['evidence_freshness']=='stale' and 'four distinct' in view['routing_rationale'] and '100%' in view['summary'];assert all('measurements' in r and 'name' in r for r in view['reasons'])
+ assert view['verified_triggered_count']==0 and view['evidence_freshness']=='stale' and '0/4 fresh groups' in view['routing_rationale'] and '100%' in view['summary'];assert all('measurements' in r and 'name' in r for r in view['reasons'])
+
+
+def test_world_confirmation_atomically_starts_one_case_run(tmp_path,monkeypatch):
+ from types import SimpleNamespace
+ from publication.deps import get_world_optional
+ from publication.world import DeviceStart,Tokens,Denied
+ import case_world
+ class FakeWorld:
+  config=SimpleNamespace(accepted_acr=('synthetic-test-acr',))
+  outcome=Tokens('synthetic-token')
+  def start_device(self,_):return DeviceStart(device_code='synthetic-device',user_code='TEST',verification_uri='https://world.example/verify',expires_in=100,interval=0)
+  def poll(self,_):return self.outcome
+  def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic-issuer',sub='synthetic-human')
+ world=FakeWorld();app.dependency_overrides[get_world_optional]=lambda:world
+ try:
+  case=case_engine.ingest_record(with_sources(record(1911),tmp_path),tmp_path);revision=client.get('/scouting/cases/'+case).json()['snapshot_digest'];ch=client.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':revision},headers={'Idempotency-Key':'human-test'}).json();start=client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt');assert start.status_code==200,start.text;aid=start.json()['attempt_id']
+  poll=client.get('/scouting/world-attempts/'+aid).json();assert poll['state']=='approved' and poll['run_id'];assert client.get('/scouting/world-attempts/'+aid).json()['run_id']==poll['run_id']
+  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1 and c.execute("SELECT count(*) FROM jobs WHERE kind='investigate'").fetchone()[0]==1
+  import case_jobs
+  assert case_jobs.run_case(poll['run_id'],producer=lambda *a,**kw:{'state':'blocked','bundle_path':None})=='blocked'
+  case2=case_engine.ingest_record(with_sources(record(1912),tmp_path),tmp_path);rev=client.get('/scouting/cases/'+case2).json()['snapshot_digest'];ch2=client.post('/scouting/cases/'+case2+'/challenge',json={'expected_revision':rev},headers={'Idempotency-Key':'denied-test'}).json();aid2=client.post('/scouting/challenges/'+ch2['challenge_id']+'/world-attempt').json()['attempt_id'];world.outcome=Denied();assert client.get('/scouting/world-attempts/'+aid2).json()['state']=='denied'
+  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1
+ finally:app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
+
+
+def test_world_attempt_cancel_expiry_and_supersession_never_start_work(tmp_path,monkeypatch):
+ from types import SimpleNamespace
+ from publication.deps import get_world_optional
+ from publication.world import DeviceStart,Tokens
+ import case_world
+ class FakeWorld:
+  config=SimpleNamespace(accepted_acr=('synthetic',))
+  def start_device(self,_):return DeviceStart(device_code='synthetic',user_code='TEST',verification_uri='https://world.example',expires_in=100,interval=0)
+  def poll(self,_):return Tokens('synthetic')
+  def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic',sub='synthetic')
+ app.dependency_overrides[get_world_optional]=lambda:FakeWorld()
+ try:
+  for n,how in ((1920,'cancel'),(1921,'expire'),(1922,'supersede')):
+   case=case_engine.ingest_record(with_sources(record(n),tmp_path),tmp_path);revision=client.get('/scouting/cases/'+case).json()['snapshot_digest'];ch=client.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':revision},headers={'Idempotency-Key':'neg-'+str(n)}).json();aid=client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt').json()['attempt_id']
+   if how=='cancel':assert client.post('/scouting/world-attempts/'+aid+'/cancel').json()['state']=='cancelled'
+   elif how=='expire':
+    with db() as c:c.execute('UPDATE case_world_attempts SET expires=? WHERE id=?',(now()-1,aid))
+    assert client.get('/scouting/world-attempts/'+aid).json()['state']=='expired'
+   else:
+    with db() as c:c.execute("UPDATE case_challenges SET state='superseded' WHERE id=?",(ch['challenge_id'],))
+    assert client.get('/scouting/world-attempts/'+aid).json()['state']=='superseded'
+   assert client.get('/scouting/world-attempts/'+aid).json()['state']!='approved'
+  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==0
+ finally:app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
+
+
+def test_concrete_provider_clue_prioritizes_review_without_gate_vote(tmp_path):
+ d=record(1931);stamp=datetime.datetime.now(datetime.timezone.utc).isoformat();raw=json.dumps({'result':{d['identity']['address']:{'creator_percent':'1.000000'}}}).encode();sha=hashlib.sha256(raw).hexdigest();folder=tmp_path/'snapshots';folder.mkdir();(folder/(sha+'.json')).write_bytes(raw)
+ d['evidence']=[{'id':sha,'source':'snapshots/'+sha+'.json','sha256':sha,'fetched_at':stamp,'observed_at':None,'block_number':None,'kind':'live_observation','limitations':['Request URL: https://api.gopluslabs.io/api/v1/token_security/1']}];case_engine.ingest_record(d,tmp_path);case_engine.ingest_record(record(1930),tmp_path)
+ rows=client.get('/scouting/cases').json()['cases'];assert [x['candidate_id'] for x in rows]==[d['candidate_id'],record(1930)['candidate_id']];assert all(x['verified_triggered_count']==0 for x in rows)

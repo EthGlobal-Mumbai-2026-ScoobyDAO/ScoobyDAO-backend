@@ -47,14 +47,18 @@ def work_one():
    # No live verifiers are shipped. Do not manufacture positive screenings.
    result='No discovery or concern verifiers configured; coverage unknown.'
   elif j['kind']=='investigate':
-   with db() as c:
-    run=c.execute('SELECT status FROM investigations WHERE id=?',(j['ref'],)).fetchone()
-    if not run or run['status']=='cancelled': result='cancelled'
-    else:
-     for p in PILLARS:
-      c.execute("UPDATE pillars SET status='unavailable', detail=? WHERE run_id=? AND pillar=? AND status='queued'",('No research producer configured; no findings inferred.',j['ref'],p))
-      event(c,j['ref'],'pillar_unavailable',p)
-     c.execute("UPDATE investigations SET status='incomplete' WHERE id=?",(j['ref'],)); event(c,j['ref'],'incomplete','Research adapters unavailable'); result='incomplete'
+   with db() as c:is_case=bool(c.execute('SELECT 1 FROM case_decisions WHERE run_id=?',(j['ref'],)).fetchone())
+   if is_case:
+    import case_jobs
+    result=case_jobs.run_case(j['ref'])
+   else:
+    with db() as c:
+     run=c.execute('SELECT status FROM investigations WHERE id=?',(j['ref'],)).fetchone()
+     if not run or run['status']=='cancelled':result='cancelled'
+     else:
+      for p in PILLARS:c.execute("UPDATE pillars SET status='unavailable', detail=? WHERE run_id=? AND pillar=? AND status='queued'",('No research producer configured; no findings inferred.',j['ref'],p))
+      c.execute("UPDATE investigations SET status='incomplete' WHERE id=?",(j['ref'],));event(c,j['ref'],'incomplete','Legacy non-case research producer unavailable');result='incomplete'
+
   elif j['kind']=='reason':
    import provider
    with db() as c:
