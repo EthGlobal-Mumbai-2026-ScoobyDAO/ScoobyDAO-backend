@@ -3,6 +3,7 @@ import json, os, shutil, subprocess, sys, time, tempfile
 from pathlib import Path
 from huey import SqliteHuey, crontab
 from store import ROOT, DATA, db, now, event, PILLARS, digest
+from vendor.pdf_export.full_draft_pdf import print_source
 huey=SqliteHuey('scooby',filename=str(DATA/'huey.sqlite3'), immediate=False)
 
 def validate_render(out,ref):
@@ -96,11 +97,8 @@ def work_one():
      markdown=markdown_path.read_text(encoding='utf-8-sig'); markdown_sha=m['sha256']; (out/'report.md').write_bytes(markdown_path.read_bytes())
      if browser:
       try:
-       # Source/model text is escaped; JS opens all original details after the reader has rendered.
-       extra='<section class="full-report"><h1>Full report (source Markdown)</h1><pre>'+html_module.escape(markdown)+'</pre></section>'
-       style='<style>@media print{details{break-inside:auto} .full-report{break-before:page} .full-report pre{white-space:pre-wrap;overflow-wrap:anywhere;font:9pt/1.45 sans-serif} nav,.skip{display:none}}</style>'
-       script='<script>document.querySelectorAll("details").forEach(x=>x.open=true);document.querySelectorAll("a[href]").forEach(x=>x.removeAttribute("href"));</script>'
-       printable=html.replace('</head>',style+'</head>',1).replace('</body>',extra+script+'</body>',1)
+       # Shared adapter validates report identity and bound Markdown before preparing print HTML.
+       printable, _ = print_source(page, out/'report.json', ref['sha256'])
        (out/'print.html').write_text(printable,encoding='utf-8')
        with tempfile.TemporaryDirectory(dir=DATA) as profile:
         subprocess.run([browser,'--headless','--disable-gpu','--no-first-run','--no-default-browser-check','--no-pdf-header-footer','--virtual-time-budget=3000','--user-data-dir='+profile,'--print-to-pdf='+str(pdf),(out/'print.html').resolve().as_uri()],check=True,timeout=90,capture_output=True)

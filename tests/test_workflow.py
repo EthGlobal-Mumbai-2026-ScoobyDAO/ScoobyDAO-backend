@@ -93,6 +93,18 @@ def test_lifecycle(monkeypatch):
  if os.environ.get('SCOOBY_BROWSER'):
   pdf=client.get('/artifacts/'+out.json()['job_id']+'/report.pdf'); assert pdf.status_code==200 and pdf.content.startswith(b'%PDF-')
   assert manifest['pdf_content']=='expanded reader and bound full Markdown'
+  from io import BytesIO
+  from pypdf import PdfReader
+  parsed=PdfReader(BytesIO(pdf.content)); destinations=parsed.named_destinations; linked=0
+  for pdf_page in parsed.pages:
+   for ref in pdf_page.get('/Annots',[]):
+    annotation=ref.get_object(); action=annotation.get('/A'); action=action.get_object() if action else {}
+    assert action.get('/S')!='/URI'
+    dest=annotation.get('/Dest') or action.get('/D')
+    if isinstance(dest,str): assert dest in destinations; linked+=1
+  assert linked>0
+  pdf_text='\n'.join(pdf_page.extract_text() or '' for pdf_page in parsed.pages)
+  assert 'Evidence and artifact index' in pdf_text and 'evidence bytes are not embedded in this PDF' in pdf_text
   print('PDF_TEST_PATH='+str(Path(os.environ['SCOOBY_DATA'])/'artifacts'/out.json()['job_id']/'report.pdf'))
  assert post(path+'/review',dict(review,decision='revise'),'revise').status_code==200
  assert client.get(package['url']).json()==descriptor # frozen report snapshot does not follow live review
