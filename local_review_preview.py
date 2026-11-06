@@ -1,5 +1,5 @@
 """Isolated read-only loopback review of six explicitly selected unapproved references."""
-import json,sqlite3,hashlib,pathlib
+import json,sqlite3,hashlib,pathlib,re
 from fastapi import FastAPI,HTTPException,Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -29,12 +29,37 @@ def load(name):
   if (m['report_id'],m['report_version'],m['report_sha256'])!=(rid,ver,r['sha256']):raise HTTPException(409)
   html=(out/'index.html').read_bytes()
   if sha(html)!=m['html_sha256']:raise HTTPException(409)
-  return {'symbol':name.upper(),'case_id':case,'candidate_id':r['candidate_id'],'report_id':rid,'version':ver,'report_sha256':r['sha256'],'html_sha256':m['html_sha256'],'status':'unreviewed_historical_reference','world_verified':False,'gate_effect':'none','html_url':'/preview/'+name+'/html'},html
+  doc=json.loads(raw); files={'report.json':r['sha256']}
+  for item in doc.get('evidence',[])+doc.get('artifacts',[]):
+   path=item.get('path'); value=item.get('sha256')
+   if path is None and item.get('availability')=='unavailable':continue
+   if not isinstance(path,str) or not isinstance(value,str) or not re.fullmatch(r'[0-9a-f]{64}',value):raise HTTPException(409,'invalid descriptor')
+   if path in files and files[path]!=value:raise HTTPException(409,'conflicting descriptor')
+   files[path]=value
+  return {'symbol':name.upper(),'case_id':case,'candidate_id':r['candidate_id'],'report_id':rid,'version':ver,'report_sha256':r['sha256'],'html_sha256':m['html_sha256'],'status':'unreviewed_historical_reference','world_verified':False,'gate_effect':'none','html_url':'/preview/'+name+'/html','files':files},html,pathlib.Path(r['path'])
  except (OSError,ValueError,KeyError,json.JSONDecodeError):raise HTTPException(409,'artifact integrity unavailable')
  finally:db.close()
 @app.get('/preview')
 def listing():return {'notice':'LOCAL REVIEW ONLY: unreviewed historical references; synthetic lineage; no World or gate approval.','reports':[load(n)[0] for n in ITEMS]}
 @app.get('/preview/{name}/html')
 def report(name:str):
- info,raw=load(name); banner=b'<div style="padding:16px;background:#fff3c4;color:#111;font:16px sans-serif">LOCAL REVIEW ONLY - Unreviewed historical reference; synthetic lineage. No World or gate approval.</div>'
+ info,raw,_=load(name); banner=b'<div style="padding:16px;background:#fff3c4;color:#111;font:16px sans-serif">LOCAL REVIEW ONLY - Unreviewed historical reference; synthetic lineage. No World or gate approval.</div>'
  return HTMLResponse(content=banner+raw,headers={'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"})
+
+@app.get('/preview/{name}/files/{file_path:path}')
+def bundle_file(name:str,file_path:str):
+ info,_,root=load(name);expected=info['files'].get(file_path)
+ if expected is None:raise HTTPException(404)
+ parts=pathlib.PurePosixPath(file_path).parts
+ if not parts or any(x in ('.','..') for x in parts) or '\\' in file_path or file_path.startswith('/'):raise HTTPException(404)
+ target=root
+ for part in parts:
+  target=target/part
+  if target.is_symlink():raise HTTPException(409)
+ try:
+  if not target.resolve().is_relative_to(root.resolve()) or target.stat().st_size>20000000:raise HTTPException(409)
+  content=target.read_bytes()
+ except OSError:raise HTTPException(409)
+ if sha(content)!=expected:raise HTTPException(409,'artifact integrity unavailable')
+ ext=target.suffix.lower();media={' .json':'application/json','.json':'application/json','.md':'text/plain; charset=utf-8','.csv':'text/plain; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'}.get(ext,'application/octet-stream')
+ return Response(content=content,media_type=media,headers={'Content-Security-Policy':"default-src 'none'; sandbox"})
