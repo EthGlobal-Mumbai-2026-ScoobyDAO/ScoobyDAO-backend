@@ -52,7 +52,11 @@ class Ledger:
   with db() as c:
    c.execute('BEGIN IMMEDIATE');run=c.execute('SELECT status FROM investigations WHERE id=?',(self.run_id,)).fetchone();decision=c.execute('SELECT * FROM case_decisions WHERE id=? AND run_id=?',(self.decision_id,self.run_id)).fetchone()
    if not run or not decision:raise ModelStageBlocked('run authorization missing')
-   if run['status']=='cancelled':raise ModelStageBlocked('run cancelled')
+   if run['status']=='cancelled':
+    current=c.execute("SELECT * FROM case_model_stages WHERE run_id=? AND stage='reasoning'",(self.run_id,)).fetchone()
+    if stage=='reasoning' and state in ('completed','failed','cancelled') and current and current['state']=='reserved':
+     usage=safe_usage(data.get('usage'));c.execute("UPDATE case_model_stages SET state='cancelled',usage=?,finished=? WHERE run_id=? AND stage='reasoning' AND state='reserved'",(dumps(usage) if usage else None,now(),self.run_id));event(c,self.run_id,'model_stage_cancelled',dumps({'stage':'reasoning','state':'cancelled','usage':usage}));return
+    raise ModelStageBlocked('run cancelled')
    case=c.execute('SELECT current_snapshot FROM cases WHERE id=?',(decision['case_id'],)).fetchone();snap=c.execute('SELECT expires,policy_digest FROM case_snapshots WHERE id=?',(self.snapshot_id,)).fetchone()
    import case_engine
    if not case or not snap or decision['snapshot_id']!=self.snapshot_id or case['current_snapshot']!=self.snapshot_id or snap['expires']<=now() or snap['policy_digest']!=decision['policy_digest'] or case_engine.policy_digest()!=decision['policy_digest']:raise ModelStageBlocked('case policy or evidence binding expired')
@@ -70,6 +74,6 @@ class Ledger:
     if not isinstance(checkpoint,dict) or len(encoded)>500000 or fingerprint(self.run_id,self.decision_id,self.snapshot_id,data)!=current['request_digest'] or checkpoint.get('profile')!='scooby.reasoning-checkpoint/1' or not isinstance(checkpoint.get('payload'),dict) or checkpoint.get('model')!=MODEL or any(checkpoint.get(k)!=data.get(k) for k in ('input_sha256','prompt_sha256','schema_sha256')):raise ModelStageBlocked('model checkpoint binding mismatch')
     usage=safe_usage(data.get('usage'));c.execute("UPDATE case_model_stages SET state='completed',checkpoint=?,usage=?,finished=? WHERE run_id=? AND stage='reasoning' AND state='reserved'",(encoded,dumps(usage) if usage else None,now(),self.run_id));detail['usage']=usage
    elif stage=='reasoning' and state in ('failed','cancelled') and current and current['state']=='reserved':
-    c.execute('UPDATE case_model_stages SET state=?,finished=? WHERE run_id=? AND stage=\'reasoning\' AND state=\'reserved\'',('failed' if state=='failed' else 'cancelled',now(),self.run_id))
+    usage=safe_usage(data.get('usage'));c.execute('UPDATE case_model_stages SET state=?,usage=?,finished=? WHERE run_id=? AND stage=\'reasoning\' AND state=\'reserved\'',('failed' if state=='failed' else 'cancelled',dumps(usage) if usage else None,now(),self.run_id));detail['usage']=usage
    elif stage in ('pillar','conclusion') and (not current or current['state']!='completed'):raise ModelStageBlocked('model stage not completed')
    event(c,self.run_id,('research_stage_' if stage in ('sources','source','report') else 'model_stage_')+state,dumps(detail))
