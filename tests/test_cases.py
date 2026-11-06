@@ -172,3 +172,18 @@ def test_evidence_bytes_tamper_blocks_auto_dispatch(tmp_path,monkeypatch):
  with db() as c:
   dec=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();snapshot=c.execute('SELECT evidence FROM case_snapshots WHERE id=?',(dec['snapshot_id'],)).fetchone();evidence=json.loads(snapshot['evidence']);evidence[next(iter(evidence))]='dGFtcGVyZWQ=';c.execute('UPDATE case_snapshots SET evidence=? WHERE id=?',(json.dumps(evidence),dec['snapshot_id']))
  with pytest.raises(ValueError,match='tampered'):case_engine.start_decision(dec['id'])
+
+def test_existing_nonreference_run_blocks_new_auto_run(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));d=with_sources(record(1911),tmp_path)
+ with db() as c:
+  c.execute('INSERT INTO candidates VALUES(?,?,?)',(d['candidate_id'],json.dumps(d),now()))
+  c.execute('INSERT INTO selections VALUES(?,?,?,?,?,?,?)',('legacy-sel-1911',d['candidate_id'],'diagnostic_exception','unverified','legacy',now(),'legacy-sel-key-1911'))
+  c.execute('INSERT INTO investigations VALUES(?,?,?,?,?,?)',('legacy-run-1911',d['candidate_id'],'legacy-sel-1911','running',now(),'legacy-run-key-1911'))
+ case=case_engine.ingest_record(d,tmp_path)
+ with db() as c: assert c.execute('SELECT count(*) FROM case_decisions WHERE case_id=?',(case,)).fetchone()[0]==0
+ view=client.get('/scouting/cases/'+case).json();assert view['lane']=='research_running' and view['research']['authorization']=='unverified_legacy' and view['research']['budget'] is None
+
+def test_policy_file_change_requires_process_restart(monkeypatch):
+ monkeypatch.setattr(case_engine,'_LOADED_POLICY_SOURCES',{'synthetic':'stale'})
+ with pytest.raises(RuntimeError,match='restart'):case_engine.policy_digest()
+ assert client.get('/scouting/cases').status_code==503

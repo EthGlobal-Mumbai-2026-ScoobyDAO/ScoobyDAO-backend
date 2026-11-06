@@ -389,11 +389,14 @@ def refresh_cases(x:CaseScan,idempotency_key:str=Header(None)):
   try: jid=job(c,'case_scan',str(x.limit),key(idempotency_key))
   except ValueError: err(409,'Idempotency key conflict')
  signal();return {'job_id':jid,'status':'queued','scope':'configured local discovery store; no network calls'}
+def case_policy_digest():
+ try:return __import__('case_engine').policy_digest()
+ except (OSError,RuntimeError):err(503,'Case policy source changed or is unavailable; restart after review')
 def case_view(c,case,policy=None):
  import datetime as dt
- policy=policy or __import__('case_engine').policy_digest()
+ policy=policy or case_policy_digest()
  snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],));record=json.loads(snap['record']);ass=json.loads(snap['assessment']);state=case['state']
- decision=c.execute('SELECT case_decisions.run_id,case_decisions.budget,investigations.status FROM case_decisions JOIN investigations ON investigations.id=case_decisions.run_id WHERE case_decisions.case_id=? AND case_decisions.run_id IS NOT NULL ORDER BY case_decisions.created DESC LIMIT 1',(case['id'],)).fetchone()
+ decision=c.execute("SELECT investigations.id AS run_id,investigations.status,case_decisions.budget FROM investigations LEFT JOIN case_decisions ON case_decisions.run_id=investigations.id WHERE investigations.candidate_id=? AND investigations.status!='reference_only' ORDER BY investigations.created DESC LIMIT 1",(case['candidate_id'],)).fetchone()
  if decision: state='investigating' if decision['status'] in ('queued','running') else 'unavailable'
  captured=json.loads(snap['evidence'])
  expected=digest(dumps({'record':record,'evidence':captured,'policy':snap['policy_digest'],'assessment':ass}).encode())
@@ -408,7 +411,7 @@ def case_view(c,case,policy=None):
  pillars=[row(x) for x in c.execute('SELECT pillar,status,detail FROM pillars WHERE run_id=? ORDER BY pillar',(decision['run_id'],))] if decision else []
  _,count,_=__import__('case_engine').verified_gate(ass,captured)
  priority={'human_review_required':0,'auto_qualified':1,'research_running':2,'monitoring':3,'unavailable':4}[lane]*100+(12-min(count,12))
- return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':'Deterministic screening; not a report or safety verdict.','uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'unavailable','reason':'Authenticated human authorization verifier is not configured.','action_url':None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':None,'report_version':None,'budget':json.loads(decision['budget']),'pillars':pillars,'reason':'One or more research producers are unavailable; no completed report.' if decision['status']=='incomplete' else None} if decision else None}
+ return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':'Deterministic screening; not a report or safety verdict.','uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'unavailable','reason':'Authenticated human authorization verifier is not configured.','action_url':None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':None,'report_version':None,'budget':json.loads(decision['budget']) if decision['budget'] else None,'authorization':'policy_qualified_local' if decision['budget'] else 'unverified_legacy','pillars':pillars,'reason':'Research is incomplete; inspect the per-pillar states.' if decision['status']=='incomplete' else None} if decision else None}
 @app.get('/cases')
 @app.get('/scouting/cases')
 def scouting_cases():
@@ -416,7 +419,7 @@ def scouting_cases():
  with db() as c:
   total=c.execute('SELECT count(*) FROM cases').fetchone()[0]
   if total>5000: err(503,'Case index exceeds bounded list capacity; cursor pagination required')
-  policy=__import__('case_engine').policy_digest();items=[case_view(c,x,policy) for x in c.execute('SELECT * FROM cases').fetchall()]
+  policy=case_policy_digest();items=[case_view(c,x,policy) for x in c.execute('SELECT * FROM cases').fetchall()]
  items.sort(key=lambda x:(x['priority_order'],x['candidate_id']))
  return {'schema_version':'scouting-case-list/1','generated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'stale_after_seconds':60,'cases':items[:100],'truncated':total>100,'authentication':'none; local operator prototype'}
 @app.get('/cases/{case_id}')
@@ -434,9 +437,9 @@ def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None)):
    if (old['case_id'],old['snapshot_id'],old['action'])!=(case_id,x.expected_revision,x.action):err(409,'Idempotency key conflict')
    old_state=old['state']
    if old_state=='pending' and old['expires']<=now():old_state='expired'
-   if old_state=='pending' and (case['current_snapshot']!=old['snapshot_id'] or __import__('case_engine').policy_digest()!=old['policy_digest']):old_state='superseded'
+   if old_state=='pending' and (case['current_snapshot']!=old['snapshot_id'] or case_policy_digest()!=old['policy_digest']):old_state='superseded'
    return {'challenge_id':old['id'],'case_id':case_id,'candidate_id':case['candidate_id'],'snapshot_digest':old['snapshot_id'],'policy_digest':old['policy_digest'],'action':old['action'],'nonce':old['nonce'],'state':old_state,'expires_at':old['expires'],'verification':'unavailable'}
-  if snap['id']!=x.expected_revision or snap['expires']<=now() or __import__('case_engine').policy_digest()!=snap['policy_digest']:err(409,'Snapshot is stale or superseded')
+  if snap['id']!=x.expected_revision or snap['expires']<=now() or case_policy_digest()!=snap['policy_digest']:err(409,'Snapshot is stale or superseded')
   if case['state'] not in ('awaiting_human','monitoring'):err(409,'Case is not awaiting an exception')
   i=ident();nonce=secrets.token_hex(32);expires=min(snap['expires'],now()+900)
   c.execute('INSERT INTO case_challenges VALUES(?,?,?,?,?,?,?,?,?,?)',(i,case_id,snap['id'],snap['policy_digest'],x.action,nonce,'pending',expires,now(),k))
@@ -449,7 +452,7 @@ def continue_challenge(challenge_id:str):
   challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,))
   if challenge['state']!='pending' or challenge['expires']<=now():err(409,'Challenge is expired or superseded')
   case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],))
-  if case['current_snapshot']!=challenge['snapshot_id'] or __import__('case_engine').policy_digest()!=challenge['policy_digest']:err(409,'Challenge is stale or superseded')
+  if case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']:err(409,'Challenge is stale or superseded')
  err(503,'Authenticated human verification adapter is not configured')
 
 @app.get('/scouting/challenges/{challenge_id}')
@@ -457,7 +460,7 @@ def challenge_status(challenge_id:str):
  with db() as c:
   challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],));state=challenge['state']
   if state=='pending' and challenge['expires']<=now():state='expired'
-  if state=='pending' and (case['current_snapshot']!=challenge['snapshot_id'] or __import__('case_engine').policy_digest()!=challenge['policy_digest']):state='superseded'
+  if state=='pending' and (case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']):state='superseded'
   return {'challenge_id':challenge_id,'candidate_id':case['candidate_id'],'snapshot_digest':challenge['snapshot_id'],'policy_digest':challenge['policy_digest'],'action':challenge['action'],'nonce':challenge['nonce'],'expires_at':challenge['expires'],'state':state,'verification':'unavailable'}
 @app.post('/scouting/challenges/{challenge_id}/{human_action}')
 def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke','revise']):
@@ -470,7 +473,7 @@ def scouting_sources():
 @app.get('/scouting/leads')
 def scouting_leads():
  # No post identifiers, excerpts, author metadata or derived content are stored until deletion is implemented.
- return {'leads':[],'status':'unavailable','reason':'Reddit provider access and deletion/retention lifecycle are not implemented; no lead can vote or qualify.'}
+ return {'leads':[],'status':'unavailable','reason':'SearchApi Reddit lead adapter and deletion/retention lifecycle are not implemented; no lead can vote or qualify.'}
 
 @app.get('/scouting/schema')
 def scouting_schema():

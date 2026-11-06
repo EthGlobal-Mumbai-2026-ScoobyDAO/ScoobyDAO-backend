@@ -46,7 +46,7 @@ def init():
   CREATE TABLE IF NOT EXISTS heartbeats(name TEXT PRIMARY KEY, seen REAL NOT NULL, detail TEXT NOT NULL);
   ''')
   c.execute("INSERT OR IGNORE INTO case_sources VALUES('discovery','unavailable','Local discovery store not yet synchronized.',?)",(now(),))
-  c.execute("INSERT OR IGNORE INTO case_sources VALUES('reddit','unavailable','No approved access; retention/deletion integration is not implemented.',?)",(now(),))
+  c.execute("INSERT OR IGNORE INTO case_sources VALUES('reddit','unavailable','SearchApi Reddit adapter is not integrated; retention/deletion lifecycle is not implemented.',?)",(now(),))
 def row(r): return dict(r) if r else None
 def event(c, rid, kind, detail): c.execute('INSERT INTO events(run_id,kind,detail,created) VALUES(?,?,?,?)',(rid,kind,detail,now()))
 def job(c, kind, ref, key):
