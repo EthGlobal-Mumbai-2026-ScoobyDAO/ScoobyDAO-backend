@@ -40,6 +40,7 @@ def init():
   CREATE TABLE IF NOT EXISTS budget_reservations(job_id TEXT PRIMARY KEY, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS render_manifests(job_id TEXT PRIMARY KEY REFERENCES jobs(id), sha256 TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS case_snapshots(id TEXT PRIMARY KEY,candidate_id TEXT NOT NULL,record TEXT NOT NULL,evidence TEXT NOT NULL,policy_digest TEXT NOT NULL,assessment TEXT NOT NULL,evaluated REAL NOT NULL,expires REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS graph_activity_inputs(source_sha256 TEXT PRIMARY KEY,case_id TEXT NOT NULL,candidate_id TEXT NOT NULL,source_json TEXT NOT NULL,created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS cases(id TEXT PRIMARY KEY,candidate_id TEXT NOT NULL UNIQUE,current_snapshot TEXT NOT NULL REFERENCES case_snapshots(id),state TEXT NOT NULL,updated REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS case_decisions(id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id),snapshot_id TEXT NOT NULL REFERENCES case_snapshots(id),policy_digest TEXT NOT NULL,action TEXT NOT NULL,budget TEXT NOT NULL,run_id TEXT,created REAL NOT NULL,UNIQUE(case_id,snapshot_id,policy_digest,action));
   CREATE TABLE IF NOT EXISTS case_challenges(id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id),snapshot_id TEXT NOT NULL REFERENCES case_snapshots(id),policy_digest TEXT NOT NULL,action TEXT NOT NULL,nonce TEXT NOT NULL UNIQUE,state TEXT NOT NULL,expires REAL NOT NULL,created REAL NOT NULL,idem TEXT NOT NULL UNIQUE);

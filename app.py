@@ -569,6 +569,13 @@ def scouting_cases():
 @app.get('/scouting/cases/{case_id}')
 def scouting_case(case_id:str):
  with db() as c:return case_view(c,getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,)))
+@app.get('/scouting/cases/{case_id}/activity')
+def scouting_case_activity(case_id:str):
+ import graph_activity_read
+ try: result=graph_activity_read.read(case_id)
+ except (ValueError,KeyError,TypeError,OSError): err(409,'Activity capture integrity unavailable')
+ if result is None:err(404,'Not found')
+ return result
 @app.post('/scouting/cases/{case_id}/challenge')
 def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None),principal=Depends(_require_admin('case_investigation'))):
  import secrets
@@ -710,7 +717,7 @@ PUBLIC_PREFIXES=('/web/v1/','/publication/v1/')
 # Public report library, GET/HEAD only: list, per-version artifacts, packages and rendered files.
 import re as _re
 PUBLIC_LIBRARY=_re.compile(r'^/(reports|reports/[^/]+/[^/]+/artifacts|packages/[0-9a-f]{64}(/.+)?|artifacts/[^/]+/.+)$')
-SCOUT_READ=_re.compile(r'^/scouting/(?:cases(?:/[^/]+)?|schema)$')
+SCOUT_READ=_re.compile(r'^/scouting/(?:cases(?:/[^/]+(?:/activity)?)?|schema)$')
 CASE_AUTH=_re.compile(r'^/scouting/(?:cases/[^/]+/challenge|challenges/[^/]+(?:/(?:world-attempt|continue|deny|revoke|revise))?|world-attempts/[^/]+(?:/cancel)?)$')
 CASE_PROGRESS=_re.compile(r'^/investigations/[^/]+/(?:events|resume)$')
 def _public_path(path,method='GET'):
