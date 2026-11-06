@@ -36,6 +36,19 @@ def select_pool(doc,chain,address,preferred=None):
  if not matches: raise ValueError('no identity-matched pool in returned page')
  return matches[0],matches
 
+def validate_candle_identity(doc,chain,address,side):
+ # When OHLC metadata exists, it must agree with the token side established
+ # from the selected pool response. Missing metadata is separately disclosed.
+ identity(chain,address)
+ if side not in ('base','quote'): raise ValueError('invalid selected token side')
+ meta=doc.get('meta') if isinstance(doc,dict) else None
+ if meta is None: return False
+ if not isinstance(meta,dict): raise ValueError('invalid OHLC token metadata')
+ token=meta.get(side)
+ if not isinstance(token,dict) or not isinstance(token.get('address'),str) or token['address'].lower()!=address.lower():
+  raise ValueError('OHLC token metadata disagrees with selected pool side')
+ return True
+
 def prepare(doc,cutoff):
  # Return closes and adjacent returns; never forward-fill missing dates or invent prices.
  rows=doc['data']['attributes']['ohlcv_list']; dates={}; cutoff=datetime.date.fromisoformat(cutoff)
@@ -64,9 +77,13 @@ def fetch(chain,address,out,pool=None):
  url=base+'/pools/'+chosen['address']+'/ohlcv/day?'+urllib.parse.urlencode({'aggregate':1,'limit':1000,'currency':'usd','token':chosen['side'],'include_empty_intervals':'false'}); candles,rec=get(url,out,'daily'); result['requests'].append(rec)
  if candles is None: store(out/'source-status.json',result); return result
  cutoff=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
- try: h=prepare(candles,cutoff)
+ try:
+  meta_verified=validate_candle_identity(candles,chain,address,chosen['side'])
+  h=prepare(candles,cutoff)
  except (KeyError,TypeError,ValueError,OverflowError) as exc:
-  result['error']='Daily candle payload invalid: '+type(exc).__name__; store(out/'source-status.json',result); return result
- result['history']={'closes_before_cutoff':h['close_count'],'adjacent_daily_returns':len(h['returns']),'gaps':h['gaps'],'cutoff_utc_date':cutoff,'policy':h['policy']}; result['state']='available_for_operator_review' if len(h['returns'])>=2 and not h['gaps'] else 'pending_history_or_data_gaps'; store(out/'returns.json',h); store(out/'source-status.json',result); return result
+  result['error']='Daily candle payload invalid: '+type(exc).__name__
+  if str(exc)=='OHLC token metadata disagrees with selected pool side': result['reason']='ohlc_token_side_mismatch'
+  store(out/'source-status.json',result); return result
+ result['history']={'ohlc_side_metadata_matches':meta_verified,'closes_before_cutoff':h['close_count'],'adjacent_daily_returns':len(h['returns']),'gaps':h['gaps'],'cutoff_utc_date':cutoff,'policy':h['policy']}; result['state']='available_for_operator_review' if len(h['returns'])>=2 and not h['gaps'] else 'pending_history_or_data_gaps'; store(out/'returns.json',h); store(out/'source-status.json',result); return result
 if __name__=='__main__':
  a=argparse.ArgumentParser(description=__doc__); a.add_argument('--chain',type=int,required=True); a.add_argument('--address',required=True); a.add_argument('--output',type=Path,required=True); a.add_argument('--pool'); x=a.parse_args(); print(json.dumps(fetch(x.chain,x.address,x.output,x.pool),indent=2))

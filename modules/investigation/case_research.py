@@ -370,10 +370,11 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                           and str(p['attributes'].get('address', '')).lower() == chosen['address']), None)
     if chosen and isinstance(candles, dict):
         try:
+            candle_side_confirmed = history.validate_candle_identity(candles, chain, address, chosen['side'])
             daily_prepared = history.prepare(candles, dt.datetime.now(dt.timezone.utc).date().isoformat())
             valid['daily'] = captured['daily']
-        except (ValueError, KeyError, TypeError, OverflowError, OSError):
-            stops.append('invalid_daily_candles')
+        except (ValueError, KeyError, TypeError, OverflowError, OSError) as exc:
+            stops.append('ohlc_token_side_mismatch' if str(exc) == 'OHLC token metadata disagrees with selected pool side' else 'invalid_daily_candles')
     if pinned_contract_capture is not None:
         try:
             analysis = contract_analysis.analyze({'chain_id': chain, 'address': address}, pinned_contract_capture)
@@ -691,6 +692,7 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                     'quality': 'unvalidated', 'evidence_ids': ['daily', 'pools'],
                     'window': {'start': points[0]['time'], 'end': points[-1]['time'], 'precision': 'day'}, 'points': points, 'unknown_reason': None})
             p['quality_issues'].append('Observed daily prices and returns are not the legacy VAE technical score or a calibrated trading signal.')
+            if not candle_side_confirmed: p['quality_issues'].append('OHLC token-side metadata was absent; pool-side association is provider-reported and not independently confirmed.')
             if daily_prepared['gaps']: p['quality_issues'].append('Daily candle gaps were excluded; series is not continuously sampled.')
         if model:
             for key, target in [('risk_assessment', 'statistical_risk'), ('technical_health', 'technical_health')]:
