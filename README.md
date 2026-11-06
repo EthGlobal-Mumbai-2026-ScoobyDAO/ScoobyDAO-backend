@@ -35,7 +35,7 @@ Candidate v0.1 and report v0.2 are frozen shared contracts. The reader validates
 - **Frontend chat `01a1adf5-cdb8-78e0-b887-625f6ca4e941`:** portable reader/build export and contributor handoff/interface proposal only.
 - **Another human teammate:** post-report publication and World ID/AgentKit human sign-off. Implemented in `publication/` on top of this seam (fake-issuer tested; live run pending); see the section below. See [workstreams](docs/workstreams.md) and the [human teammate handoff](docs/post-report-handoff.md) for the seam and exact continuation.
 
-Use separate topic branches and pull requests for workstreams. `main` is the integration checkpoint; coordinate shared contracts and review/publication interfaces before merging. Avoid concurrent edits to the same integration checkout. Discovery and investigation source exports are imported as isolated modules; neither is connected to the backend worker.
+Use separate topic branches and pull requests for workstreams. `main` is the integration checkpoint; coordinate shared contracts and review/publication interfaces before merging. Avoid concurrent edits to the same integration checkout. The case worker reconciles configured discovery snapshots and invokes the bounded investigation producer; live qualification and World confirmation still require real evidence and configuration.
 
 ## Run locally
 
