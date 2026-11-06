@@ -25,7 +25,7 @@ class GateTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);db=root/'state.sqlite'
    with patch.object(p,'Fetcher',Fake): r=p.run(db,root,2,3,['ethereum'])
-   self.assertEqual(r['qualified_candidates'],0);self.assertEqual(len(r['leads']),1)
+   self.assertIsNone(r['qualified_candidates']);self.assertEqual(len(r['leads']),1)
    c=sqlite3.connect(db); record=json.loads(c.execute('SELECT record FROM candidates').fetchone()[0]); findings=c.execute('SELECT status FROM pilot_findings').fetchall()
    self.assertEqual(record['state'],'monitoring');self.assertEqual(record['selection']['status'],'not_selected');self.assertIsNone(record['screening']['score'])
    self.assertTrue(all(row[0] in ('unknown','held') for row in findings));c.close()

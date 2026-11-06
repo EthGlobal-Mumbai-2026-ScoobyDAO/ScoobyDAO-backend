@@ -21,6 +21,29 @@ def response(point,name,target,selector):
  v=point['calls'][name]
  if v.get('to','').lower()!=target or v.get('data','').lower()!=selector or v.get('block')!=point['block_tag']:raise ValueError('RPC call not bound to the expected contract, selector and block')
  return v['result']
+def check_trace(doc,prior,latest):
+ """Bind displayed values to matching requests and responses in the captured transcript."""
+ trace=doc.get('rpc_trace')
+ if not isinstance(trace,list) or not trace:raise ValueError('missing RPC transcript')
+ def match(method,params):
+  entries=[]
+  for entry in trace:
+   if not isinstance(entry,dict):raise ValueError('invalid RPC transcript')
+   req=entry.get('request');res=entry.get('response')
+   if not isinstance(req,dict) or not isinstance(res,dict):raise ValueError('invalid RPC transcript')
+   if req.get('method')==method and req.get('params')==params:
+    if req.get('id')!=res.get('id') or 'error' in res or 'result' not in res:raise ValueError('invalid RPC transcript response')
+    entries.append(res['result'])
+  if not entries:raise ValueError('RPC transcript request missing')
+  if any(value!=entries[0] for value in entries):raise ValueError('conflicting RPC transcript responses')
+  return entries[0]
+ if match('eth_chainId',[])!='0x1':raise ValueError('RPC transcript chain mismatch')
+ for point,tag in ((prior,prior['block_tag']),(latest,'finalized')):
+  block=match('eth_getBlockByNumber',[tag,False])
+  if not isinstance(block,dict) or block.get('number')!=point['block_tag'] or block.get('hash')!=point['block_hash'] or integer(block.get('timestamp'))!=point['block_timestamp']:raise ValueError('RPC transcript block mismatch')
+  for call in point['calls'].values():
+   result=match('eth_call',[{'to':call['to'],'data':call['data']},point['block_tag']])
+   if result!=call['result']:raise ValueError('RPC transcript call mismatch')
 def price(point,token,pool):
  tag=point['block_tag'];num=integer(tag);ts=point['block_timestamp']
  if not isinstance(ts,int) or num<=0:raise ValueError('invalid block metadata')
@@ -32,7 +55,8 @@ def price(point,token,pool):
  r=response(point,'reserves',pool,'0x0902f1ac');s=r[2:]
  if len(s)!=192:raise ValueError('invalid reserve response')
  a,b,updated=(int(s[i:i+64],16) for i in (0,64,128))
- if a<=0 or b<=0:raise ValueError('zero reserves')
+ if a<=0 or b<=0 or a>=2**112 or b>=2**112 or updated>=2**32:raise ValueError('invalid reserves')
+ if updated==0 or ((ts-updated) % 2**32)>3600:raise ValueError('pool reserves are stale')
  decimals=integer(response(point,'feed_decimals',FEED,'0x313ce567'))
  if decimals>36:raise ValueError('invalid feed decimals')
  ans=response(point,'feed_round',FEED,'0xfeaf968c')[2:]
@@ -63,7 +87,8 @@ def verify(record,root,as_of):
  elapsed=latest['block_timestamp']-prior['block_timestamp']
  if not 86400<=elapsed<=90000 or integer(prior['block_tag'])>=integer(latest['block_tag']):raise ValueError('requires 24-25 hours of ordered history')
  if e.get('block_number')!=integer(latest['block_tag']) or discovery.stamp(e['observed_at']).timestamp()!=latest['block_timestamp']:raise ValueError('evidence block/time mismatch')
+ check_trace(doc,prior,latest)
  with localcontext() as context:
   context.prec=60; before=price(prior,token,pool);after=price(latest,token,pool);pct=(after/before-1)*100
  if not pct.is_finite():raise ValueError('invalid percentage')
- return {'triggered':abs(pct)>=Decimal(20),'detail':'USD price change over a complete 24–25 hour interval from finalized-block V2 pool reserves and Chainlink ETH/USD; one direct pool only.','measurements':[{'label':'USD price change','value':str(round(pct,4)),'unit':'%'},{'label':'observation interval','value':elapsed,'unit':'seconds'}],'evidence_ids':[e['id']]}
+ return {'triggered':True if abs(pct)>=Decimal(20) else None,'detail':'USD price change over a complete 24–25 hour interval from finalized-block V2 pool reserves and Chainlink ETH/USD; one direct pool only. Volume change is not evaluated, so a below-threshold price move leaves this concern unknown.','measurements':[{'label':'USD price change','value':str(round(pct,4)),'unit':'%'},{'label':'observation interval','value':elapsed,'unit':'seconds'}],'evidence_ids':[e['id']]}
