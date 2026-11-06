@@ -1,4 +1,4 @@
-import datetime, hashlib, json, os, shutil, subprocess, sys, tempfile
+import base64, datetime, hashlib, json, os, shutil, subprocess, sys, tempfile
 from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Literal
@@ -393,6 +393,28 @@ def refresh_cases(x:CaseScan,idempotency_key:str=Header(None)):
 def case_policy_digest():
  try:return __import__('case_engine').policy_digest()
  except (OSError,RuntimeError):err(503,'Case policy source changed or is unavailable; restart after review')
+def scouting_clues(record,captured):
+ evidence={e['id']:e for e in record.get('evidence',[])};clues=[]
+ for trigger in record.get('triggers',[]):
+  for evidence_id in trigger.get('evidence_ids',[]) or [None]:
+   e=evidence.get(evidence_id,{})
+   clues.append({'kind':'discovery_trigger','description':trigger['description'],'evidence_id':evidence_id,'observed_at':e.get('observed_at'),'fetched_at':e.get('fetched_at'),'verification':'unverified_provider_lead'})
+ # Project a narrow, labeled allowlist of provider claims from the already captured, hash-bound evidence.
+ for e in record.get('evidence',[]):
+  if not any('api.gopluslabs.io/api/v1/token_security/' in x for x in e.get('limitations',[])):continue
+  try:
+   raw=base64.b64decode(captured[e['source']],validate=True)
+   if digest(raw)!=e['sha256']:continue
+   data=json.loads(raw);results=data.get('result',{});address=record['identity']['address'].lower();token=next(v for k,v in results.items() if k.lower()==address and isinstance(v,dict))
+   descriptions=[]
+   if token.get('creator_percent')=='1.000000':descriptions.append('GoPlus reported the creator held 100% of supply at fetch time; this provider claim needs independent verification.')
+   n=token.get('honeypot_with_same_creator')
+   if isinstance(n,str) and n.isdigit() and 0<int(n)<=1000000:descriptions.append('GoPlus reported '+n+' honeypot(s) associated with the same creator; the claim and attribution are unverified.')
+   if token.get('is_proxy')=='1':descriptions.append('GoPlus reported a proxy; its implementation and control require independent review.')
+   for description in descriptions:clues.append({'kind':'provider_claim','description':description,'evidence_id':e['id'],'observed_at':e.get('observed_at'),'fetched_at':e.get('fetched_at'),'verification':'unverified_provider_claim'})
+  except (ValueError,TypeError,KeyError,StopIteration,AttributeError):continue
+ return clues
+
 def case_view(c,case,policy=None):
  import datetime as dt
  policy=policy or case_policy_digest()
@@ -408,11 +430,19 @@ def case_view(c,case,policy=None):
   values=[e.get(key) for e in record.get('evidence',[]) if e.get(key)]
   try:return max(values,key=lambda x:dt.datetime.fromisoformat(x.replace('Z','+00:00'))) if values else None
   except (ValueError,TypeError):return None
- reasons=[{'group_id':g['id'],'description':g['detail'],'verification_status':g['status'],'evidence_ids':[e['id'] for e in g.get('evidence',[])],'observed_at':max((e['observed_at'] for e in g.get('evidence',[])),default=None)} for g in ass['groups']]
+ reasons=[{'group_id':g['id'],'name':g.get('name',g['id']),'measurements':g.get('measurements',[]),'description':g['detail'],'verification_status':g['status'],'evidence_ids':[e['id'] for e in g.get('evidence',[])],'observed_at':max((e['observed_at'] for e in g.get('evidence',[])),default=None)} for g in ass['groups']]
  pillars=[row(x) for x in c.execute('SELECT pillar,status,detail FROM pillars WHERE run_id=? ORDER BY pillar',(decision['run_id'],))] if decision else []
  _,count,_=__import__('case_engine').verified_gate(ass,captured)
+ clues=scouting_clues(record,captured); fetched=latest('fetched_at'); observed=latest('observed_at')
+ try:
+  ages=[(dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(t.replace('Z','+00:00'))).total_seconds() for t in (fetched,observed) if t]
+  freshness='stale' if any(age>3600 for age in ages) else 'unknown' if not fetched or not observed or any(age<0 for age in ages) else 'fresh'
+ except (ValueError,TypeError):freshness='unknown'
+ remaining=max(0,4-count); routing=('Research running.' if lane=='research_running' else 'Automatic research requires four distinct freshly verified concern groups; '+str(count)+' verified, '+str(remaining)+' more required. Human exception requires authenticated verification, currently unavailable.')
+ if freshness!='fresh':routing+=' A fresh evidence check is needed; unknown checks do not establish safety.'
+ summary=next((x['description'] for x in clues if x['kind']=='provider_claim'),None) or next((x['description'] for x in clues), 'No captured discovery trigger is available.')
  priority={'human_review_required':0,'auto_qualified':1,'research_running':2,'monitoring':3,'unavailable':4}[lane]*100+(12-min(count,12))
- return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':'Deterministic screening; not a report or safety verdict.','uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'unavailable','reason':'Authenticated human authorization verifier is not configured.','action_url':None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':None,'report_version':None,'budget':json.loads(decision['budget']) if decision['budget'] else None,'authorization':'policy_qualified_local' if decision['budget'] else 'unverified_legacy','pillars':pillars,'reason':'Research is incomplete; inspect the per-pillar states.' if decision['status']=='incomplete' else None} if decision else None}
+ return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':summary,'scouting_clues':clues,'routing_rationale':routing,'evidence_freshness':freshness,'uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'unavailable','reason':'Authenticated human authorization verifier is not configured.','action_url':None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':None,'report_version':None,'budget':json.loads(decision['budget']) if decision['budget'] else None,'authorization':'policy_qualified_local' if decision['budget'] else 'unverified_legacy','pillars':pillars,'reason':'Research is incomplete; inspect the per-pillar states.' if decision['status']=='incomplete' else None} if decision else None}
 @app.get('/cases')
 @app.get('/scouting/cases')
 def scouting_cases():

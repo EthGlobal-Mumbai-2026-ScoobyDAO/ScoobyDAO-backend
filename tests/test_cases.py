@@ -210,3 +210,14 @@ def test_social_feeds_and_candidate_failure_are_independent(tmp_path,monkeypatch
  feeds=client.get('/scouting/leads').json();assert feeds['status']=='partial' and len(feeds['leads'])==2 and feeds['coverage']['available_feeds']==2
  status=client.get('/scouting/social-candidate-status').json()['candidate_queries'];assert status==[{'candidate_id':candidate,'status':'unavailable','reason':'provider_error','interpretation':'unavailable','observation_count':0}]
  Path(paths[1]).unlink();feeds=client.get('/scouting/leads').json();assert feeds['status']=='partial' and len(feeds['leads'])==1 and feeds['coverage']['available_feeds']==1
+
+
+def test_source_clues_are_separate_from_verified_gate(tmp_path,monkeypatch):
+ import base64
+ from app import scouting_clues
+ d=record(1910);stamp=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=3)).isoformat();raw=json.dumps({'result':{d['identity']['address']:{'creator_percent':'1.000000','honeypot_with_same_creator':'11','is_proxy':'1'}}}).encode();sha=hashlib.sha256(raw).hexdigest();source='snapshots/'+sha+'.json'
+ d['triggers']=[{'reason_code':'new_pool_lead','description':'Provider reported a new pool.','evidence_ids':[sha]}];d['evidence']=[{'id':sha,'source':source,'sha256':sha,'fetched_at':stamp,'observed_at':None,'block_number':None,'kind':'live_observation','limitations':['Request URL: https://api.gopluslabs.io/api/v1/token_security/1']}]
+ clues=scouting_clues(d,{source:base64.b64encode(raw).decode()});assert len(clues)==4 and all(x['verification'].startswith('unverified_') for x in clues);assert '100%' in clues[1]['description'] and '11' in clues[2]['description']
+ assert len(scouting_clues(d,{}))==1
+ folder=tmp_path/'snapshots';folder.mkdir();(folder/(sha+'.json')).write_bytes(raw);case=case_engine.ingest_record(d,tmp_path);view=client.get('/scouting/cases/'+case).json()
+ assert view['verified_triggered_count']==0 and view['evidence_freshness']=='stale' and 'four distinct' in view['routing_rationale'] and '100%' in view['summary'];assert all('measurements' in r and 'name' in r for r in view['reasons'])
