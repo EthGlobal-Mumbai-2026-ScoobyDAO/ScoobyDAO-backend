@@ -1,0 +1,62 @@
+{
+  "profile": "scooby.activity-30d/1-proposal",
+  "status": "pass",
+  "decision_scope": "selected_pool_only",
+  "token_activity_status": "threshold_reported_by_selected_pool",
+  "reason": "selected_pool_meets_threshold",
+  "evaluated_at_utc": "2026-11-07T12:34:00+00:00",
+  "window_start_utc": "2026-10-08T12:00:00+00:00",
+  "window_end_utc": "2026-11-07T12:00:00+00:00",
+  "threshold_inr": "10000000",
+  "volume_usd": "100000",
+  "volume_inr": "10000000",
+  "scope": {
+    "chain_id": 1,
+    "token_address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "pool_id": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "coverage": "selected_pool_only",
+    "token_side": "base"
+  },
+  "fx": {
+    "provider": "ECB via Frankfurter",
+    "inr_per_usd": "100",
+    "rate_date": "2026-11-06",
+    "captured_at_utc": "2026-11-07T12:34:00+00:00",
+    "evidence_id": "33c4c0b1bec4edfbf058aefa8433fd45ce9534515c687eef45c6b5185c67899e",
+    "method": "single_reference_rate_for_full_window"
+  },
+  "evidence": {
+    "pool_identity": {
+      "evidence_id": "63065bb66c1c00b04dab16ecd9664ad5f3b560525fb3d37563351af1ab515d1a",
+      "source_url": "https://api.geckoterminal.com/api/v2/networks/eth/tokens/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/pools?page=1",
+      "fetched_at_utc": "2026-11-07T12:34:00+00:00"
+    },
+    "hourly_volume": {
+      "evidence_id": "e00f33f22cca9aa3167d0358ea60ed718439a09471e63df7a1910607c309d123",
+      "source_url": "https://pro-api.coingecko.com/api/v3/onchain/networks/eth/pools/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/ohlcv/hour?aggregate=1&limit=1000&currency=usd&token=base&include_empty_intervals=false",
+      "fetched_at_utc": "2026-11-07T12:34:00+00:00"
+    },
+    "fx_rate": {
+      "evidence_id": "33c4c0b1bec4edfbf058aefa8433fd45ce9534515c687eef45c6b5185c67899e",
+      "source_url": "https://api.frankfurter.dev/v2/providers/ecb/rate/usd/inr",
+      "fetched_at_utc": "2026-11-07T12:34:00+00:00"
+    }
+  },
+  "coverage": {
+    "expected_hours": 720,
+    "observed_hours": 720
+  },
+  "context": {
+    "liquidity_usd": "12345",
+    "annualized_hourly_log_volatility": "0.0",
+    "volatility_return_count": 719,
+    "volatility_method": "sample_stddev_hourly_log_returns_times_sqrt_8760",
+    "volatility_unit": "annualized_fraction"
+  },
+  "limitations": [
+    "Selected pool only; not token-wide or all-exchange volume.",
+    "Reported USD volume can include wash trading and provider coverage or valuation errors.",
+    "Entire USD window is converted using one dated INR-per-USD reference rate, not contemporaneous trade FX.",
+    "Missing hourly intervals are unknown, not assumed zero; the latest incomplete hour is excluded."
+  ]
+}

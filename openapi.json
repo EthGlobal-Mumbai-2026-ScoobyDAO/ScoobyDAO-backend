@@ -1862,14 +1862,41 @@
           "admin"
         ],
         "summary": "Start Session",
-        "description": "Start a World login. The response carries the session token once; it stays inactive until an\nenabled reviewer holding at least one scope completes the login.",
+        "description": "Start a World login. The response carries the session token once; it stays inactive until an\nenabled reviewer holding at least one scope completes the login. With {report_id, version} in the body the\nsession is limited to that report version (the review desk \"Read\" button).",
         "operationId": "start_session_web_v1_admin_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SessionIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "X"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2356,6 +2383,26 @@
         }
       }
     },
+    "/web/v1/review-queue": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Public Review Queue",
+        "description": "Anonymous list for the review desk's Read buttons: id, version, report hash and review state only.",
+        "operationId": "public_review_queue_web_v1_review_queue_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/web/v1/admin/reviews/{report_id}/{version}/artifacts": {
       "get": {
         "tags": [
@@ -2689,6 +2736,43 @@
       "get": {
         "summary": "Scouting Case",
         "operationId": "scouting_case_cases__case_id__get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scouting/cases/{case_id}/activity": {
+      "get": {
+        "summary": "Scouting Case Activity",
+        "operationId": "scouting_case_activity_scouting_cases__case_id__activity_get",
         "parameters": [
           {
             "name": "case_id",
@@ -3476,6 +3560,28 @@
           "reason"
         ],
         "title": "Selection"
+      },
+      "SessionIn": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Report Id"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "version"
+        ],
+        "title": "SessionIn"
       },
       "TargetIn": {
         "properties": {

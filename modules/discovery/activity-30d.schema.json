@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scooby.activity-30d/1-proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile", "status", "decision_scope", "token_activity_status", "reason", "evaluated_at_utc", "window_start_utc", "window_end_utc", "threshold_inr", "volume_usd", "volume_inr", "scope", "fx", "evidence", "coverage", "context", "limitations"],
+  "properties": {
+    "profile": {"const": "scooby.activity-30d/1-proposal"},
+    "status": {"enum": ["pass", "excluded", "unknown"]},
+    "decision_scope": {"const": "selected_pool_only"},
+    "token_activity_status": {"enum": ["unknown", "threshold_reported_by_selected_pool"]},
+    "reason": {"type": "string", "minLength": 1},
+    "evaluated_at_utc": {"type": "string", "format": "date-time"},
+    "window_start_utc": {"type": "string", "format": "date-time"},
+    "window_end_utc": {"type": "string", "format": "date-time"},
+    "threshold_inr": {"const": "10000000"},
+    "volume_usd": {"type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},
+    "volume_inr": {"type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},
+    "scope": {"type": ["object", "null"], "properties": {"chain_id": {"enum": [1, 8453]}, "token_address": {"type": "string"}, "pool_id": {"type": "string"}, "token_side": {"enum": ["base", "quote"]}, "coverage": {"const": "selected_pool_only"}}, "required": ["chain_id", "token_address", "pool_id", "coverage"], "additionalProperties": false},
+    "fx": {"type": ["object", "null"], "properties": {"provider": {"const": "ECB via Frankfurter"}, "inr_per_usd": {"type": "string", "pattern": "^(?=[0-9.]*[1-9])(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}, "rate_date": {"type": "string", "format": "date"}, "captured_at_utc": {"type": "string", "format": "date-time"}, "evidence_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "method": {"const": "single_reference_rate_for_full_window"}}, "required": ["provider", "inr_per_usd", "rate_date", "captured_at_utc", "evidence_id", "method"], "additionalProperties": false},
+    "evidence": {"type": "object", "additionalProperties": {"type": "object", "required": ["evidence_id", "source_url", "fetched_at_utc"], "properties": {"evidence_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "source_url": {"type": "string"}, "fetched_at_utc": {"type": "string", "format": "date-time"}}, "additionalProperties": false}},
+    "coverage": {"type": "object", "properties": {"expected_hours": {"const": 720}, "observed_hours": {"type": "integer", "minimum": 0, "maximum": 720}}, "required": ["expected_hours", "observed_hours"], "additionalProperties": false},
+    "context": {"type": "object", "properties": {"liquidity_usd": {"type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}, "annualized_hourly_log_volatility": {"type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}, "volatility_return_count": {"type": "integer", "minimum": 0, "maximum": 719}, "volatility_method": {"const": "sample_stddev_hourly_log_returns_times_sqrt_8760"}, "volatility_unit": {"const": "annualized_fraction"}}, "required": ["liquidity_usd", "annualized_hourly_log_volatility", "volatility_return_count", "volatility_method", "volatility_unit"], "additionalProperties": false},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [{"if": {"properties": {"status": {"const": "unknown"}}}, "then": {"properties": {"volume_usd": {"type": "null"}, "volume_inr": {"type": "null"}}}, "else": {"properties": {"volume_usd": {"type": "string"}, "volume_inr": {"type": "string"}, "fx": {"type": "object"}, "scope": {"type": "object", "required": ["token_side"]}, "coverage": {"properties": {"observed_hours": {"const": 720}}}, "evidence": {"required": ["pool_identity", "hourly_volume", "fx_rate"]}}}}, {"if": {"properties": {"status": {"const": "pass"}}}, "then": {"properties": {"token_activity_status": {"const": "threshold_reported_by_selected_pool"}}}, "else": {"properties": {"token_activity_status": {"const": "unknown"}}}}]
+}
