@@ -4,8 +4,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY --chown=scooby:scooby app.py store.py worker.py provider.py ./
+COPY --chown=scooby:scooby app.py store.py worker.py provider.py seed_restore.py ./
 COPY --chown=scooby:scooby schemas ./schemas
+COPY --chown=scooby:scooby modules/investigation/contract_validate.py ./modules/investigation/contract_validate.py
 COPY --chown=scooby:scooby vendor/reader ./vendor/reader
 COPY --chown=scooby:scooby vendor/pdf_export ./vendor/pdf_export
 COPY --chown=scooby:scooby ops ./ops

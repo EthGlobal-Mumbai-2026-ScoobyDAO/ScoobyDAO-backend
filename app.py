@@ -166,8 +166,9 @@ def report_metadata(c,r):
  if digest(raw)!=r['sha256']: err(409,'Stored report integrity failure')
  doc=json.loads(raw)
  latest=c.execute('SELECT decision,created FROM reviews WHERE report_id=? AND version=? ORDER BY created DESC',(r['id'],r['version'])).fetchone()
+ diagnostic=c.execute('SELECT * FROM diagnostic_imports WHERE run_id=?',(run['id'],)).fetchone()
  return {'report_id':r['id'],'report_version':r['version'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
-         'mode':doc.get('mode'),'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),
+         'mode':doc.get('mode'),'provenance':'user_requested_historical_diagnostic' if diagnostic else 'source_curated_reference' if run['status']=='reference_only' else 'imported','diagnostic':{'description':diagnostic['description'],'model_status':diagnostic['model_status'],'case_admitted':False,'world_verified':False} if diagnostic else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),
          'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':'unverified local operator'},
          'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
 @app.get('/reports')
