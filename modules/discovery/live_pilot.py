@@ -114,7 +114,7 @@ def run(db,root,limit,budget,chain_names):
    for group,status in assessment['groups'].items():c.execute('INSERT INTO pilot_findings(candidate_id,run_id,group_id,status,detail,evidence_ids) VALUES(?,?,?,?,?,?)',(key,run_id,group,status,'Held pending method validation.' if status=='held' else 'Provider hints not independently verified; no gate vote.','[]'))
  selected_count=sum(json.loads(c.execute('SELECT record FROM candidates WHERE id=?',(lead['candidate_id'],)).fetchone()[0])['selection']['status']=='selected' for _,lead in all_leads)
  status='partial' if issues else 'ok' if all_leads else 'no_leads';c.execute('UPDATE pilot_runs SET completed_at=?,status=?,calls=? WHERE run_id=?',(now(),status,f.calls,run_id));c.commit()
- report={'run_id':run_id,'status':status,'calls':f.calls,'budget':budget,'chains':chain_names,'leads':[x[1] for x in all_leads],'issues':issues,'gate':'not_evaluated: no independently verified concern measurements','qualified_candidates':0,'selected_candidates':selected_count,'limitations':['New-pool feed is not exhaustive. Base/quote orientation and token identity are provider-reported.','Market and security responses are captured as hints only. Source observation freshness is unknown.','No numeric concern policy or live token assessment has been applied.']}
+ report={'run_id':run_id,'status':status,'calls':f.calls,'budget':budget,'chains':chain_names,'leads':[x[1] for x in all_leads],'issues':issues,'gate':'not_evaluated_by_scan: see the review queue for verified results','qualified_candidates':None,'selected_candidates':selected_count,'limitations':['New-pool feed is not exhaustive. Base/quote orientation and token identity are provider-reported.','Market and security responses are captured as hints only. Source observation freshness is unknown.','The scan itself does not verify or apply concern measurements.']}
  (Path(root)/'latest-run.json').write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding='utf-8');c.close();return report
 
 def main():
@@ -125,5 +125,5 @@ def main():
  q=review_queue.queue(a.db,a.output)
  review_queue.save_atomic(a.output/'review-queue.html',review_queue.html_page(q))
  review_queue.save_atomic(a.output/'review-queue.json',json.dumps(q,indent=2,ensure_ascii=False))
- print(json.dumps({'run_id':result['run_id'],'status':result['status'],'calls':result['calls'],'budget':result['budget'],'qualified':q['qualified_count'],'monitored':q['monitored_count'],'source_issues':result['issues'],'review_queue':str(a.output/'review-queue.html'),'gate':'No metric verifier is enabled; unverified source hints do not vote.'},indent=2))
+ print(json.dumps({'run_id':result['run_id'],'status':result['status'],'calls':result['calls'],'budget':result['budget'],'qualified':q['qualified_count'],'monitored':q['monitored_count'],'source_issues':result['issues'],'review_queue':str(a.output/'review-queue.html'),'gate':'The review queue evaluates registered verifiers; unverified source hints do not vote.'},indent=2))
 if __name__=='__main__':main()
