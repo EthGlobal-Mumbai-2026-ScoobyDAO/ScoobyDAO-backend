@@ -6,7 +6,7 @@ from jsonschema.exceptions import ValidationError
 from store import ROOT, PILLARS, db, now, ident, digest, dumps, job, event
 DISCOVERY=ROOT/'modules'/'discovery'
 if str(DISCOVERY) not in sys.path: sys.path.insert(0,str(DISCOVERY))
-import review_queue
+import review_queue, scouting_brief
 SCHEMA=json.loads((ROOT/'schemas'/'candidate.schema.json').read_text(encoding='utf-8-sig'))
 MAX_BYTES=5_000_000
 def policy_budget():
@@ -57,7 +57,15 @@ def evaluate(record,evidence):
    raw=base64.b64decode(b64,validate=True)
    if len(raw)>MAX_BYTES or digest(raw)!=Path(name).stem: raise ValueError('captured evidence hash mismatch')
    target=root/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(raw)
-  return review_queue.assess(record,root,dt.datetime.now(dt.timezone.utc))
+  brief=scouting_brief.scouting_brief(record,root,'case-assessment',dt.datetime.now(dt.timezone.utc))
+  groups=[{**{k:v for k,v in g.items() if k!='vote'},'votes':g['vote']} for g in brief['deterministic_checks']]
+  count=brief['coverage']['triggered_groups']
+  return {'candidate_id':record['candidate_id'],'identity':record['identity'],'policy':review_queue.POLICY,
+          'triggered_count':count,'evaluated_count':brief['coverage']['evaluated_groups'],
+          'eligible':brief['routing']['recommendation']=='auto_eligible',
+          'priority':'higher' if count>=5 else 'standard' if count>=4 else None,'groups':groups,
+          'scouting':{'routing':brief['routing'],'provider_observations':brief['provider_observations'],
+                      'scouting_origins':brief['scouting_origins']}}
 
 def verified_gate(assessment,evidence):
  """Count only distinct triggered groups carrying fresh captured source evidence."""
@@ -69,13 +77,15 @@ def verified_gate(assessment,evidence):
  triggered=[g for g in groups if isinstance(g,dict) and g.get('status')=='triggered' and g.get('votes')==1]
  ids=[g.get('id') for g in triggered]
  if any(not isinstance(x,str) for x in ids) or len(set(ids))!=len(ids): return False,0,None
- expiry=[];as_of=dt.datetime.now(dt.timezone.utc).timestamp()
+ expiry=[];seen_evidence=set();as_of=dt.datetime.now(dt.timezone.utc).timestamp()
  for group in triggered:
   ev=group.get('evidence')
   if not isinstance(ev,list) or not ev: return False,0,None
   for e in ev:
    try:
     name=e['source'];raw=base64.b64decode(evidence[name],validate=True); stamp=dt.datetime.fromisoformat(e['observed_at'].replace('Z','+00:00'))
+    if name in seen_evidence:return False,0,None
+    seen_evidence.add(name)
     if stamp.tzinfo is None or digest(raw)!=e['sha256'] or e['id']!=e['sha256'] or name!='snapshots/'+e['sha256']+'.json':return False,0,None
     end=stamp.timestamp()+3600
     if stamp.timestamp()>as_of or end<=as_of:return False,0,None
@@ -94,7 +104,7 @@ def ingest_record(record,source_root):
  evidence=collect_evidence(record,source_root);policy=policy_digest();assessment=evaluate(record,evidence);assessment.pop('as_of',None)
  # Assessment is recomputed; ignore eligibility/score supplied by sources.
  valid,count,gate_expiry=verified_gate(assessment,evidence);budget=policy_budget()
- snap=digest(dumps({'record':record,'evidence':evidence,'policy':policy,'assessment':assessment}).encode());case=digest(cid.encode()); t=now();state='auto_queued' if valid else 'awaiting_human' if count>0 else 'monitoring'
+ snap=digest(dumps({'record':record,'evidence':evidence,'policy':policy,'assessment':assessment}).encode());case=digest(cid.encode()); t=now();state='auto_queued' if valid else 'awaiting_human' if count>0 or assessment.get('scouting',{}).get('routing',{}).get('recommendation')=='human_review_required' else 'monitoring'
  with db() as c:
   c.execute('BEGIN IMMEDIATE')
   old=c.execute('SELECT current_snapshot FROM cases WHERE id=?',(case,)).fetchone()
