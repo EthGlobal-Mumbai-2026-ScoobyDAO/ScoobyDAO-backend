@@ -60,3 +60,9 @@ def test_source_progress_is_truthful_even_with_zero_model_budget():
  ledger=case_model.Ledger('run','decision','snap');ledger({'stage':'sources','state':'started','mode':'captured_replay'});ledger({'stage':'source','name':'market','state':'captured_replay','url':'synthetic-secret-url'});ledger({'stage':'sources','state':'completed','attempts':0,'captured':1})
  with db() as c:
   events=[dict(r) for r in c.execute('SELECT kind,detail FROM events ORDER BY seq')];assert len(events)==3 and all(e['kind'].startswith('research_stage_') for e in events);assert 'synthetic-secret-url' not in str(events);assert c.execute('SELECT count(*) FROM case_model_stages').fetchone()[0]==0
+
+
+def test_grounding_diagnostic_exposes_category_not_model_text():
+ ledger=case_model.Ledger('run','decision','snap');ledger(start_event());ledger({'stage':'reasoning','state':'failed','reason':'invalid_or_unlinked_output','detail':'pillar onchain: unsupported numeric literals: 123456789 SECRET'})
+ with db() as c:
+  event=json.loads(c.execute("SELECT detail FROM events WHERE kind='model_stage_failed'").fetchone()[0]);assert event['diagnostic']=='unsupported_numeric_literal' and '123456789' not in json.dumps(event) and 'SECRET' not in json.dumps(event)

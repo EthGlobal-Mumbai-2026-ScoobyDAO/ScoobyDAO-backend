@@ -49,6 +49,14 @@ class Ledger:
   if state in ('failed','unavailable','cancelled','blocked','skipped'):
    reason=data.get('reason')
    if isinstance(reason,str) and reason in ('context_or_evidence_invalid','missing_openai_key','provider_or_validation_failure','client_retries_not_disabled','refused','incomplete_output','invalid_or_unlinked_output','pillar_citation_scope_invalid','cross_pillar_citation','untyped_evidence_reference','unsupported_numeric_literal','provider_failure','model_identifier_mismatch','cancelled','no_identity_bound_source_evidence','sources_contain_no_usable_pillar_observation','model_budget_zero'):detail['reason']=reason
+   # Translate producer diagnostics to fixed categories; never expose raw text,
+   # identifiers or model-generated numbers in public events.
+   diagnostic=data.get('detail')
+   if isinstance(diagnostic,str):
+    if 'cite at least one local structured input' in diagnostic:detail['diagnostic']='pillar_citation_scope_invalid'
+    elif 'cite structured input and linked evidence' in diagnostic:detail['diagnostic']='missing_structured_citation'
+    elif 'evidence lacks a cited input' in diagnostic:detail['diagnostic']='unlinked_evidence_reference'
+    elif 'unsupported numeric literals' in diagnostic:detail['diagnostic']='unsupported_numeric_literal'
   with db() as c:
    c.execute('BEGIN IMMEDIATE');run=c.execute('SELECT status FROM investigations WHERE id=?',(self.run_id,)).fetchone();decision=c.execute('SELECT * FROM case_decisions WHERE id=? AND run_id=?',(self.decision_id,self.run_id)).fetchone()
    if not run or not decision:raise ModelStageBlocked('run authorization missing')
