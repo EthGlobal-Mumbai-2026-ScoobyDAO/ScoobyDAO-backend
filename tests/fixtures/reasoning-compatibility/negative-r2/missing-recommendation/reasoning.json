@@ -1,0 +1,147 @@
+{
+  "profile": "scooby.reasoning/2",
+  "candidate_id": "1:0x1111111111111111111111111111111111111111",
+  "report_id": "synthetic-v2-compatibility",
+  "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z",
+  "source_report_sha256": "0e9031448f3fe601b6f59ccba8a215f4538bca4fcd3bd11474df8a24a117773e",
+  "prompt_sha256": "a9e07558c75431a0f2b24012e1e9489c52fa2c24fad5c08bdfcbeb0710a08879",
+  "math_reference_sha256": "3fb3d3139323ae56e083409c3752488fc768b4bbe4266190004bf9c2efe76638",
+  "supplemental_math_schema_sha256": null,
+  "model_call": {
+    "provider": "offline_mock",
+    "model": "offline_mock",
+    "response_id": "no-api-call",
+    "usage": null
+  },
+  "reasoning": {
+    "pillars": [
+      {
+        "name": "microstructure",
+        "summary": "SYNTHETIC microstructure insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "microstructure-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "onchain",
+        "summary": "SYNTHETIC onchain insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "onchain-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "fundamentals",
+        "summary": "SYNTHETIC fundamentals insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "fundamentals-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "statistical_risk",
+        "summary": "SYNTHETIC statistical_risk insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "statistical_risk-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "technical_health",
+        "summary": "SYNTHETIC technical_health insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "technical_health-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      }
+    ],
+    "conclusion": {
+      "label": "SYNTHETIC TEST ONLY",
+      "summary": "SYNTHETIC proposed conclusion.",
+      "analysis": [
+        {
+          "text": "SYNTHETIC overall analysis.",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "input_ids": [
+            "onchain-claim"
+          ]
+        }
+      ],
+      "unknowns": [
+        "SYNTHETIC unknown."
+      ],
+      "supporting_claim_ids": [
+        "onchain-claim"
+      ],
+      "counterevidence_claim_ids": []
+    }
+  }
+}

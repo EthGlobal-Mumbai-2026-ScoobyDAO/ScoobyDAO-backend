@@ -1,0 +1,193 @@
+{
+  "profile": "scooby.pillar-irc/1",
+  "report_id": "synthetic-v2-compatibility",
+  "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z",
+  "candidate_id": "1:0x1111111111111111111111111111111111111111",
+  "pillars": {
+    "microstructure": {
+      "insight": {
+        "text": "SYNTHETIC microstructure insight",
+        "claim_ids": [
+          "microstructure-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "reasoning": {
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "microstructure-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "citations": {
+        "claim_ids": [
+          "microstructure-claim"
+        ],
+        "input_ids": [
+          "microstructure-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "limitations": [
+        "SYNTHETIC limitation."
+      ],
+      "questions": [
+        "SYNTHETIC open question?"
+      ]
+    },
+    "onchain": {
+      "insight": {
+        "text": "SYNTHETIC onchain insight",
+        "claim_ids": [
+          "onchain-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "reasoning": {
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "onchain-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "citations": {
+        "claim_ids": [
+          "onchain-claim"
+        ],
+        "input_ids": [
+          "onchain-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "limitations": [
+        "SYNTHETIC limitation."
+      ],
+      "questions": [
+        "SYNTHETIC open question?"
+      ]
+    },
+    "fundamentals": {
+      "insight": {
+        "text": "SYNTHETIC fundamentals insight",
+        "claim_ids": [
+          "fundamentals-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "reasoning": {
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "fundamentals-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "citations": {
+        "claim_ids": [
+          "fundamentals-claim"
+        ],
+        "input_ids": [
+          "fundamentals-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "limitations": [
+        "SYNTHETIC limitation."
+      ],
+      "questions": [
+        "SYNTHETIC open question?"
+      ]
+    },
+    "statistical_risk": {
+      "insight": {
+        "text": "SYNTHETIC statistical_risk insight",
+        "claim_ids": [
+          "statistical_risk-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "reasoning": {
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "statistical_risk-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "citations": {
+        "claim_ids": [
+          "statistical_risk-claim"
+        ],
+        "input_ids": [
+          "statistical_risk-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "limitations": [
+        "SYNTHETIC limitation."
+      ],
+      "questions": [
+        "SYNTHETIC open question?"
+      ]
+    },
+    "technical_health": {
+      "insight": {
+        "text": "SYNTHETIC technical_health insight",
+        "claim_ids": [
+          "technical_health-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "reasoning": {
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "technical_health-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "citations": {
+        "claim_ids": [
+          "technical_health-claim"
+        ],
+        "input_ids": [
+          "technical_health-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      "limitations": [
+        "SYNTHETIC limitation."
+      ],
+      "questions": [
+        "SYNTHETIC open question?"
+      ]
+    }
+  }
+}

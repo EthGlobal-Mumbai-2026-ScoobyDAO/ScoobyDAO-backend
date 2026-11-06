@@ -1,0 +1,21 @@
+name: Private staging image smoke
+on:
+  push:
+  pull_request:
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+      - run: docker compose up -d
+      - name: Check loopback API and worker heartbeat
+        run: |
+          for i in $(seq 1 36); do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null && docker compose exec -T worker python /app/ops/worker_health.py; then exit 0; fi
+            sleep 5
+          done
+          docker compose logs
+          exit 1
+      - if: always()
+        run: docker compose down -v

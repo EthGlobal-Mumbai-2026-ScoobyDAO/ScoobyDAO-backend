@@ -13,6 +13,9 @@ All routes below are local operator routes; no authentication or production auth
 | POST /scans, GET /jobs/{id} | Schedule a bounded scan or inspect work |
 | GET /investigations/{id}/events | Audit progress |
 | POST /reports/import | Validate a complete producer bundle using frontend adapter; bind exact bytes |
+| GET /packages/{sha}, /packages/{sha}/manifest.json, /packages/{sha}/report.json, /packages/{sha}/assets/{path} | Immutable package descriptor, exact root manifest, report and source-bound assets |
+| GET /reports | List report versions with digest, reference context and unverified review |
+| GET /reports/{id}/{version}/artifacts | Version-bound HTML, Markdown and PDF availability, hashes and job-specific URLs |
 | GET /reports/{id}/{version} | Report version and external review status |
 | POST /reports/{id}/{version}/review | Request review, approve, revise or reject exact digest |
 | POST /reports/{id}/{version}/render | Queue a visibly pending frontend HTML/PDF draft for exact version |
