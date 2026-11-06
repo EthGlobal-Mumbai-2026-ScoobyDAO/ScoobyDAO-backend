@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BUNDLE = Path(__file__).parent / 'historical-bundle'
 PUBLISHER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'  # anvil #0
 ATTESTOR_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'   # anvil #1
-REGISTRY = '0xfb2c164ddb3676d03e1e443f3f2934b8d0df88e5'
+REGISTRY = '0x805d681383f580403b979bf1d017cff045dc7ebd'
 RESOLVER = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 ADJUDICATOR = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC'
 OP = {'Authorization': 'Bearer op-token'}
@@ -555,6 +555,17 @@ def test_client_assertion_enforced_by_issuer(env):
     for expected in ('invalid_grant', 'invalid_client'):
         resp = httpx.Client(transport=tr).post(f'{ISSUER}/api/v1/token', data=form)
         assert resp.json()['error'] == expected
+
+
+def test_default_manifest_hash_matches_web_recompute(env, monkeypatch):
+    """The web "Recompute hash" button computes keccak256(utf8(canonicalJSON(manifest))) with sorted
+    keys and no whitespace (ScoobyDAO-web src/lib/canonical.ts). The default must match it."""
+    from eth_utils import keccak
+    monkeypatch.delenv('SCOOBY_CLAIM_HASH_ALG', raising=False)
+    t = make_target(env)
+    rep = client.get(f"/web/v1/reports/{t['report_id']}@{t['report_version']}").json()
+    canon = json.dumps(rep['manifest'], ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    assert rep['manifestHash'] == '0x' + keccak(canon).hex().removeprefix('0x')
 
 
 def test_web_adapter_shapes(env):
