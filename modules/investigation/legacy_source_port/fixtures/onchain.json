@@ -1,0 +1,40 @@
+{
+  "token": "0x1111111111111111111111111111111111111111",
+  "chainId": 1,
+  "blockNumber": 123,
+  "summary": {
+    "fundamentals_score": 85,
+    "label": "Green"
+  },
+  "flags": [],
+  "facts": {
+    "owner": null,
+    "ownershipModel": "AccessControl",
+    "renounced": false,
+    "multisig": {
+      "isSafe": false
+    },
+    "proxy": {
+      "type": "None",
+      "admin": null
+    },
+    "pauseStatus": "unknown",
+    "mintBurnPrimitives": [],
+    "blacklistPrimitives": [],
+    "taxPrimitives": [],
+    "maxTxPrimitives": [],
+    "supply": {
+      "topHolders": []
+    },
+    "liquidity": {
+      "pair": "0x3333333333333333333333333333333333333333",
+      "lpLocked": false,
+      "lockEvidence": {
+        "pctLocked": 0.0
+      }
+    },
+    "honeypot": {
+      "risk": "low"
+    }
+  }
+}

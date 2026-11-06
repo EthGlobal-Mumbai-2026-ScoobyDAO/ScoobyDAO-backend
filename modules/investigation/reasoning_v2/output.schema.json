@@ -1,0 +1,224 @@
+{
+  "type": "object",
+  "properties": {
+    "pillars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "microstructure",
+              "onchain",
+              "fundamentals",
+              "statistical_risk",
+              "technical_health"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "analysis": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "evidence_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "input_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "text",
+                "evidence_ids",
+                "input_ids"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "analysis",
+          "limitations",
+          "questions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "conclusion": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "analysis": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "input_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "text",
+              "evidence_ids",
+              "input_ids"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "supporting_claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "counterevidence_claim_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendation": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "rationale": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "evidence_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "input_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "text",
+                "evidence_ids",
+                "input_ids"
+              ],
+              "additionalProperties": false
+            },
+            "counterevidence": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "input_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "text",
+                  "evidence_ids",
+                  "input_ids"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "reversal_conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "action",
+            "rationale",
+            "counterevidence",
+            "reversal_conditions"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "label",
+        "summary",
+        "analysis",
+        "unknowns",
+        "supporting_claim_ids",
+        "counterevidence_claim_ids",
+        "recommendation"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "pillars",
+    "conclusion"
+  ],
+  "additionalProperties": false
+}
