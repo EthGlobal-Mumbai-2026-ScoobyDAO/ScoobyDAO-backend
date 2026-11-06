@@ -528,7 +528,7 @@ def case_view(c,case,policy=None):
  expected=digest(dumps({'record':record,'evidence':captured,'policy':snap['policy_digest'],'assessment':ass}).encode())
  if expected!=snap['id']: err(409,'Case snapshot integrity failure')
  if (snap['expires']<=now() or policy!=snap['policy_digest']) and state!='investigating': state='unavailable'
- lane={'monitoring':'human_review_required','awaiting_human':'human_review_required','auto_queued':'auto_qualified','investigating':'research_running','research_partial':'research_partial','research_complete':'research_complete','unavailable':'unavailable'}[state]
+ lane={'monitoring':'monitoring','awaiting_human':'human_review_required','auto_queued':'auto_qualified','investigating':'research_running','research_partial':'research_partial','research_complete':'research_complete','unavailable':'unavailable'}[state]
  def latest(key):
   values=[e.get(key) for e in record.get('evidence',[]) if e.get(key)]
   try:return max(values,key=lambda x:dt.datetime.fromisoformat(x.replace('Z','+00:00'))) if values else None
