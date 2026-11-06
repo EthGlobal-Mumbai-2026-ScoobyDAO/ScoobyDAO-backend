@@ -38,7 +38,7 @@ def run_case(run_id, producer=None):
   if out.is_symlink() or not out.is_dir():raise ValueError('unsafe bundle path')
   doc=json.loads((out/'report.json').read_bytes());sha=digest((out/'report.json').read_bytes());contract_validate.verify_digest(out,sha)
   result={'state':'partial','bundle_path':str(out),'report_id':doc['report_id'],'report_version':doc['report_version'],'report_sha256':sha,'pillar_status':{k:v['status'] for k,v in doc['pillars'].items()}}
- else:result=producer(descriptor,out,max_source_requests=budget['max_source_requests'],cancelled=cancelled)
+ else:result=producer(descriptor,out,max_source_requests=budget['max_source_requests'],captured_snapshot={'record':json.loads(snap['record']),'evidence':json.loads(snap['evidence'])},cancelled=cancelled)
  if result.get('state') in ('blocked','cancelled'):
   with db() as c:
    c.execute('BEGIN IMMEDIATE');current=c.execute('SELECT status FROM investigations WHERE id=?',(run_id,)).fetchone()
