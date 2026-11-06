@@ -19,8 +19,18 @@ def select_pool(doc,chain,address,preferred=None):
  asset=f'{NETWORKS[chain]}_{address.lower()}'; matches=[]
  for p in doc.get('data',[]):
   rel=p.get('relationships',{}); base=rel.get('base_token',{}).get('data',{}).get('id','').lower(); quote=rel.get('quote_token',{}).get('data',{}).get('id','').lower(); addr=p.get('attributes',{}).get('address','').lower()
-  if not re.fullmatch(r'0x[0-9a-f]{40}',addr): continue
-  if asset==base or asset==quote: matches.append({'address':addr,'side':'base' if asset==base else 'quote','name':p['attributes'].get('name'),'created_at':p['attributes'].get('pool_created_at')})
+  is_address=bool(re.fullmatch(r'0x[0-9a-f]{40}',addr))
+  # GeckoTerminal identifies Base Uniswap v4 pools using a bytes32 pool ID,
+  # not a contract address. Require its chain-specific DEX and pool record ID;
+  # this is a provider attribution, not independent on-chain verification.
+  dex=rel.get('dex',{}); dex=dex.get('data',{}) if isinstance(dex,dict) else {}; dex=dex if isinstance(dex,dict) else {}
+  is_base_v4_id=(chain==8453 and bool(re.fullmatch(r'0x[0-9a-f]{64}',addr))
+                 and dex.get('id')=='uniswap-v4-base' and str(p.get('id','')).lower()==f'base_{addr}')
+  if not (is_address or is_base_v4_id): continue
+  if asset==base or asset==quote:
+   record={'address':addr,'side':'base' if asset==base else 'quote','name':p['attributes'].get('name'),'created_at':p['attributes'].get('pool_created_at')}
+   if is_base_v4_id: record.update(identifier_type='provider_reported_uniswap_v4_pool_id',dex_id='uniswap-v4-base')
+   matches.append(record)
  if preferred: matches=[p for p in matches if p['address']==preferred.lower()]
  if not matches: raise ValueError('no identity-matched pool in returned page')
  return matches[0],matches
@@ -50,7 +60,7 @@ def fetch(chain,address,out,pool=None):
  try: chosen,alternatives=select_pool(doc,chain,address,pool)
  except ValueError as exc: result['error']=str(exc); store(out/'source-status.json',result); return result
  result['pool']=chosen; result['pool_alternatives']=alternatives; result['selection']='explicit pool' if pool else 'first matching pool in provider response; not best execution or market-wide coverage'
- url=base+'/pools/'+chosen['address']+'/ohlcv/day?'+urllib.parse.urlencode({'aggregate':1,'limit':1000,'currency':'usd','token':chosen['side']}); candles,rec=get(url,out,'daily'); result['requests'].append(rec)
+ url=base+'/pools/'+chosen['address']+'/ohlcv/day?'+urllib.parse.urlencode({'aggregate':1,'limit':1000,'currency':'usd','token':chosen['side'],'include_empty_intervals':'false'}); candles,rec=get(url,out,'daily'); result['requests'].append(rec)
  if candles is None: store(out/'source-status.json',result); return result
  cutoff=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
  try: h=prepare(candles,cutoff)
