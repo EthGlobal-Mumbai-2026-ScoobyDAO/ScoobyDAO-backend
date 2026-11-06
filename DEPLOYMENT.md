@@ -57,6 +57,14 @@ The API check is process-only. The worker heartbeat can take two minutes to appe
 docker run --rm -v <actual-volume>:/data:ro -v "$(pwd)/backups:/backup" alpine tar -czf /backup/scooby-data.tar.gz -C /data .
 ```
 
-Restore into a separate empty recovery volume and test in an isolated stack; validate SQLite, queue, digests and ownership before cutover. For rollback, stop both services, preserve current state, restore a compatible complete backup and prior image/config privately, then verify before resuming. SQLite migration and downgrade tooling is not implemented.
+Restore only into a newly created, verified-empty recovery volume; never extract over the active volume. Replace the placeholders after inspecting the volumes:
+
+```sh
+docker volume create <new-recovery-volume>
+docker volume inspect <new-recovery-volume>
+docker run --rm -v <new-recovery-volume>:/data -v "$(pwd)/backups:/backup:ro" alpine tar -xzf /backup/scooby-data.tar.gz -C /data
+```
+
+Mount the recovery volume in an isolated test stack; validate SQLite, queue, digests and ownership before cutover. For rollback, stop both services, preserve current state, restore a compatible complete backup and prior image/config privately, then verify before resuming. SQLite migration and downgrade tooling is not implemented.
 
 CI defines a Compose build and process/worker-heartbeat smoke; it does not establish PDF quality or public security. Docker is unavailable on the authoring workstation, so this image and stack are **not locally built or run**. Check the actual PR CI result before calling the private-stage image verified. World ID is not a prerequisite for private staging; publication remains outside this checkpoint.
