@@ -120,6 +120,10 @@ def init() -> None:
         for col in ('initiator_iss', 'initiator_sub'):
             if col not in cols:
                 c.execute(f'ALTER TABLE pub_attempts ADD COLUMN {col} TEXT')
+        # Additive: a per-report admin session (the review desk "Read" button) is limited to one report version,
+        # stored as 'report/<report_id>/<version>'. NULL means an unrestricted admin session.
+        if 'resource' not in {r['name'] for r in c.execute('PRAGMA table_info(admin_sessions)')}:
+            c.execute('ALTER TABLE admin_sessions ADD COLUMN resource TEXT')
     from .upgrade import retire_open_review_grants
     retire_open_review_grants()
 

@@ -168,6 +168,12 @@ class AdminConfig:
     publication_requires_review: bool  # a publication target needs a current World-confirmed report approval
 
 
+def review_per_report() -> bool:
+    """SCOOBY_REVIEW_PER_REPORT=true: reading or deciding on a report needs a session limited to that report (the review
+    desk "Read" button, one World confirmation per report). Off by default: any review session reads every report."""
+    return _bool(os.getenv('SCOOBY_REVIEW_PER_REPORT'))
+
+
 def admin_config() -> AdminConfig:
     release = os.getenv('SCOOBY_REPORT_RELEASE', 'all').strip().lower()
     if release not in ('all', 'approved'):

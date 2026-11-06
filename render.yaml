@@ -51,6 +51,9 @@ services:
         value: approved
       - key: SCOOBY_ADMIN_AUDIENCE
         value: https://scoobydao-backend.onrender.com
+      # Each report is read through its own World confirmation (review desk Read button).
+      - key: SCOOBY_REVIEW_PER_REPORT
+        value: "true"
       # Output of `python -m publication.cli export-reviewer --name <label>`; set in the dashboard.
       - key: SCOOBY_REVIEWERS
         sync: false

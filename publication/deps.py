@@ -5,11 +5,11 @@ import hmac
 import threading
 from functools import lru_cache
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 from . import service
-from .admin import SCOPES, AdminWorldClient, bearer, principal_for_token
-from .config import ConfigError, admin_config, chain_config, settings, world_config
+from .admin import SCOPES, AdminWorldClient, bearer, principal_for_token, report_resource
+from .config import ConfigError, admin_config, chain_config, review_per_report, settings, world_config
 from .world import WorldClient
 
 _world_lock = threading.Lock()
@@ -29,14 +29,40 @@ def require_admin(scope: str):
     if scope not in SCOPES:
         raise ValueError(f'unknown admin scope {scope!r}')
 
-    def dependency(authorization: str | None = Header(None)):
+    def dependency(request: Request, authorization: str | None = Header(None)):
         principal = principal_for_token(bearer(authorization))
         if principal is None:
             raise HTTPException(401, 'admin session required', headers={'WWW-Authenticate': 'Bearer'})
         if scope not in principal.scopes:
             raise HTTPException(403, f'admin scope {scope} required')
+        target = route_resource(request)
+        if principal.resource is not None and target != principal.resource:
+            raise HTTPException(403, 'this session is limited to another report; use Read on this report')
+        if principal.resource is None and target is not None and scope == 'report_review' and review_per_report():
+            raise HTTPException(403, 'reading a report needs its own World ID confirmation; use Read on this report')
         return principal
     return dependency
+
+
+def route_resource(request: Request) -> str | None:
+    """The report version a request is about ('report/<id>/<version>'), from its path, or None."""
+    from store import db
+    pp = request.path_params
+    if 'report_id' in pp and 'version' in pp:
+        return report_resource(pp['report_id'], pp['version'])
+    if 'web_id' in pp and '@' in pp['web_id']:
+        rid, ver = pp['web_id'].rsplit('@', 1)
+        return report_resource(rid, ver)
+    if 'attempt_id' in pp:
+        with db() as c:
+            if '/review-attempts/' in request.url.path:
+                row = c.execute('SELECT t.report_id, t.report_version FROM rev_attempts a JOIN rev_targets t ON t.id=a.target_id '
+                                'WHERE a.id=?', (pp['attempt_id'],)).fetchone()
+            else:
+                row = c.execute('SELECT t.report_id, t.report_version FROM pub_attempts a JOIN pub_targets t ON t.id=a.target_id '
+                                'WHERE a.id=?', (pp['attempt_id'],)).fetchone()
+        return report_resource(row['report_id'], row['report_version']) if row else 'report/unknown/unknown'
+    return None
 
 
 def get_settings():
