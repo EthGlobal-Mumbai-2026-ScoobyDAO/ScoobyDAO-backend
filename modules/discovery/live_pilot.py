@@ -83,9 +83,9 @@ def evaluate(groups):
  count=sum(v=='triggered' for v in result.values())
  return {'groups':result,'triggered_groups':count,'evaluated_groups':sum(v in ('triggered','not_triggered') for v in result.values()),'eligible':count>=4,'priority':'higher' if count>=5 else 'standard' if count>=4 else None,'note':'Votes require validated metric-specific evidence; this boundary does not itself validate observations.'}
 
-def run(db,root,limit,budget,chain_names):
+def run(db,root,limit,budget,chain_names,fetcher_factory=None):
  if limit<1 or limit>10 or budget<0 or budget>30:raise ValueError('limit must be 1-10 per chain and budget 0-30')
- c=setup(db); started=now();run_id=hashlib.sha256(started.encode()).hexdigest()[:16]; f=Fetcher(Path(root)/'snapshots',budget); c.execute('INSERT INTO pilot_runs VALUES(?,?,?,?,?,?)',(run_id,started,None,'running',0,budget));c.commit(); all_leads=[]; issues=[]
+ c=setup(db); started=now();run_id=hashlib.sha256(started.encode()).hexdigest()[:16]; f=(fetcher_factory or Fetcher)(Path(root)/'snapshots',budget); c.execute('INSERT INTO pilot_runs VALUES(?,?,?,?,?,?)',(run_id,started,None,'running',0,budget));c.commit(); all_leads=[]; issues=[]
  def fetch_source(name,url):
   try: data,e,meta=f.get(url)
   except BudgetExhausted as ex: data,e,meta=None,None,{'status':'backpressure','error':str(ex)}
