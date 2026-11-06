@@ -1,0 +1,96 @@
+{
+  "pair": {
+    "base": "0x1111111111111111111111111111111111111111",
+    "quote": "0x2222222222222222222222222222222222222222",
+    "chainId": 1
+  },
+  "blockNumber": 123,
+  "venues": [
+    {
+      "name": "synthetic",
+      "pool": "0x3333333333333333333333333333333333333333",
+      "tick": 0,
+      "sqrtPriceX96": "79228162514264337593543950336",
+      "liquidity": "0",
+      "feeBps": 500,
+      "depth": {
+        "up": {
+          "pct2": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct5": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct10": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          }
+        },
+        "down": {
+          "pct2": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct5": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          },
+          "pct10": {
+            "notionalQuote": 0.0,
+            "route": "direct"
+          }
+        }
+      },
+      "slippageCurve": [
+        {
+          "notionalQuote": 1000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 5000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 10000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 25000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 50000.0,
+          "slippagePct": 2.0000001655807422e-08
+        },
+        {
+          "notionalQuote": 100000.0,
+          "slippagePct": 2.0000001655807422e-08
+        }
+      ],
+      "cliffs": [
+        {
+          "tick": 0.0,
+          "deltaLRatio": 0.0
+        }
+      ],
+      "activeLiquidityRatio": 1.0,
+      "lpConcentration": {
+        "top1Share": 0.0,
+        "top5Share": 0.0,
+        "hhi": 0.0,
+        "sampledPositions": 0.0
+      }
+    }
+  ],
+  "crossVenueSpreadBps": 0.0,
+  "mevExposure": {
+    "score": 68,
+    "evidence": {
+      "sandwichDensity": "elevated",
+      "depthThin": true
+    }
+  },
+  "microstructure_score": 7
+}

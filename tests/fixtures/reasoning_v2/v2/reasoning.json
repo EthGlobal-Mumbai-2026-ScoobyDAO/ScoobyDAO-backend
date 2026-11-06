@@ -1,0 +1,171 @@
+{
+  "profile": "scooby.reasoning/2",
+  "candidate_id": "1:0x1111111111111111111111111111111111111111",
+  "report_id": "synthetic-v2-compatibility",
+  "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z",
+  "source_report_sha256": "0e9031448f3fe601b6f59ccba8a215f4538bca4fcd3bd11474df8a24a117773e",
+  "prompt_sha256": "39d222d9ba2bb3bb1fe7ed3e74ccda5ced9543e43d83656feeede4cf7b34747b",
+  "math_reference_sha256": "5f330cf0ed036cc9fe03a3b525aebfa6ccfdd611f8e9745ed97659499871027a",
+  "supplemental_math_schema_sha256": null,
+  "model_call": {
+    "provider": "offline_mock",
+    "model": "offline_mock",
+    "response_id": "no-api-call",
+    "usage": null
+  },
+  "reasoning": {
+    "pillars": [
+      {
+        "name": "microstructure",
+        "summary": "SYNTHETIC microstructure insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "microstructure-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "onchain",
+        "summary": "SYNTHETIC onchain insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "onchain-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "fundamentals",
+        "summary": "SYNTHETIC fundamentals insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "fundamentals-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "statistical_risk",
+        "summary": "SYNTHETIC statistical_risk insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "statistical_risk-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      },
+      {
+        "name": "technical_health",
+        "summary": "SYNTHETIC technical_health insight",
+        "analysis": [
+          {
+            "text": "SYNTHETIC observation and reasoning.",
+            "evidence_ids": [
+              "test-a"
+            ],
+            "input_ids": [
+              "technical_health-claim"
+            ]
+          }
+        ],
+        "limitations": [
+          "SYNTHETIC limitation."
+        ],
+        "questions": [
+          "SYNTHETIC open question?"
+        ]
+      }
+    ],
+    "conclusion": {
+      "label": "SYNTHETIC TEST ONLY",
+      "summary": "SYNTHETIC proposed conclusion.",
+      "analysis": [
+        {
+          "text": "SYNTHETIC overall analysis.",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "input_ids": [
+            "onchain-claim"
+          ]
+        }
+      ],
+      "unknowns": [
+        "SYNTHETIC unknown."
+      ],
+      "supporting_claim_ids": [
+        "onchain-claim"
+      ],
+      "counterevidence_claim_ids": [],
+      "recommendation": {
+        "action": "SYNTHETIC TEST ONLY: defer the fictional interaction.",
+        "rationale": {
+          "text": "SYNTHETIC rationale.",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "input_ids": [
+            "onchain-claim"
+          ]
+        },
+        "counterevidence": [
+          {
+            "text": "SYNTHETIC counterevidence.",
+            "evidence_ids": [
+              "test-b"
+            ],
+            "input_ids": []
+          }
+        ],
+        "reversal_conditions": [
+          "SYNTHETIC reversal condition."
+        ]
+      }
+    }
+  }
+}
