@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "app.js",
-      "sha256": "1e8a299ffbd615244cfb1a7282a64bf44fe1d33ca83118a131dba622f4bc8cce"
+      "sha256": "cda8c38b9c4606e068e3b4881d8564d89a9403904a828ff7d41da13513b94ea6"
     },
     {
       "path": "build.py",
