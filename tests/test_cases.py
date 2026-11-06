@@ -13,7 +13,7 @@ BASE=Path(__file__).parent
 
 @pytest.fixture(autouse=True)
 def isolated_state(tmp_path,monkeypatch):
- monkeypatch.setattr(store,'DB',tmp_path/'case-state.sqlite3');store.init()
+ monkeypatch.delenv('SCOOBY_SOCIAL_CONTEXT_FILE',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'case-state.sqlite3');store.init()
 
 def record(n):
  d=json.loads((BASE/'candidate.json').read_text(encoding='utf-8-sig'));d['mode']='live';d['identity']['address']='0x'+format(n,'040x');d['candidate_id']='1:'+d['identity']['address'];d['identity']['symbol']='SYNTHETIC';d['selection']={'status':'not_selected','selected_by':None,'selected_at':None,'reason':None};d['state']='monitoring';d['evidence']=[];return d
@@ -187,3 +187,15 @@ def test_policy_file_change_requires_process_restart(monkeypatch):
  monkeypatch.setattr(case_engine,'_LOADED_POLICY_SOURCES',{'synthetic':'stale'})
  with pytest.raises(RuntimeError,match='restart'):case_engine.policy_digest()
  assert client.get('/scouting/cases').status_code==503
+
+
+def test_social_context_is_transient_unresolved_and_expires(tmp_path,monkeypatch):
+ stamp=datetime.datetime.now(datetime.timezone.utc);source=tmp_path/'metadata.json'
+ item={'id':'t3_synthetic','url':'https://www.reddit.com/r/CryptoScams/comments/synthetic/example/','subreddit':'CryptoScams','observed_at':(stamp-datetime.timedelta(days=200)).isoformat(),'fetched_at':stamp.isoformat(),'attribution':'fabricated','verified_concern_votes':99,'author':'MUST NOT LEAK','excerpt':'MUST NOT LEAK'}
+ source.write_text(json.dumps({'profile':'scooby.reddit-leads/1','provider':'searchapi.io','observations':[item]}));monkeypatch.setenv('SCOOBY_SOCIAL_CONTEXT_FILE',str(source))
+ result=client.get('/scouting/leads').json();assert result['status']=='partial' and len(result['leads'])==1
+ lead=result['leads'][0];assert lead['attribution']=='unresolved' and lead['verified_concern_votes']==0 and lead['age_days']>=200 and 'author' not in lead and 'excerpt' not in lead
+ assert next(x for x in client.get('/scouting/sources').json()['sources'] if x['id']=='reddit')['status']=='partial'
+ with db() as c:assert c.execute('SELECT count(*) FROM cases').fetchone()[0]==0
+ item['fetched_at']=(stamp-datetime.timedelta(days=2)).isoformat();source.write_text(json.dumps({'profile':'scooby.reddit-leads/1','provider':'searchapi.io','observations':[item]}));assert client.get('/scouting/leads').json()['leads']==[]
+ source.unlink();assert client.get('/scouting/leads').json()['status']=='unavailable'

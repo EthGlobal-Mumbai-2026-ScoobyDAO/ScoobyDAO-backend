@@ -1,4 +1,5 @@
-import hashlib, json, os, shutil, subprocess, sys, tempfile
+import datetime, hashlib, json, os, shutil, subprocess, sys, tempfile
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Header
@@ -467,13 +468,41 @@ def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke'
  with db() as c:getrow(c,'SELECT id FROM case_challenges WHERE id=?',(challenge_id,))
  err(503,'Authenticated human verification adapter is not configured')
 
+def social_context():
+ # Explicitly configured local metadata only. Read on demand; never copy into the database or reports.
+ path=os.getenv('SCOOBY_SOCIAL_CONTEXT_FILE','').strip()
+ unavailable={'leads':[],'status':'unavailable','reason':'No current bounded SearchApi metadata is configured.','provider':'searchapi.io'}
+ if not path:return unavailable
+ try:
+  p=Path(path)
+  if p.stat().st_size>262144:raise ValueError('metadata too large')
+  data=json.loads(p.read_text(encoding='utf-8-sig'))
+  if data.get('profile')!='scooby.reddit-leads/1' or data.get('provider')!='searchapi.io':raise ValueError('unsupported metadata')
+  observations=data['observations']
+  if not isinstance(observations,list) or len(observations)>40:raise ValueError('invalid observations')
+  leads=[];current=datetime.datetime.now(datetime.timezone.utc)
+  for item in observations:
+   fetched=datetime.datetime.fromisoformat(item['fetched_at'].replace('Z','+00:00'));observed=datetime.datetime.fromisoformat(item['observed_at'].replace('Z','+00:00'))
+   age=(current-fetched).total_seconds()
+   if fetched.tzinfo is None or observed.tzinfo is None or age<0 or age>86400 or observed>fetched:raise ValueError('stale or invalid observation')
+   url=item['url'];parts=urlsplit(url)
+   if parts.scheme!='https' or parts.hostname not in ('www.reddit.com','reddit.com') or parts.username or parts.password or len(url)>2048:raise ValueError('invalid URL')
+   ident=item['id'];sub=item['subreddit']
+   if not isinstance(ident,str) or not ident.startswith('t3_') or not ident[3:].isalnum() or not isinstance(sub,str) or not sub.replace('_','').isalnum() or len(sub)>32:raise ValueError('invalid identity')
+   leads.append({'id':ident,'url':url,'subreddit':sub,'observed_at':observed.isoformat(),'fetched_at':fetched.isoformat(),'age_days':round((current-observed).total_seconds()/86400,2),'source_mode':'dated_social_context','attribution':'unresolved','verified_concern_votes':0})
+  return {'leads':leads,'status':'partial','provider':'searchapi.io','reason':'Historical context only; attribution unresolved and research integration incomplete. Metadata expires 24 hours after fetch.','coverage':{'posts_examined':len(leads),'complete':False},'storage':'read-only external metadata; not persisted by backend'}
+ except (OSError,ValueError,TypeError,KeyError,AttributeError,OverflowError):return unavailable
+
 @app.get('/scouting/sources')
 def scouting_sources():
- with db() as c:return {'sources':[row(x) for x in c.execute('SELECT * FROM case_sources ORDER BY id')],'reddit_lead_storage':'blocked_pending_retention_and_deletion_review','authentication':'none; local operator prototype'}
+ context=social_context()
+ with db() as c:sources=[row(x) for x in c.execute('SELECT * FROM case_sources ORDER BY id')]
+ for source in sources:
+  if source['id']=='reddit' and context['status']=='partial':source.update(status='partial',detail='SearchApi metadata is available as historical context; identity resolution and durable lifecycle remain incomplete.')
+ return {'sources':sources,'reddit_lead_storage':'blocked_pending_retention_and_deletion_review','authentication':'none; local operator prototype'}
 @app.get('/scouting/leads')
 def scouting_leads():
- # No post identifiers, excerpts, author metadata or derived content are stored until deletion is implemented.
- return {'leads':[],'status':'unavailable','reason':'SearchApi Reddit lead adapter and deletion/retention lifecycle are not implemented; no lead can vote or qualify.'}
+ return social_context()
 
 @app.get('/scouting/schema')
 def scouting_schema():
