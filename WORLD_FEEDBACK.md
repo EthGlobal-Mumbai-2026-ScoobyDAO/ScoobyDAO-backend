@@ -32,5 +32,5 @@ Fill in after the live run. Timing comes from the `world_timing` log events (`di
 
 - Python 3.11, FastAPI, httpx, PyJWT[crypto] 2.x, cryptography, eth-account, web3 7.x (see `requirements.txt`)
 - Issuer: `https://auth.world.org` (or sandbox), discovery checked 2026-11-06
-- Chain: Ethereum Sepolia, ReportRegistry `0xfb2c164ddb3676d03e1e443f3f2934b8d0df88e5`
+- Chain: Ethereum Sepolia, ReportRegistry `0x805d681383f580403b979bf1d017cff045dc7ebd`
 - World App version used by the reviewer: _

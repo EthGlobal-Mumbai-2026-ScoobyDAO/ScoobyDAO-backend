@@ -1,0 +1,51 @@
+# Render blueprint: backend API only (step 1 of docs/render-deploy.md). Publishing stays off.
+# One instance only: device codes live in process memory and SQLite needs a single writer.
+services:
+  - type: web
+    name: scooby-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # paid plan: persistent disks and the Render Shell need it
+    region: singapore
+    branch: deploy/render-backend
+    numInstances: 1
+    healthCheckPath: /health
+    disk:
+      name: scooby-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: SCOOBY_DATA
+        value: /data
+      - key: SCOOBY_PUBLIC_GATE
+        value: "true"
+      - key: SCOOBY_OPERATOR_TOKEN
+        generateValue: true
+      - key: SCOOBY_MODEL_CALL_BUDGET
+        value: "0"
+      - key: SCOOBY_PUBLISH_ENABLED
+        value: "false"
+      - key: SCOOBY_DEMO_AUTOPUBLISH
+        value: "false"
+      - key: SCOOBY_CLAIM_HASH_ALG
+        value: keccak256
+      - key: SCOOBY_CHAIN_ID
+        value: "11155111"
+      - key: SCOOBY_REPORT_REGISTRY
+        value: "0x805d681383f580403b979bf1d017cff045dc7ebd"
+      # World ID (step 3): set in the dashboard after portal registration.
+      - key: WORLD_ISSUER
+        value: https://auth.world.org
+      - key: WORLD_CLIENT_ID
+        sync: false
+      - key: WORLD_CLIENT_KEY_ID
+        value: scooby-2026-11
+      - key: WORLD_CLIENT_KEY_PATH
+        value: /etc/secrets/world_client_key.pem   # upload as a Render Secret File
+      - key: WORLD_ACCEPTED_ACR
+        value: https://world.org/oidc/acr/orb,https://world.org/oidc/acr/orb-face
+      - key: WORLD_ASSERTION_AUD
+        value: endpoint
+      # Set when the frontend is deployed (step 4); exact origin, no trailing slash.
+      - key: SCOOBY_WEB_ORIGIN
+        sync: false
