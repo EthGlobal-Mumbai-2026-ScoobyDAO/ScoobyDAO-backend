@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from jsonschema import Draft202012Validator
 from store import ROOT, DATA, db, ident, now, dumps, digest, row, job, event, PILLARS
 from worker import wake
-app=FastAPI(title='Scooby DAO local operator API',version='0.1.0',description='Local-only prototype. Identities and review receipts are not authenticated.')
+app=FastAPI(title='Scooby DAO local operator API',version='0.1.0',description='Local-only prototype. Local review receipts are unauthenticated; World ID integration requires live verification.')
 web_origin=os.getenv('SCOOBY_WEB_ORIGIN','').strip()
 if web_origin:
  if not (web_origin.startswith('http://') or web_origin.startswith('https://')) or '*' in web_origin or web_origin.endswith('/'):
@@ -335,8 +335,24 @@ def honeypot_readiness():
   'research_output':'reference bundle imported and rendered; no automated end-to-end deep research',
   'reader':'corrected IRC reader integrated for imported bundles; automated research remains unwired',
   'pdf':'reference draft contains expanded reader and bound full Markdown; thumbnail and text checks passed, detailed accessibility and typography QA pending',
-  'review':'local unverified receipts; no authenticated sign-off',
-  'publication':'reserved for human teammate; not implemented',
+  'review':'local receipts are unauthenticated; separate World ID integration is not live-verified',
+  'publication':'optional World ID and outbox implementation; disabled by default, not live-verified',
   'paid_model_budget_default':0,
   'documentation':'docs/honeypot-readiness.md'
  }
+
+# Publication boundary and World ID Agent Pass sign-off live in publication/ (see docs/publication-plan.md).
+from publication import routes as publication_routes, web_adapter as publication_web
+app.include_router(publication_routes.router)
+app.include_router(publication_web.router)
+
+class PublicationWebCORS(CORSMiddleware):
+ async def __call__(self, scope, receive, send):
+  if scope['type'] == 'http' and scope['path'].startswith('/web/v1/'):
+   await super().__call__(scope, receive, send)
+  else:
+   await self.app(scope, receive, send)
+
+if web_origin:
+ app.add_middleware(PublicationWebCORS, allow_origins=[web_origin], allow_methods=['GET','POST'],
+                    allow_headers=['Content-Type'])
