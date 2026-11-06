@@ -18,7 +18,7 @@ python tests/smoke_worker.py
    python scripts/world_jwk.py secrets/world_client_key.pem --kid scooby-2026-11   # paste the JWKS into the portal
    ```
    Set `WORLD_ISSUER`, `WORLD_CLIENT_ID`, `WORLD_CLIENT_KEY_PATH`, `WORLD_CLIENT_KEY_ID`.
-2. **Keys and funding.** Create two Sepolia EOAs: the publisher, which must be `ReportRegistry.publisher()` for `0xfb2c164ddb3676d03e1e443f3f2934b8d0df88e5` (if it isn't, deploy a new registry with your publisher and update `SCOOBY_REPORT_REGISTRY`), and the attestor. Fund only the publisher with Sepolia ETH. Set `SCOOBY_PUBLISHER_KEY`, `SCOOBY_ATTESTOR_KEY`, `SCOOBY_RPC_URL`, `SCOOBY_RESOLVER`, `SCOOBY_ADJUDICATOR`, `SCOOBY_OPERATOR_TOKEN`.
+2. **Keys and funding.** Create two Sepolia EOAs: the publisher, which must be `ReportRegistry.publisher()` for `0x805d681383f580403b979bf1d017cff045dc7ebd` (if it isn't, deploy a new registry with your publisher and update `SCOOBY_REPORT_REGISTRY`), and the attestor. Fund only the publisher with Sepolia ETH. Set `SCOOBY_PUBLISHER_KEY`, `SCOOBY_ATTESTOR_KEY`, `SCOOBY_RPC_URL`, `SCOOBY_RESOLVER`, `SCOOBY_ADJUDICATOR`, `SCOOBY_OPERATOR_TOKEN`.
 3. **Enroll reviewers** (each does a World App login once):
    ```bash
    python -m publication.cli enroll --name alice

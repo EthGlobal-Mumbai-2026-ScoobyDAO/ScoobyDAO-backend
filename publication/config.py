@@ -65,7 +65,7 @@ class Settings:
     approval_ttl: int
     operator_token: str | None = field(repr=False)
     web_origin: str = 'http://localhost:3000'
-    claim_hash_alg: str = 'sha256'
+    claim_hash_alg: str = 'keccak256'
     lock_margin: int = 3600
 
     def __repr__(self) -> str:
@@ -73,7 +73,7 @@ class Settings:
 
 
 def settings() -> Settings:
-    alg = os.getenv('SCOOBY_CLAIM_HASH_ALG', 'sha256').strip().lower()
+    alg = os.getenv('SCOOBY_CLAIM_HASH_ALG', 'keccak256').strip().lower()
     if alg not in ('sha256', 'keccak256'):
         raise ConfigError('SCOOBY_CLAIM_HASH_ALG must be sha256 or keccak256')
     return Settings(
