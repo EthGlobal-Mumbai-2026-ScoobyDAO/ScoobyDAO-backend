@@ -5,6 +5,7 @@ from store import DATA, db, digest, dumps, event, job, now, PILLARS
 from modules.investigation.contract_validate import verify_digest
 
 def restore(root, manifest_sha, selected):
+ if os.getenv('SCOOBY_REPORT_RELEASE','').strip().lower()!='approved':raise ValueError('SCOOBY_REPORT_RELEASE=approved required before seed restore')
  root=Path(root).resolve()
  if root.is_file() and root.suffix.lower()=='.zip':
   with tempfile.TemporaryDirectory(dir=DATA) as tmp:
