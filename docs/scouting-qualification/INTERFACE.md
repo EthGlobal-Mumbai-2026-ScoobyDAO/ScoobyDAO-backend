@@ -1,6 +1,6 @@
 # Proposed shared scouting and qualification interfaces
 
-Status: owner proposals under reconciliation. This document is not a deployed API or an adopted replacement for frozen candidate v0.1/report v0.2. Backend owns the final additive schema and conformance tests; discovery and web must explicitly accept it before runtime adoption.
+Status: the read-only local Cases prototype is accepted at the tested schema/commit below; authorization and final integration remain under reconciliation. This document is not a deployed API or an adopted replacement for frozen candidate v0.1/report v0.2. Backend owns the final additive schema and conformance tests; discovery and web must explicitly accept it before runtime adoption.
 
 ## Discovery to backend
 
@@ -12,7 +12,7 @@ Reddit search results enter a separate lead boundary before canonical candidate 
 
 ## Backend to Cases UI
 
-Web proposes `GET /scouting/cases` with an additive `scouting-case-list/1` envelope: generated timestamp, staleness window and bounded cases list. Each record includes candidate identity, source mode/reference context, backend-owned lane/ordering, human-action requirement, summary/uncertainties, observation/capture times and concern/evidence reasons. A successful empty list differs from unavailable or failed source/transport.
+The locally tested producer provides `GET /scouting/cases` with an additive `scouting-case-list/1` envelope: generated timestamp, staleness window and bounded cases list. Each record includes candidate identity, source mode/reference context, backend-owned lane/ordering, human-action requirement, summary/uncertainties, observation/capture times and concern/evidence reasons. A successful empty list differs from unavailable or failed source/transport.
 
 Proposed lanes: `human_review_required`, `auto_qualified`, `research_running`, `monitoring`, `unavailable`. Backend owns deterministic attention order with stable candidate-ID ties. Historical references and demo market/case records are separated from live scouting. Return actual research run/report references only when they exist. The UI does not infer completion, probability, sign-off or publication.
 
@@ -25,8 +25,20 @@ The scouting transport uses an explicitly configured HTTPS origin or loopback HT
 | Boundary | Owner proposal | Acceptance |
 |---|---|---|
 | Screening result | Discovery: content-bound identity/policy, group outcomes, evidence/freshness, assessment and urgency | Await backend schema mapping and discovery acceptance |
-| Cases read model | Web: `scouting-case-list/1`, lane/priority, freshness, reasons, disabled verified continuation | Await backend exact DTO and web acceptance |
+| Cases read model | `scouting-case-list/1`, lane/priority, freshness, reasons, disabled verified continuation | Accepted for local read-only prototype at the exact tested snapshot below; final consumer commit/merge remains to record |
 | Research authorization | Root build charter: separate scoped candidate action/principal result | Await backend verifier seam and teammate implementation acceptance |
 | Social provider | Investigation transport; discovery consumes lead results | Await callable/result contract and consumer acceptance |
 
 Implementation PRs must include positive and negative producer/consumer fixtures, version identifiers, source byte/digest rules and failure semantics. Record acceptance and exact commits here or link the adopted repository contract; do not silently replace field names across workstreams.
+
+## Accepted local read snapshot
+
+Backend PR #12, tested source commit `640e91856f9ea779024bbf3d33f55a190e98de2d`. Canonical additive runtime schema path: `schemas/runtime/scouting-case-list-v1.schema.json`; exact-byte SHA-256 `ef227454cbcf429b15a6b2a268c9b057d83e1e90288cf02a2dea2eae37bfb336`. Frozen candidate/report contracts are unchanged. The orchestrator verified the tested schema bytes and their identity with later local source; that does not independently validate every later runtime revision.
+
+Actual browser proof: web `127.0.0.1:3109` fetched API `127.0.0.1:58448` with the exact matching CORS origin at1440/375. Four existing discovery-pilot snapshots rendered as monitoring, with source dates/ages and all concern reasons accessible; no qualified/urgent case was invented, no overflow/page errors or writes. Mock tests separately cover urgency and disabled continuation. This is private local prototype acceptance, not authenticated/public deployment or full research completion.
+
+The runtime DTO currently permits only live Ethereum/Base identity and `reference:null`; historical catalog is a future separate read model, not fabricated case/report IDs. Symbol can be null. Records include `case_id`, candidate identity, `snapshot_digest`, `policy_digest`, `expires_at`, `verified_triggered_count`, `reasons` (triggered/not_triggered/unknown/held), and optional actual research status, budget, pillars and reason. Counts are backend-reported, not probabilities. Source age is distinct from list TTL. Incomplete research is preserved and cannot remain falsely running.
+
+Backend orders all cases by human-action attention and distinct verified concern count with stable candidate ties before returning up to100. The bounded index limit is5,000; above that the prototype returns503 rather than silently omitting older urgent records. Human continuation remains unavailable until the teammate verifier and action contract exist. The current challenge wire action is `diagnostic_research`; build-charter scope labels describe intended permission and are not additional deployed endpoints.
+
+Social integration separately accepted14 dated context observations across two successful bounded SearchApi queries, with unresolved token identity and zero concern votes. A RAY-specific query returned provider-declared failure of unknown exact cause; no sentiment inference follows. All3 additional request-budget calls are used, with no retries. These social records are not the four pilot cases and do not prove fresh risk. Final producer/consumer commits, full worker invocation and scoped human verification remain separate checkpoints.
