@@ -105,10 +105,15 @@ def ingest_record(record,source_root):
  # Assessment is recomputed; ignore eligibility/score supplied by sources.
  valid,count,gate_expiry=verified_gate(assessment,evidence);budget=policy_budget()
  snap=digest(dumps({'record':record,'evidence':evidence,'policy':policy,'assessment':assessment}).encode());case=digest(cid.encode()); t=now();state='auto_queued' if valid else 'awaiting_human' if count>0 or assessment.get('scouting',{}).get('routing',{}).get('recommendation')=='human_review_required' else 'monitoring'
+ expires=[t+3600]
+ if gate_expiry is not None:expires.append(gate_expiry)
+ for hint in assessment.get('scouting',{}).get('provider_observations',{}).get('observations',[]):
+  if hint.get('code')!='provider_source_unavailable':
+   expires.append(dt.datetime.fromisoformat(hint['source_evidence']['fetched_at'].replace('Z','+00:00')).timestamp()+scouting_brief.MAX_HINT_AGE_SECONDS)
  with db() as c:
   c.execute('BEGIN IMMEDIATE')
   old=c.execute('SELECT current_snapshot FROM cases WHERE id=?',(case,)).fetchone()
-  c.execute('INSERT OR IGNORE INTO case_snapshots VALUES(?,?,?,?,?,?,?,?)',(snap,cid,dumps(record),dumps(evidence),policy,dumps(assessment),t,min(t+3600,gate_expiry) if gate_expiry else t+3600))
+  c.execute('INSERT OR IGNORE INTO case_snapshots VALUES(?,?,?,?,?,?,?,?)',(snap,cid,dumps(record),dumps(evidence),policy,dumps(assessment),t,min(expires)))
   existing_run=c.execute("SELECT status FROM investigations WHERE candidate_id=? AND status!='reference_only' ORDER BY created DESC LIMIT 1",(cid,)).fetchone()
   if existing_run: state='investigating' if existing_run['status'] in ('queued','running') else 'monitoring'
   c.execute('INSERT INTO cases VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET current_snapshot=excluded.current_snapshot,state=excluded.state,updated=excluded.updated',(case,cid,snap,state,t))

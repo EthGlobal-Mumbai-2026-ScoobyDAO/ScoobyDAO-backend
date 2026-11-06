@@ -6,12 +6,12 @@ def test_fresh_provider_concern_routes_human_without_gate_vote(tmp_path,monkeypa
  monkeypatch.setattr(store,'DB',tmp_path/'backend.sqlite');store.init()
  record=json.loads((Path(__file__).parent/'candidate.json').read_text(encoding='utf-8-sig'));address='0x'+'a'*40
  record.update(mode='live',candidate_id='1:'+address,triggers=[]);record['identity'].update(chain_id=1,address=address)
- stamp=datetime.datetime.now(datetime.timezone.utc).isoformat();raw=json.dumps({'code':1,'result':{address:{'is_honeypot':'1'}}}).encode();sha=hashlib.sha256(raw).hexdigest();folder=tmp_path/'snapshots';folder.mkdir();(folder/(sha+'.json')).write_bytes(raw)
+ fetched=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(minutes=59);stamp=fetched.isoformat();raw=json.dumps({'code':1,'result':{address:{'is_honeypot':'1'}}}).encode();sha=hashlib.sha256(raw).hexdigest();folder=tmp_path/'snapshots';folder.mkdir();(folder/(sha+'.json')).write_bytes(raw)
  record['evidence']=[{'id':sha,'sha256':sha,'source':'snapshots/'+sha+'.json','kind':'live_observation','observed_at':None,'fetched_at':stamp,'block_number':None,'limitations':['Request URL: https://api.gopluslabs.io/api/v1/token_security/1?contract_addresses='+address]}]
  case=case_engine.ingest_record(record,tmp_path)
  with store.db() as c:
   row=c.execute('SELECT state,current_snapshot FROM cases WHERE id=?',(case,)).fetchone();assert row['state']=='awaiting_human'
-  assessment=json.loads(c.execute('SELECT assessment FROM case_snapshots WHERE id=?',(row['current_snapshot'],)).fetchone()[0]);assert assessment['triggered_count']==0 and not assessment['eligible'];assert assessment['scouting']['routing']['recommendation']=='human_review_required'
+  snap=c.execute('SELECT assessment,expires FROM case_snapshots WHERE id=?',(row['current_snapshot'],)).fetchone();assessment=json.loads(snap['assessment']);assert assessment['triggered_count']==0 and not assessment['eligible'];assert assessment['scouting']['routing']['recommendation']=='human_review_required';assert snap['expires']<=fetched.timestamp()+3600
   assert c.execute('SELECT count(*) FROM case_decisions WHERE case_id=?',(case,)).fetchone()[0]==0
 
 def test_same_artifact_cannot_count_for_distinct_groups():
