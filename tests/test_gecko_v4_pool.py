@@ -78,3 +78,15 @@ def test_v4_history_fetch_uses_provider_id_and_disables_empty_fill(tmp_path, mon
     assert result['pool']['identifier_type']=='provider_reported_uniswap_v4_pool_id'
     assert result['state']=='pending_history_or_data_gaps' and result['history']['closes_before_cutoff']==0
     assert '/pools/'+POOL_ID+'/ohlcv/day?' in calls[1][0] and 'include_empty_intervals=false' in calls[1][0]
+
+
+def test_rate_limit_is_visible_as_unavailable_without_retry(tmp_path, monkeypatch):
+    import urllib.error
+    calls=[]
+    def rejected(request, timeout):
+        calls.append(request)
+        raise urllib.error.HTTPError(request.full_url, 429, 'rate limited', {}, None)
+    monkeypatch.setattr(history.urllib.request,'urlopen',rejected)
+    result=history.fetch(8453,ADDR,tmp_path/'rate-limited')
+    assert result['state']=='unavailable' and result['history'] is None
+    assert result['requests'][0]['http_status']==429 and len(calls)==1

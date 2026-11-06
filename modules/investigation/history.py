@@ -1,5 +1,5 @@
 """Fetch identity-bound GeckoTerminal daily candles; no trading, no model calls."""
-import argparse, datetime, hashlib, json, math, re, urllib.parse, urllib.request
+import argparse, datetime, hashlib, json, math, re, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 NETWORKS={1:'eth',8453:'base'}
 def stamp(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -14,6 +14,7 @@ def get(url,out,name):
   if len(raw)>10000000: raise ValueError('response too large')
   doc=json.loads(raw,parse_constant=lambda s:(_ for _ in ()).throw(ValueError('non-finite JSON')))
   (out/(name+'.json')).write_bytes(raw); return doc,{'url':url,'requested_at':start,'fetched_at':stamp(),'http_status':status,'sha256':hashlib.sha256(raw).hexdigest(),'path':name+'.json'}
+ except urllib.error.HTTPError as e: return None,{'url':url,'requested_at':start,'fetched_at':stamp(),'error_type':'HTTPError','http_status':e.code,'status':'unavailable'}
  except Exception as e: return None,{'url':url,'requested_at':start,'fetched_at':stamp(),'error_type':type(e).__name__,'status':'unavailable'}
 def select_pool(doc,chain,address,preferred=None):
  asset=f'{NETWORKS[chain]}_{address.lower()}'; matches=[]
