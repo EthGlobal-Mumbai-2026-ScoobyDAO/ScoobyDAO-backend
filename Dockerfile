@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=scooby:scooby app.py store.py worker.py provider.py ./
 COPY --chown=scooby:scooby schemas ./schemas
 COPY --chown=scooby:scooby vendor/reader ./vendor/reader
+COPY --chown=scooby:scooby vendor/pdf_export ./vendor/pdf_export
 COPY --chown=scooby:scooby ops ./ops
 COPY --chown=scooby:scooby publication ./publication
 USER scooby
