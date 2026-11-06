@@ -8,11 +8,35 @@ from functools import lru_cache
 from fastapi import Header, HTTPException
 
 from . import service
-from .config import ConfigError, chain_config, settings, world_config
+from .admin import SCOPES, AdminWorldClient, bearer, principal_for_token
+from .config import ConfigError, admin_config, chain_config, settings, world_config
 from .world import WorldClient
 
 _world_lock = threading.Lock()
 _world: WorldClient | None = None
+
+
+def get_admin_cfg():
+    try:
+        return admin_config()
+    except ConfigError as e:
+        raise HTTPException(503, str(e)) from None
+
+
+def require_admin(scope: str):
+    """Dependency factory: an active admin session (World login of an enabled reviewer) holding `scope`.
+    Reviewer status and scopes are re-read on every request."""
+    if scope not in SCOPES:
+        raise ValueError(f'unknown admin scope {scope!r}')
+
+    def dependency(authorization: str | None = Header(None)):
+        principal = principal_for_token(bearer(authorization))
+        if principal is None:
+            raise HTTPException(401, 'admin session required', headers={'WWW-Authenticate': 'Bearer'})
+        if scope not in principal.scopes:
+            raise HTTPException(403, f'admin scope {scope} required')
+        return principal
+    return dependency
 
 
 def get_settings():
@@ -30,12 +54,13 @@ def get_chain_cfg():
 
 
 def get_world() -> WorldClient:
-    """Real World client from env. No configuration means 503 (fail closed)."""
+    """Real World client from env. No configuration means 503 (fail closed). It carries the
+    checkpoint-1 hook (authorize_case_admin) that the case bridge requires."""
     global _world
     with _world_lock:
         if _world is None:
             try:
-                _world = WorldClient(world_config())
+                _world = AdminWorldClient(world_config())
             except ConfigError as e:
                 raise HTTPException(503, f'World sign-off is not configured: {e}') from None
         return _world

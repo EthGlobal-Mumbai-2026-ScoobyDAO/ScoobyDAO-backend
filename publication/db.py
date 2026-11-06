@@ -52,10 +52,74 @@ CREATE TRIGGER IF NOT EXISTS pub_events_no_delete BEFORE DELETE ON pub_events
  BEGIN SELECT RAISE(ABORT, 'pub_events is append-only'); END;
 '''
 
+# Admin boundary and checkpoint 2 (report sign-off). Separate namespaces from pub_* and from the
+# case bridge's case_* tables, so no receipt can stand in for another kind.
+ADMIN_SCHEMA = '''
+CREATE TABLE IF NOT EXISTS admin_scopes(
+ iss TEXT NOT NULL, sub TEXT NOT NULL,
+ scope TEXT NOT NULL CHECK (scope IN ('case_investigation','report_review','publication')),
+ granted_by TEXT NOT NULL, created REAL NOT NULL, revoked_at REAL,
+ PRIMARY KEY(iss, sub, scope), FOREIGN KEY(iss, sub) REFERENCES pub_reviewers(iss, sub));
+CREATE TABLE IF NOT EXISTS admin_sessions(
+ id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE,
+ state TEXT NOT NULL CHECK (state IN ('pending','active','denied','expired','cancelled','not_permitted','failed','revoked')),
+ iss TEXT, sub TEXT, accepted_acr TEXT NOT NULL, device_code_hash TEXT NOT NULL, user_code TEXT NOT NULL,
+ verification_uri TEXT NOT NULL, verification_uri_complete TEXT, interval INTEGER NOT NULL, next_poll_at REAL NOT NULL,
+ started_at REAL NOT NULL, login_expires_at REAL NOT NULL, expires_at REAL, error TEXT, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS admin_events(
+ seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, actor TEXT NOT NULL, detail_json TEXT NOT NULL, created REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS admin_events_append_only BEFORE UPDATE ON admin_events
+ BEGIN SELECT RAISE(ABORT, 'admin_events is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS admin_events_no_delete BEFORE DELETE ON admin_events
+ BEGIN SELECT RAISE(ABORT, 'admin_events is append-only'); END;
+CREATE TABLE IF NOT EXISTS rev_targets(
+ id TEXT PRIMARY KEY, report_id TEXT NOT NULL, report_version TEXT NOT NULL, report_sha256 TEXT NOT NULL,
+ target_json TEXT NOT NULL, target_digest TEXT NOT NULL UNIQUE, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS rev_attempts(
+ id TEXT PRIMARY KEY, target_id TEXT NOT NULL REFERENCES rev_targets(id),
+ decision TEXT NOT NULL CHECK (decision IN ('approve','reject','revise')), reason TEXT NOT NULL,
+ binding_json TEXT NOT NULL, binding_digest TEXT NOT NULL UNIQUE,
+ initiator_iss TEXT NOT NULL, initiator_sub TEXT NOT NULL, session_id TEXT NOT NULL REFERENCES admin_sessions(id),
+ accepted_acr TEXT NOT NULL, device_code_hash TEXT NOT NULL, user_code TEXT NOT NULL, verification_uri TEXT NOT NULL,
+ verification_uri_complete TEXT, interval INTEGER NOT NULL, next_poll_at REAL NOT NULL, started_at REAL NOT NULL,
+ expires_at REAL NOT NULL,
+ status TEXT NOT NULL CHECK (status IN ('pending','confirmed','denied','expired','cancelled','not_permitted','failed','superseded')),
+ error TEXT, idem TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS rev_receipts(
+ id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL UNIQUE REFERENCES rev_attempts(id), target_id TEXT NOT NULL REFERENCES rev_targets(id),
+ target_digest TEXT NOT NULL, binding_digest TEXT NOT NULL, decision TEXT NOT NULL CHECK (decision IN ('approve','reject','revise')),
+ reason TEXT NOT NULL, reviewer_iss TEXT NOT NULL, reviewer_sub TEXT NOT NULL, acr TEXT NOT NULL, amr_json TEXT NOT NULL,
+ auth_time INTEGER NOT NULL, id_token_sha256 TEXT NOT NULL UNIQUE, verified_at REAL NOT NULL, verifier_version TEXT NOT NULL,
+ revoked_at REAL, revoke_reason TEXT);
+CREATE TABLE IF NOT EXISTS rev_events(
+ seq INTEGER PRIMARY KEY AUTOINCREMENT, target_id TEXT, kind TEXT NOT NULL, actor TEXT NOT NULL, detail_json TEXT NOT NULL, created REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS rev_receipts_append_only BEFORE UPDATE ON rev_receipts
+ WHEN NEW.id IS NOT OLD.id OR NEW.attempt_id IS NOT OLD.attempt_id OR NEW.target_id IS NOT OLD.target_id
+   OR NEW.target_digest IS NOT OLD.target_digest OR NEW.binding_digest IS NOT OLD.binding_digest
+   OR NEW.decision IS NOT OLD.decision OR NEW.reason IS NOT OLD.reason OR NEW.reviewer_iss IS NOT OLD.reviewer_iss
+   OR NEW.reviewer_sub IS NOT OLD.reviewer_sub OR NEW.acr IS NOT OLD.acr OR NEW.amr_json IS NOT OLD.amr_json
+   OR NEW.auth_time IS NOT OLD.auth_time OR NEW.id_token_sha256 IS NOT OLD.id_token_sha256
+   OR NEW.verified_at IS NOT OLD.verified_at OR NEW.verifier_version IS NOT OLD.verifier_version
+   OR (OLD.revoked_at IS NOT NULL AND (NEW.revoked_at IS NOT OLD.revoked_at OR NEW.revoke_reason IS NOT OLD.revoke_reason))
+ BEGIN SELECT RAISE(ABORT, 'rev_receipts is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS rev_receipts_no_delete BEFORE DELETE ON rev_receipts
+ BEGIN SELECT RAISE(ABORT, 'rev_receipts is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS rev_events_append_only BEFORE UPDATE ON rev_events
+ BEGIN SELECT RAISE(ABORT, 'rev_events is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS rev_events_no_delete BEFORE DELETE ON rev_events
+ BEGIN SELECT RAISE(ABORT, 'rev_events is append-only'); END;
+'''
+
 
 def init() -> None:
     with db() as c:
         c.executescript(SCHEMA)
+        c.executescript(ADMIN_SCHEMA)
+        # Additive: a publication attempt started from an admin session is bound to that admin (NULL for operator CLI/API).
+        cols = {r['name'] for r in c.execute('PRAGMA table_info(pub_attempts)')}
+        for col in ('initiator_iss', 'initiator_sub'):
+            if col not in cols:
+                c.execute(f'ALTER TABLE pub_attempts ADD COLUMN {col} TEXT')
 
 
 def audit(c, target_id: str | None, kind: str, actor: str, detail: dict | None = None) -> None:

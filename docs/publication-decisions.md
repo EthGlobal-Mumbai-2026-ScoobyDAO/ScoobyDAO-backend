@@ -33,6 +33,17 @@ Sources checked on 2026-11-06: the live discovery document at `https://auth.worl
 15. **Demo autopublish.** `SCOOBY_DEMO_AUTOPUBLISH=true` (default false), and only with publishing enabled: the first `/web/v1/approvals/{id}` read after an approve receipt calls `request_publication` once (idempotency key = receipt id). All publish checks still apply. The operator API never auto-publishes.
 16. **Revocation limits.** Before broadcast, revoke stops the outbox, and the publisher re-checks revocation in a transaction right before sending. After broadcast or confirmation it is recorded and the status shows `revoked`, but the onchain record cannot be removed.
 
+## Admin World ID checkpoints (backend PR #10)
+
+Sources rechecked on 2026-11-06: World docs (oidc, step-up, id-token, testing, app-registration, xaa) and the live discovery document. Full design: [admin-world-checkpoints.md](admin-world-checkpoints.md).
+
+17. **Admin permission is server-side.** A World login identifies a person. An admin is an enrolled reviewer (`pub_reviewers`) holding an explicit scope (`admin_scopes`: `case_investigation`, `report_review`, `publication`), granted by CLI. Admin sessions are bearer tokens issued after a World device login of such a reviewer. They are stored as SHA-256, and scopes are re-read on every request.
+18. **Report sign-off is its own off-chain target.** `scooby.report-review-target/1` binds report bytes, lineage, the evidence manifest (files re-hashed) and the render manifest. It needs no chain configuration, publisher key or transaction. The publication target keeps its chain parameters and its own World sign-off. A report approval never authorizes publication; with `SCOOBY_PUBLICATION_REQUIRES_REVIEW=true` (the default), it is a precondition for preparing a target and for each publish request.
+19. **The confirmer must be the requester.** World docs: bind the attempt to the requester's backend session and require the validated `(iss, sub)` to match. Checkpoint-2 attempts and web-started publication attempts complete only for the admin who started them, while that admin still holds the scope. Operator-started publication attempts keep the earlier rule (any enabled reviewer).
+20. **Private reads.** `GET /publication/v1/targets/{id}` and `/attempts/{id}` returned user codes to anyone who knew an attempt id, and `/web/v1/reports/{id}` exposes that id as `approvalId`. Both reads now need the operator token, and the web sign-off routes need an admin session with the `publication` scope.
+21. **Delegation and passkeys.** World documents no delegation claim, so ID tokens with an RFC 8693 `act` or `may_act` claim are rejected for every human checkpoint. No AgentKit dependency is added. A passkey (`amr` with `mfa`) can satisfy the baseline `acr` classes without a fresh World proof. Receipts record which method was used; `orb-face` forces a fresh proof.
+22. **Case checkpoint hook.** The case bridge (backend PR #12) starts a run only if `world.authorize_case_admin(identity, binding)` returns true. `AdminWorldClient` implements it: action `diagnostic_research`, an enabled reviewer holding `case_investigation`, and an active admin session. The hook is read-only and fails closed. A path guard protects the case-checkpoint routes.
+
 ## Future work (not in this task)
 
 IDKit proofs and REP badges, AgentKit/AgentBook, a reviewer-held signing key instead of the backend attestor, encrypted-at-rest device codes for multi-process APIs, and a `GET /stats` and `/claims` read model for the web.

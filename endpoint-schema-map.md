@@ -24,7 +24,20 @@ All routes below are local operator routes; no authentication or production auth
 
 OpenAPI DTOs are implementation-owned. Frozen candidate v0.1 and report v0.2 are copied byte-for-byte; the frontend validator is the integration authority for bundle semantics. The proposed TL;DR sidecar remains `scooby.pillar-tldr/1`.
 
-## Publication v1 (operator; bearer `SCOOBY_OPERATOR_TOKEN` on mutating routes)
+## Admin checkpoints (bearer admin session from a World login; see docs/admin-world-checkpoints.md)
+
+| Route | Purpose |
+|---|---|
+| POST /web/v1/admin/session, GET /web/v1/admin/session, DELETE /web/v1/admin/session | Start a World login (token returned once), poll it until active, sign out; only enrolled reviewers holding a scope activate |
+| GET /web/v1/admin/reviews, /web/v1/admin/reviews/{id}/{version} | `report_review`: every installed version with its state; full review context and the exact target digest |
+| POST /web/v1/admin/reviews/{id}/{version}/attempts | `{decision, reason, expected_target_digest}` + Idempotency-Key → World confirmation bound to the requesting admin |
+| GET /web/v1/admin/review-attempts/{id}, POST /web/v1/admin/review-attempts/{id}/cancel | Requesting admin only; poll-on-read or cancel |
+| POST /web/v1/admin/reviews/{id}/{version}/revoke | Withdraw recorded decisions; the version returns to pending review |
+| POST /web/v1/reports/{id}/approve, GET /web/v1/approvals/{id} | Now need an admin session with the `publication` scope; requester only |
+| Case bridge (PR #12) challenge, world-attempt and resume routes | Guarded by path: admin session with `case_investigation` |
+| GET /reports, /reports/{id}/{version}/artifacts | Add `admin_review` (`scooby.report-review-status/1`, safe for consumers) |
+
+## Publication v1 (operator; bearer `SCOOBY_OPERATOR_TOKEN` on every route, including target and attempt reads)
 
 | Route | Purpose |
 |---|---|

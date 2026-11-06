@@ -122,3 +122,38 @@ def chain_config() -> ChainConfig:
         confirmations=max(1, _int('SCOOBY_CONFIRMATIONS', 1)),
         demo_autopublish=_bool(os.getenv('SCOOBY_DEMO_AUTOPUBLISH')),
     )
+
+
+@dataclass(frozen=True)
+class AdminConfig:
+    """Admin boundary for the two World ID checkpoints (see docs/admin-world-checkpoints.md)."""
+    session_ttl: int                   # seconds an admin session stays active after its World login
+    attempt_ttl: int                   # upper bound for one checkpoint confirmation (World caps device codes at 20 min)
+    audience: str                      # bound into every checkpoint binding; a receipt for another audience never counts
+    max_pending_logins: int            # unauthenticated login starts are capped (each one calls World)
+    report_release: str                # 'all': consumers list every report with its review state; 'approved': only approved ones
+    publication_requires_review: bool  # a publication target needs a current World-confirmed report approval
+
+
+def admin_config() -> AdminConfig:
+    release = os.getenv('SCOOBY_REPORT_RELEASE', 'all').strip().lower()
+    if release not in ('all', 'approved'):
+        raise ConfigError('SCOOBY_REPORT_RELEASE must be all or approved')
+    audience = (os.getenv('SCOOBY_ADMIN_AUDIENCE') or 'scooby-admin').strip()
+    if not audience or len(audience) > 200:
+        raise ConfigError('SCOOBY_ADMIN_AUDIENCE must be 1-200 characters')
+    session_ttl = _int('SCOOBY_ADMIN_SESSION_TTL', 4 * 3600)
+    attempt_ttl = _int('SCOOBY_ADMIN_ATTEMPT_TTL', 600)
+    if not 60 <= session_ttl <= 24 * 3600:
+        raise ConfigError('SCOOBY_ADMIN_SESSION_TTL must be between 60 and 86400 seconds')
+    if not 60 <= attempt_ttl <= 1200:
+        raise ConfigError('SCOOBY_ADMIN_ATTEMPT_TTL must be between 60 and 1200 seconds')
+    return AdminConfig(
+        session_ttl=session_ttl,
+        attempt_ttl=attempt_ttl,
+        audience=audience,
+        max_pending_logins=max(1, _int('SCOOBY_ADMIN_MAX_PENDING_LOGINS', 20)),
+        report_release=release,
+        publication_requires_review=os.getenv('SCOOBY_PUBLICATION_REQUIRES_REVIEW', 'true').strip().lower()
+        not in ('0', 'false', 'no', 'off'),
+    )

@@ -172,11 +172,14 @@ def report_metadata(c,r):
          'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
 @app.get('/reports')
 def list_reports():
- with db() as c: return [report_metadata(c,r) for r in c.execute('SELECT * FROM reports ORDER BY created DESC').fetchall()]
+ # admin_review is the World-confirmed checkpoint-2 state; the local 'review' above it never authorizes release.
+ with db() as c: return [dict(report_metadata(c,r),admin_review=report_review.public_status(c,r['id'],r['version'])) for r in c.execute('SELECT * FROM reports ORDER BY created DESC').fetchall() if report_review.consumer_visible(c,r['id'],r['version'])]
 @app.get('/reports/{report_id}/{version}/artifacts')
 def report_artifacts(report_id:str,version:str):
  with db() as c:
-  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version)); result=report_metadata(c,r)
+  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version))
+  if not report_review.consumer_visible(c,report_id,version): err(404,'Not found')
+  result=report_metadata(c,r); result['admin_review']=report_review.public_status(c,report_id,version)
   jobs=c.execute("SELECT * FROM jobs WHERE kind='render' AND state='done' ORDER BY created DESC").fetchall()
   match=next((j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}),None)
  if not match:
@@ -346,9 +349,18 @@ from publication import routes as publication_routes, web_adapter as publication
 app.include_router(publication_routes.router)
 app.include_router(publication_web.router)
 
+# Admin boundary for the two World ID checkpoints (docs/admin-world-checkpoints.md): the /web/v1/admin API, the
+# path guard on case-checkpoint routes, and CORS that lets the admin web send its session bearer token.
+from publication import admin as publication_admin, admin_routes as publication_admin_routes, review as report_review
+app.include_router(publication_admin_routes.router)
+app.add_middleware(publication_admin.AdminRouteGuard)
+if web_origin:
+ app.add_middleware(publication_admin_routes.AdminWebCORS, allow_origins=[web_origin], allow_credentials=False,
+                    allow_methods=['GET','POST','DELETE'], allow_headers=['Content-Type','Authorization','Idempotency-Key'])
+
 class PublicationWebCORS(CORSMiddleware):
  async def __call__(self, scope, receive, send):
-  if scope['type'] == 'http' and scope['path'].startswith('/web/v1/'):
+  if scope['type'] == 'http' and scope['path'].startswith('/web/v1/') and not publication_admin_routes.cors_path(scope['path']):
    await super().__call__(scope, receive, send)
   else:
    await self.app(scope, receive, send)
