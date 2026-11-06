@@ -275,13 +275,14 @@ def get_reason(input_id:str):
 def honeypot_readiness():
  return {
   'kind':'static_integration_inventory',
-  'checkpoint_case_status':'no_selection_recorded_in_this_checkpoint',
+  'checkpoint_case_status':'no_fresh_milestone_selection_recorded_in_this_checkpoint',
+  'reference_track':'RAY source-curated report imported; diagnostic exception, not gate-qualified; review pending',
   'normal_gate':{'required_distinct_verified_groups':4,'wired_verifiers':0,'qualified_selection_enabled':False},
   'discovery_newer_work':'G07 and partial G09 exist in an unmerged worktree, not in this worker',
   'investigation':'five persisted pillar states; producers are not wired',
-  'research_output':'external bundle import and validation only; no automated end-to-end report',
+  'research_output':'reference bundle imported and rendered; no automated end-to-end deep research',
   'reader':'corrected IRC reader integrated for imported bundles; automated research remains unwired',
-  'pdf':'pending draft with expanded reader and bound full Markdown; case-specific QA required',
+  'pdf':'reference draft contains expanded reader and bound full Markdown; thumbnail and text checks passed, detailed accessibility and typography QA pending',
   'review':'local unverified receipts; no authenticated sign-off',
   'publication':'reserved for human teammate; not implemented',
   'paid_model_budget_default':0,

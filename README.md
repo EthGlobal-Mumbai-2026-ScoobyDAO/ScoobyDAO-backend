@@ -8,7 +8,7 @@ This repository is an **early local integration scaffold**, not a live or produc
 
 M0 readiness is in progress; M1 bounded discovery is owned by discovery, with no new case selected in this backend checkpoint. M2 requires separate human selection or a newly approved diagnostic exception. M3 investigates the mechanism and five pillars; M4 integrates the actual selected run into IRC HTML and a complete PDF; M5 compares the locked draft with independent evidence and seeks human sign-off. M6 publication and World ID/AgentKit remain reserved for the **human teammate**. The conclusion is evidence-driven and may be inconclusive. See the [milestones](docs/honeypot-validation-milestones.md) and [readiness/dependency map](docs/honeypot-readiness.md).
 
-Discovery's newer unmerged worktree has narrowly scoped G07 and partial G09 verifiers; the older export in this repository and the backend worker do not have them wired. A corrected IRC reader and research audit also exist outside this checkout. No end-to-end workflow is claimed from their existence. `GET /readiness/honeypot` is a static integration inventory, not a live case gate or health check.
+Discovery's newer unmerged worktree has narrowly scoped G07 and partial G09 verifiers; the older export in this repository and the backend worker do not have them wired. The corrected IRC reader is integrated for imported reference bundles; the separate research audit remains outside this checkout. The root-curated RAY reference has passed the local API-to-worker-to-HTML/Markdown/PDF path, but automated deep research is not wired and detailed PDF accessibility and typography QA remains. `GET /readiness/honeypot` is a static integration inventory, not a live case gate or health check.
 
 ## What works and what remains
 
