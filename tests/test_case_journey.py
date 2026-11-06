@@ -45,3 +45,14 @@ def test_both_routes_generate_and_link_report_using_synthetic_dependencies(tmp_p
  reports=client.get('/reports').json();assert len(reports)==1 and reports[0]['case_id']==case and reports[0]['candidate_id']==d['candidate_id'];assert reports[0]['review']['status']=='pending'
  artifact=client.get('/reports/'+research['report_id']+'/'+research['report_version']+'/artifacts').json();assert artifact.get('artifacts',{}).get('html',{}).get('availability')=='available',artifact;assert len(calls)==5
  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1 and c.execute('SELECT count(*) FROM reports').fetchone()[0]==1
+
+
+def test_real_producer_at_zero_budget_blocks_without_fabricated_report(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r))
+ d=with_sources(record(int(ADDR[2:],16)),tmp_path);case=case_engine.ingest_record(d,tmp_path)
+ with db() as c:decision=c.execute('SELECT id FROM case_decisions WHERE case_id=?',(case,)).fetchone()['id']
+ run=case_engine.start_decision(decision);assert case_jobs.run_case(run)=='blocked'
+ with db() as c:
+  assert c.execute('SELECT status FROM investigations WHERE id=?',(run,)).fetchone()[0]=='blocked'
+  assert c.execute('SELECT count(*) FROM reports').fetchone()[0]==0
+  assert {r[0] for r in c.execute('SELECT status FROM pillars WHERE run_id=?',(run,))}=={'unavailable'}
