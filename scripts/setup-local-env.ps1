@@ -11,6 +11,7 @@ $scoobyWorldNames = @('WORLD_ISSUER', 'WORLD_CLIENT_ID', 'WORLD_CLIENT_KEY_PATH'
 $scoobyDefaults = [ordered]@{
     SCOOBY_WEB_ORIGIN = 'http://127.0.0.1:3000'
     SCOOBY_MODEL_CALL_BUDGET = '0'
+    SCOOBY_CASE_MODEL_MAX_CALLS = '0'
     SCOOBY_CASE_SYNC_ENABLED = 'false'
     SCOOBY_PUBLISH_ENABLED = 'false'
     SCOOBY_DEMO_AUTOPUBLISH = 'false'
@@ -30,9 +31,18 @@ function Set-ScoobyEnvironmentValue {
 
 function Read-ScoobyExistingValue {
     param([string]$Name)
-    $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'Process')
-    if ([string]::IsNullOrWhiteSpace($scoobyExisting)) {
+    # The worker must not silently inherit an expired OpenAI process key when a
+    # current User-scoped key has been configured. Never print the value.
+    if ($Name -eq 'OPENAI_API_KEY') {
         $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'User')
+        if ([string]::IsNullOrWhiteSpace($scoobyExisting)) {
+            $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'Process')
+        }
+    } else {
+        $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'Process')
+        if ([string]::IsNullOrWhiteSpace($scoobyExisting)) {
+            $scoobyExisting = [Environment]::GetEnvironmentVariable($Name, 'User')
+        }
     }
     return $scoobyExisting
 }

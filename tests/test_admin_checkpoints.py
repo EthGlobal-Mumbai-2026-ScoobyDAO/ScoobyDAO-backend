@@ -345,7 +345,7 @@ def test_changed_bytes_supersede_and_old_approvals_never_carry_over(env):
     assert status(rid, 'v2')['state'] == 'pending_review'
     raw = (bundle / 'report.json').read_bytes()
     (bundle / 'report.json').write_bytes(raw + b'\n')
-    assert client.get('/reports').status_code == 409                  # the consumer library already fails closed
+    assert any(x.get('integrity')=='unavailable' for x in client.get('/reports').json())  # isolate corrupt item without exposing bytes
     queue = client.get('/web/v1/admin/reviews', headers=h).json()['items']
     assert next(i for i in queue if (i['report_id'], i['report_version']) == (rid, ver))['state'] == 'unavailable'
     assert decide(env, h, rid, ver, 'approve', digest='a' * 64).status_code == 409
@@ -570,3 +570,39 @@ def test_no_tokens_codes_or_subjects_leak(env, caplog):
     consumer = client.get('/reports').text + client.get(f'/reports/{rid}/{ver}/artifacts').text
     for private in [ADMIN_SUB, 'admin-1', token] + env.fw.issued_device_codes:
         assert private not in consumer
+
+def test_open_review_upgrade_quarantines_auto_authority_and_approval(env,monkeypatch):
+    monkeypatch.setenv('SCOOBY_REPORT_RELEASE','approved')
+    rid,ver,_=make_report(env)
+    h=login(client,env.fw,env.clock)
+    with db() as c:
+        c.execute("UPDATE admin_scopes SET granted_by='open-review',created=? WHERE iss=? AND sub=? AND scope='report_review'",(env.clock()-10,ISSUER,ADMIN_SUB))
+    approve(env,h,rid,ver)
+    assert consumer_item(rid,ver) is not None
+    admin.retire_open_review_grants()
+    assert consumer_item(rid,ver) is None
+    assert client.get('/web/v1/admin/reviews',headers=h).status_code in (401,403)
+    with db() as c:
+        receipt=c.execute('SELECT revoked_at,revoke_reason FROM rev_receipts').fetchone()
+        assert receipt['revoked_at'] is not None and 'named-admin' in receipt['revoke_reason']
+        assert c.execute("SELECT count(*) FROM rev_events WHERE kind='open_review_receipt_quarantined'").fetchone()[0]==1
+        admin.grant(c,ISSUER,ADMIN_SUB,'report_review','explicit-admin')
+    admin.retire_open_review_grants()
+    assert client.get('/web/v1/admin/reviews',headers=h).status_code==200
+    assert consumer_item(rid,ver) is None  # regrant does not resurrect the old approval
+
+
+def test_open_review_history_survives_explicit_grant_overwrite(env,monkeypatch):
+    monkeypatch.setenv('SCOOBY_REPORT_RELEASE','approved')
+    rid,ver,_=make_report(env)
+    with db() as c:admin.grant(c,ISSUER,ADMIN_SUB,'report_review','open-review')
+    h=login(client,env.fw,env.clock);approve(env,h,rid,ver)
+    env.clock.advance(10)
+    with db() as c:admin.grant(c,ISSUER,ADMIN_SUB,'report_review','named-admin')
+    from publication import db as publication_db
+    publication_db.init();publication_db.init()  # CLI/publisher initialization, no web import
+    assert client.get('/web/v1/admin/reviews',headers=h).status_code==200
+    assert consumer_item(rid,ver) is None
+    with db() as c:
+        assert c.execute('SELECT revoked_at FROM rev_receipts').fetchone()[0] is not None
+        assert c.execute("SELECT count(*) FROM rev_events WHERE kind='open_review_receipt_quarantined'").fetchone()[0]==1

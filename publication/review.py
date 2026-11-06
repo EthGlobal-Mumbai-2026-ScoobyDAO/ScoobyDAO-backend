@@ -171,10 +171,14 @@ def consumer_visible(c, report_id: str, version: str) -> bool:
     """Release policy for the consumer report library (SCOOBY_REPORT_RELEASE). 'all' lists every version
     with its review state; 'approved' lists only versions whose current target is approved."""
     from .config import ConfigError, admin_config
+    # Seeded private drafts remain private even if a later process forgets the
+    # approved-only deployment setting; an exact-version approval is required.
     try:
         policy = admin_config().report_release
     except ConfigError:
         return False  # an invalid release policy hides reports rather than releasing them
+    if c.execute('SELECT 1 FROM seed_imports WHERE report_id=? AND version=?',(report_id,version)).fetchone():
+        return approved(c, report_id, version)
     return policy == 'all' or approved(c, report_id, version)
 
 

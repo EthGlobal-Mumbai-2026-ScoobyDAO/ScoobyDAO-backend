@@ -1,7 +1,10 @@
 """Execute the original legacy VAE and risk/technical code using validated captured data."""
 import argparse, ast, csv, hashlib, json, os, pathlib, subprocess, sys
 from datetime import date
-import history
+try:
+ from . import history
+except ImportError:
+ import history
 def sha(b): return hashlib.sha256(b).hexdigest()
 def load(p): return json.loads(pathlib.Path(p).read_text(encoding='utf8'))
 def run(source,out,days,legacy_repo):
@@ -16,7 +19,8 @@ def run(source,out,days,legacy_repo):
   if not path.is_file() or sha(path.read_bytes())!=req.get('sha256'): raise ValueError('source hash mismatch or unavailable')
  chosen,_=history.select_pool(load(source/'pools.json'),int(chain),address,status['pool']['address'])
  if chosen['side']!=status['pool']['side']: raise ValueError('pool token side mismatch')
- calc=history.prepare(load(source/'daily.json'),status['history']['cutoff_utc_date']); recorded=load(source/'returns.json')
+ daily=load(source/'daily.json'); side_metadata_matches=history.validate_candle_identity(daily,int(chain),address,chosen['side'])
+ calc=history.prepare(daily,status['history']['cutoff_utc_date']); recorded=load(source/'returns.json')
  if calc!=recorded: raise ValueError('stored returns do not match source candles')
  if calc['gaps'] or len(calc['returns'])<2: raise ValueError('pending history: need consecutive closed daily returns; no values fabricated')
  # Two observations are the computational minimum for sample covariance, not a validated adequacy threshold.
@@ -43,7 +47,7 @@ def run(source,out,days,legacy_repo):
  finally: os.chdir(old)
  if 'error' in risk: raise RuntimeError('legacy risk calculation failed: '+str(risk['error']))
  history.store(out/'legacy-metrics.json',{'identity':candidate,'risk_assessment':risk,'technical_health':metrics,'technical_series':series_out})
- history.store(out/'run-manifest.json',{'candidate_id':candidate,'source_status_sha256':sha((source/'source-status.json').read_bytes()),'source_candles_sha256':sha((source/'daily.json').read_bytes()),'input_returns_sha256':sha((data/'crypto_returns.csv').read_bytes()),'reconstructions_sha256':sha(series.read_bytes()),'metrics_sha256':sha((out/'legacy-metrics.json').read_bytes()),'legacy_vae_sha256':sha(vae.read_bytes()),'legacy_precompute_sha256':sha(pre.read_bytes()),'reconstructions':int(raw.shape[1]),'return_rows':len(raw),'first_date':str(raw.index.min()),'last_date':str(raw.index.max()),'alpha':0.95,'days':days,'randomness':'original unseeded legacy script; outputs vary across runs','dependencies':{'torch':torch.__version__,'numpy':np.__version__,'pandas':pd.__version__,'scipy':scipy.__version__},'limitations':['Legacy metrics and labels reproduced, not independently calibrated.','Two returns is a computation minimum, not proof of sufficient history.','No inference from a different token and no model call.']})
+ history.store(out/'run-manifest.json',{'candidate_id':candidate,'source_status_sha256':sha((source/'source-status.json').read_bytes()),'source_candles_sha256':sha((source/'daily.json').read_bytes()),'input_returns_sha256':sha((data/'crypto_returns.csv').read_bytes()),'reconstructions_sha256':sha(series.read_bytes()),'metrics_sha256':sha((out/'legacy-metrics.json').read_bytes()),'legacy_vae_sha256':sha(vae.read_bytes()),'legacy_precompute_sha256':sha(pre.read_bytes()),'reconstructions':int(raw.shape[1]),'return_rows':len(raw),'first_date':str(raw.index.min()),'last_date':str(raw.index.max()),'alpha':0.95,'days':days,'randomness':'original unseeded legacy script; outputs vary across runs','ohlc_side_metadata_matches':side_metadata_matches,'dependencies':{'torch':torch.__version__,'numpy':np.__version__,'pandas':pd.__version__,'scipy':scipy.__version__},'limitations':['Legacy metrics and labels reproduced, not independently calibrated.','Two returns is a computation minimum, not proof of sufficient history.','No inference from a different token and no model call.'] + ([] if side_metadata_matches else ['OHLC token-side metadata absent; token side is provider-reported, not independently confirmed.'])})
  return out/'legacy-metrics.json'
 if __name__=='__main__':
  a=argparse.ArgumentParser(description=__doc__); a.add_argument('--source',required=True,type=pathlib.Path); a.add_argument('--output',required=True,type=pathlib.Path); a.add_argument('--days',required=True,type=int,help='explicit legacy VaR horizon in days'); a.add_argument('--legacy-repo',required=True,type=pathlib.Path); x=a.parse_args(); print('Wrote',run(x.source.resolve(),x.output.resolve(),x.days,x.legacy_repo))

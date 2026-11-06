@@ -63,6 +63,11 @@ def subject_hash(iss: str, sub: str) -> str:
     return digest(f'{iss}|{sub}'.encode())
 
 
+def retire_open_review_grants() -> None:
+    from .upgrade import retire_open_review_grants as retire
+    retire()
+
+
 def audit(c, kind: str, actor: str, detail: dict | None = None) -> None:
     """Append-only. Never pass tokens, device codes or subjects in detail."""
     c.execute('INSERT INTO admin_events(kind,actor,detail_json,created) VALUES(?,?,?,?)',
@@ -78,50 +83,10 @@ def bearer(header: str | None) -> str | None:
 
 # ---------------------------------------------------------------------------- permissions
 def scopes_of(c, iss: str, sub: str) -> frozenset:
-    """Scopes held by an enabled reviewer; empty for everyone else. Scopes granted by open review count only while
-    SCOOBY_OPEN_REVIEW is on."""
-    from .config import open_review
+    """Scopes held by an enabled reviewer; empty for everyone else."""
     rows = c.execute('''SELECT s.scope FROM admin_scopes s JOIN pub_reviewers r ON r.iss=s.iss AND r.sub=s.sub
-                        WHERE s.iss=? AND s.sub=? AND s.revoked_at IS NULL AND r.enabled=1
-                        AND (s.granted_by != ? OR ?)''', (iss, sub, OPEN_ACTOR, 1 if open_review() else 0)).fetchall()
+                        WHERE s.iss=? AND s.sub=? AND s.revoked_at IS NULL AND r.enabled=1''', (iss, sub)).fetchall()
     return frozenset(r['scope'] for r in rows)
-
-
-# ---------------------------------------------------------------------------- open review (SCOOBY_OPEN_REVIEW)
-OPEN_ACTOR = 'open-review'
-OPEN_SCOPES = ('report_review', 'publication')   # never case_investigation
-OPEN_LABEL_PREFIX = 'open-review:'
-
-
-def open_enroll(c, iss: str, sub: str) -> None:
-    """Open review: make a validated World identity a reviewer holding OPEN_SCOPES. A reviewer an operator disabled
-    stays disabled; an explicitly enrolled reviewer keeps its label and its own grants."""
-    row = c.execute('SELECT label, enabled FROM pub_reviewers WHERE iss=? AND sub=?', (iss, sub)).fetchone()
-    if row is None:
-        c.execute('INSERT INTO pub_reviewers(iss,sub,label,enabled,created) VALUES(?,?,?,1,?)',
-                  (iss, sub, OPEN_LABEL_PREFIX + subject_hash(iss, sub)[:12], now()))
-        audit(c, 'open_reviewer_added', OPEN_ACTOR, {'subject_sha256': subject_hash(iss, sub)})
-    elif not row['enabled']:
-        if not row['label'].startswith(OPEN_LABEL_PREFIX):
-            return
-        c.execute('UPDATE pub_reviewers SET enabled=1 WHERE iss=? AND sub=?', (iss, sub))
-    held = {r['scope'] for r in c.execute('SELECT scope FROM admin_scopes WHERE iss=? AND sub=? AND revoked_at IS NULL', (iss, sub))}
-    for scope in OPEN_SCOPES:
-        if scope not in held:
-            grant(c, iss, sub, scope, OPEN_ACTOR)
-
-
-def apply_open_review_mode() -> int:
-    """At startup with open review off, disable reviewers that open review added, so no other check (for example the
-    publication allowlist) still accepts them. Returns the number disabled."""
-    from .config import open_review
-    if open_review():
-        return 0
-    with db() as c:
-        n = c.execute('UPDATE pub_reviewers SET enabled=0 WHERE enabled=1 AND label LIKE ?', (OPEN_LABEL_PREFIX + '%',)).rowcount
-        if n:
-            audit(c, 'open_reviewers_disabled', OPEN_ACTOR, {'count': n})
-        return n
 
 
 def permitted(c, iss: str, sub: str, scope: str) -> bool:
@@ -253,9 +218,6 @@ def poll_session(token: str | None, world: WorldClient | None, cfg: AdminConfig)
             audit(c, 'late_world_result_ignored', 'service', {'session_id': sid, 'state': s['state']})
             return public_session(c, s)
         if identity is not None:
-            from .config import open_review
-            if open_review():
-                open_enroll(c, identity.iss, identity.sub)
             if not scopes_of(c, identity.iss, identity.sub):
                 audit(c, 'login_not_permitted', 'world', {'session_id': sid, 'subject_sha256': subject_hash(identity.iss, identity.sub)})
                 return _end(c, sid, 'not_permitted', 'This World ID is not an enabled admin with a scope.')
@@ -346,7 +308,7 @@ class AdminWorldClient(WorldClient):
 GUARDED_ROUTES = (
     (re.compile(r'^/scouting/cases/[^/]+/challenge/?$'), 'case_investigation'),
     (re.compile(r'^/scouting/(?:challenges|world-attempts)(?:/|$)'), 'case_investigation'),
-    (re.compile(r'^/investigations/[^/]+/resume/?$'), 'case_investigation'),
+    (re.compile(r'^/investigations/[^/]+/(?:resume|events)/?$'), 'case_investigation'),
 )
 
 
