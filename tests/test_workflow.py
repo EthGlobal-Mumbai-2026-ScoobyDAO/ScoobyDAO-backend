@@ -66,3 +66,10 @@ def test_provider_transport_and_failure():
  assert 'tools' not in calls[0]
  with pytest.raises(ValueError): provider.reason([{'id':'different'}],fake)
 
+
+def test_honeypot_readiness_is_honest():
+ data=client.get('/readiness/honeypot').json()
+ assert data['kind']=='static_integration_inventory'
+ assert data['normal_gate']=={'required_distinct_verified_groups':4,'wired_verifiers':0,'qualified_selection_enabled':False}
+ assert data['paid_model_budget_default']==0 and data['checkpoint_case_status']=='no_selection_recorded_in_this_checkpoint'
+ assert 'not implemented' in data['publication']

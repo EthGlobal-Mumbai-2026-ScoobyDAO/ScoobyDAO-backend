@@ -212,3 +212,20 @@ def get_reason(input_id:str):
   x=row(getrow(c,'SELECT * FROM reasoning_inputs WHERE id=?',(input_id,)))
   x['evidence']=json.loads(x['evidence']); x['output']=json.loads(x['output']) if x['output'] else None
   return x
+
+@app.get('/readiness/honeypot', tags=['readiness'])
+def honeypot_readiness():
+ return {
+  'kind':'static_integration_inventory',
+  'checkpoint_case_status':'no_selection_recorded_in_this_checkpoint',
+  'normal_gate':{'required_distinct_verified_groups':4,'wired_verifiers':0,'qualified_selection_enabled':False},
+  'discovery_newer_work':'G07 and partial G09 exist in an unmerged worktree, not in this worker',
+  'investigation':'five persisted pillar states; producers are not wired',
+  'research_output':'external bundle import and validation only; no automated end-to-end report',
+  'reader':'bundled earlier reader; newer IRC reader not integrated',
+  'pdf':'draft browser print only; full report PDF not implemented',
+  'review':'local unverified receipts; no authenticated sign-off',
+  'publication':'reserved for human teammate; not implemented',
+  'paid_model_budget_default':0,
+  'documentation':'docs/honeypot-readiness.md'
+ }

@@ -1,5 +1,9 @@
 # Handoff — initial integration checkpoint
 
+## Active milestone
+
+M0–M6 and acceptance evidence are recorded in [the milestone charter](docs/honeypot-validation-milestones.md); actual wiring and the next vertical slice are in [the readiness map](docs/honeypot-readiness.md). No new case has been selected in this backend checkpoint. Discovery owns bounded scouting; investigation owns mechanism and controls; backend and frontend own M4 integration; root and user own M5; the human teammate owns publication and World ID/AgentKit (M6). Do not duplicate case requests or treat the prior BLISS exception as a new selection. The newer G07/G09 worktree and corrected IRC reader are not merged or wired here. Next: review the workstream patches and wire separately selected input through durable pillar jobs and the validated report/IRC reader/full-PDF path, using offline tests and separately authorized model budgets.
+
 ## Current state
 
 `main` starts with a local-only scaffold. Read README, architecture, endpoint-schema-map and contract-amendments before extending it. The frontend reader and its schema are vendored under `vendor/reader`; the shared schemas and contract semantics are under `schemas`. Historical fixtures are compatibility data only. The source is not a complete automated research system and does not authenticate operators.

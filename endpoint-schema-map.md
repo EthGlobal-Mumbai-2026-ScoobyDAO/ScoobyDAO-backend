@@ -4,6 +4,7 @@ All routes below are local operator routes; no authentication or production auth
 
 | Route | Purpose |
 |---|---|
+| GET /readiness/honeypot | Static milestone integration inventory, not a live gate |
 | GET /health, /status, /schemas | Health, worker queue and frozen schema hashes |
 | POST /candidates, GET /candidates, /candidates/{id} | Import schema-validated candidate, monitor and inspect |
 | POST /candidates/{id}/selection | Human selection or diagnostic exception; immutable audit |
