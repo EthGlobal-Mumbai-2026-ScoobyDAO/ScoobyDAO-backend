@@ -63,6 +63,11 @@ def subject_hash(iss: str, sub: str) -> str:
     return digest(f'{iss}|{sub}'.encode())
 
 
+def retire_open_review_grants() -> None:
+    from .upgrade import retire_open_review_grants as retire
+    retire()
+
+
 def audit(c, kind: str, actor: str, detail: dict | None = None) -> None:
     """Append-only. Never pass tokens, device codes or subjects in detail."""
     c.execute('INSERT INTO admin_events(kind,actor,detail_json,created) VALUES(?,?,?,?)',
