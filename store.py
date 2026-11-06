@@ -35,8 +35,18 @@ def init():
   CREATE TABLE IF NOT EXISTS reasoning_inputs(id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES investigations(id), pillar TEXT NOT NULL, evidence TEXT NOT NULL, output TEXT, status TEXT NOT NULL, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS budget_reservations(job_id TEXT PRIMARY KEY, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS render_manifests(job_id TEXT PRIMARY KEY REFERENCES jobs(id), sha256 TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS case_snapshots(id TEXT PRIMARY KEY,candidate_id TEXT NOT NULL,record TEXT NOT NULL,evidence TEXT NOT NULL,policy_digest TEXT NOT NULL,assessment TEXT NOT NULL,evaluated REAL NOT NULL,expires REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS cases(id TEXT PRIMARY KEY,candidate_id TEXT NOT NULL UNIQUE,current_snapshot TEXT NOT NULL REFERENCES case_snapshots(id),state TEXT NOT NULL,updated REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS case_decisions(id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id),snapshot_id TEXT NOT NULL REFERENCES case_snapshots(id),policy_digest TEXT NOT NULL,action TEXT NOT NULL,budget TEXT NOT NULL,run_id TEXT,created REAL NOT NULL,UNIQUE(case_id,snapshot_id,policy_digest,action));
+  CREATE TABLE IF NOT EXISTS case_challenges(id TEXT PRIMARY KEY,case_id TEXT NOT NULL REFERENCES cases(id),snapshot_id TEXT NOT NULL REFERENCES case_snapshots(id),policy_digest TEXT NOT NULL,action TEXT NOT NULL,nonce TEXT NOT NULL UNIQUE,state TEXT NOT NULL,expires REAL NOT NULL,created REAL NOT NULL,idem TEXT NOT NULL UNIQUE);
+  CREATE TABLE IF NOT EXISTS case_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,case_id TEXT NOT NULL,kind TEXT NOT NULL,detail TEXT NOT NULL,created REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS case_scan_cursor(name TEXT PRIMARY KEY,position INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS case_sources(id TEXT PRIMARY KEY,status TEXT NOT NULL,detail TEXT NOT NULL,updated REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS case_leads(id TEXT PRIMARY KEY,provider TEXT NOT NULL,candidate_id TEXT,origin TEXT,created REAL NOT NULL,FOREIGN KEY(candidate_id) REFERENCES candidates(id));
   CREATE TABLE IF NOT EXISTS heartbeats(name TEXT PRIMARY KEY, seen REAL NOT NULL, detail TEXT NOT NULL);
   ''')
+  c.execute("INSERT OR IGNORE INTO case_sources VALUES('discovery','unavailable','Local discovery store not yet synchronized.',?)",(now(),))
+  c.execute("INSERT OR IGNORE INTO case_sources VALUES('reddit','unavailable','No approved access; retention/deletion integration is not implemented.',?)",(now(),))
 def row(r): return dict(r) if r else None
 def event(c, rid, kind, detail): c.execute('INSERT INTO events(run_id,kind,detail,created) VALUES(?,?,?,?)',(rid,kind,detail,now()))
 def job(c, kind, ref, key):

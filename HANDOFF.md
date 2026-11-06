@@ -1,5 +1,9 @@
 # Handoff — initial integration checkpoint
 
+## Case orchestration (topic branch)
+
+See [case orchestration](docs/case-orchestration.md) for the bounded discovery-store bridge, global-priority case DTO, zero-call auto decisions, one-run-per-candidate suppression and fail-closed human challenge. Discovery PR #9, investigation PR #11 and [qualification charter PR #10](https://github.com/EthGlobal-Mumbai-2026-ScoobyDAO/ScoobyDAO-backend/pull/10) are separate dependencies; no World Agent research verifier or final human report sign-off is inferred. The actual discovery verifiers support only two groups, so no real candidate auto-qualifies. Per-pillar producers remain unwired and a started run is incomplete. Reddit-derived content/lead retention and linking are blocked pending a compliant deletion lifecycle. Legacy unverified live start, resume and reasoning are blocked; use the no-research `POST /reference-runs` lane for a separately scoped reference report import.
+
 ## Current checkpoint
 
 All completed source slices are merged: backend PRs #1–5 and #7, web PRs #1–2. See [LIVE-STATE.md](LIVE-STATE.md) for exact source commits, checks and workstream gaps. The teammate separately merged World ID PR #6 while reconciliation was active; preserve its implementation and tests. Live World/chain integration remains deferred and was not performed by root. Root owns cross-repo reconciliation; backend owns runtime/packages; discovery owns screening/fork tools; investigation owns producers/mechanism protocol; web owns native cards; standalone reader owns presentation/export; the human teammate owns post-report publication and authenticated sign-off.

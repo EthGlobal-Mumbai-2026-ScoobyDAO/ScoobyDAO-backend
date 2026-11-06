@@ -45,3 +45,7 @@ OpenAPI DTOs are implementation-owned. Frozen candidate v0.1 and report v0.2 are
 | GET /web/v1/reports/{id}/raw | Exact `report.json` bytes |
 | POST /web/v1/reports/{id}/approve | Start (or reuse) an approve attempt → `Approval` |
 | GET /web/v1/approvals/{id} | `Approval` (pending/approved/denied/expired/rejected_not_reviewer/spent); never returns device codes or tokens |
+
+## Case orchestration (runtime proposal)
+
+`GET /scouting/cases` (alias `/cases`), `GET /scouting/cases/{id}`, `GET /scouting/schema`, `GET /scouting/sources`, `GET /scouting/leads`; `POST /scouting/cases/refresh`; `POST /scouting/cases/{id}/challenge`; `GET /scouting/challenges/{id}`. Human continuation/deny/revoke/revise remain unavailable (503) until a verifier exists. `POST /reference-runs` is a no-research reference import lane. See `docs/case-orchestration.md`.

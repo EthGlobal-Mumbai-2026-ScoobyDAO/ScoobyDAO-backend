@@ -2,7 +2,7 @@
 import json, os, shutil, subprocess, sys, time, tempfile
 from pathlib import Path
 from huey import SqliteHuey, crontab
-from store import ROOT, DATA, db, now, event, PILLARS, digest
+from store import ROOT, DATA, db, now, event, PILLARS, digest, dumps, job
 from vendor.pdf_export.full_draft_pdf import print_source
 huey=SqliteHuey('scooby',filename=str(DATA/'huey.sqlite3'), immediate=False)
 
@@ -36,7 +36,14 @@ def work_one():
   c.execute("UPDATE jobs SET state='running', attempts=attempts+1, lease=? WHERE id=?",(now()+300,j['id']))
   attempt=j['attempts']+1
  try:
-  if j['kind']=='scan':
+  if j['kind']=='case_scan':
+   import case_engine
+   result=dumps(case_engine.reconcile(int(j['ref'])))
+   with db() as c:c.execute("UPDATE case_sources SET status='available',detail=?,updated=? WHERE id='discovery'",('Local discovery snapshot synchronized; source freshness is per evidence.',now()))
+  elif j['kind']=='case_start':
+   import case_engine
+   result='Research run '+case_engine.start_decision(j['ref'])
+  elif j['kind']=='scan':
    # No live verifiers are shipped. Do not manufacture positive screenings.
    result='No discovery or concern verifiers configured; coverage unknown.'
   elif j['kind']=='investigate':
@@ -131,6 +138,10 @@ def work_one():
   with db() as c:
    # Bounded exponential backoff. Persist terminal errors without exception payloads that could contain secrets.
    attempts=c.execute('SELECT attempts FROM jobs WHERE id=?',(j['id'],)).fetchone()[0]
+   if j['kind']=='case_scan':
+    c.execute("UPDATE case_sources SET status='unavailable',detail=?,updated=? WHERE id='discovery'",('Configured discovery store is unavailable; no case was qualified from this failure.',now()))
+   if j['kind']=='case_start':
+    c.execute("UPDATE cases SET state='unavailable',updated=? WHERE id=(SELECT case_id FROM case_decisions WHERE id=?) AND current_snapshot=(SELECT snapshot_id FROM case_decisions WHERE id=?) AND NOT EXISTS (SELECT 1 FROM case_decisions WHERE id=? AND run_id IS NOT NULL)",(now(),j['ref'],j['ref'],j['ref']))
    if j['kind']=='reason':
     attempts=3 # never retry a possibly billed provider call automatically
     c.execute("UPDATE reasoning_inputs SET status='failed' WHERE id=?",(j['ref'],))
@@ -138,8 +149,18 @@ def work_one():
  return True
 @huey.task()
 def wake(): work_one()
+def enqueue_periodic_case_sync():
+ # Local DB reconciliation only; discovery owns all outbound collection.
+ if os.getenv('SCOOBY_CASE_SYNC_ENABLED','false').lower()!='true': return None
+ try: limit=max(1,min(25,int(os.getenv('SCOOBY_CASE_SYNC_LIMIT','10'))))
+ except ValueError: limit=10
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE')
+  if c.execute("SELECT 1 FROM jobs WHERE kind='case_scan' AND state IN ('queued','running') LIMIT 1").fetchone(): return None
+  return job(c,'case_scan',str(limit),'case-period:'+str(int(now()//60)))
 @huey.periodic_task(crontab(minute='*'))
 def reconcile():
+ enqueue_periodic_case_sync()
  with db() as c: c.execute("INSERT OR REPLACE INTO heartbeats VALUES(?,?,?)",('worker',now(),'reconciliation active'))
  for _ in range(10):
   if not work_one(): break

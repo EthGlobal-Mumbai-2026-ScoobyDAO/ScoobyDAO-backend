@@ -1,0 +1,174 @@
+import copy,json,os,sqlite3,tempfile,hashlib,datetime
+from pathlib import Path
+import pytest
+from jsonschema.exceptions import ValidationError
+os.environ.setdefault('SCOOBY_DATA',tempfile.mkdtemp(prefix='scooby-cases-test-'))
+from fastapi.testclient import TestClient
+from app import app
+from store import db,now
+import store
+import case_engine,worker
+client=TestClient(app)
+BASE=Path(__file__).parent
+
+@pytest.fixture(autouse=True)
+def isolated_state(tmp_path,monkeypatch):
+ monkeypatch.setattr(store,'DB',tmp_path/'case-state.sqlite3');store.init()
+
+def record(n):
+ d=json.loads((BASE/'candidate.json').read_text(encoding='utf-8-sig'));d['mode']='live';d['identity']['address']='0x'+format(n,'040x');d['candidate_id']='1:'+d['identity']['address'];d['identity']['symbol']='SYNTHETIC';d['selection']={'status':'not_selected','selected_by':None,'selected_at':None,'reason':None};d['state']='monitoring';d['evidence']=[];return d
+
+def with_sources(d,root):
+ folder=root/'snapshots';folder.mkdir(exist_ok=True);stamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
+ for i in range(4):
+  raw=('synthetic-source-'+str(i)).encode();sha=hashlib.sha256(raw).hexdigest();(folder/(sha+'.json')).write_bytes(raw)
+  d['evidence'].append({'id':sha,'source':'snapshots/'+sha+'.json','sha256':sha,'observed_at':stamp,'fetched_at':stamp,'block_number':None,'kind':'live_observation','limitations':['SYNTHETIC TEST ONLY']})
+ return d
+
+def result(n,record):
+ ev=record.get('evidence',[])
+ groups=[{'id':'G%02d'%i,'status':'triggered' if i<=n else 'unknown','votes':1 if i<=n else 0,'detail':'Synthetic mock only','measurements':[],'evidence':[{'id':ev[i-1]['id'],'source':ev[i-1]['source'],'sha256':ev[i-1]['sha256'],'observed_at':ev[i-1]['observed_at']}] if i<=n and len(ev)>=i else []} for i in range(1,13)]
+ return {'eligible':n>=4,'triggered_count':n,'groups':groups}
+
+def test_discovery_reconcile_is_bounded_and_human_fails_closed(tmp_path,monkeypatch):
+ path=tmp_path/'discovery.sqlite';con=sqlite3.connect(path);con.execute('CREATE TABLE candidates(id TEXT PRIMARY KEY,record TEXT NOT NULL)');d=with_sources(record(701),tmp_path);con.execute('INSERT INTO candidates VALUES(?,?)',(d['candidate_id'],json.dumps(d)));con.commit();con.close()
+ monkeypatch.setenv('SCOOBY_DISCOVERY_DB',str(path));monkeypatch.setenv('SCOOBY_DISCOVERY_ROOT',str(tmp_path));monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(1,r))
+ res=client.post('/scouting/cases/refresh',json={'limit':1},headers={'Idempotency-Key':'scan-701'});assert res.status_code==200
+ assert worker.work_one();status=client.get('/jobs/'+res.json()['job_id']).json();assert status['state']=='done'
+ body=client.get('/scouting/cases').json();assert body['schema_version']=='scouting-case-list/1';x=next(a for a in body['cases'] if a['candidate_id']==d['candidate_id']);assert x['lane']=='human_review_required' and x['continuation']['availability']=='unavailable'
+ request={'expected_revision':x['snapshot_digest'],'action':'diagnostic_research'};a=client.post('/scouting/cases/'+x['case_id']+'/challenge',json=request,headers={'Idempotency-Key':'challenge-701'});assert a.status_code==200,a.text
+ q=a.json();assert q['snapshot_digest']==x['snapshot_digest'] and q['candidate_id']==d['candidate_id'];assert client.post('/scouting/challenges/'+q['challenge_id']+'/continue').status_code==503
+ with db() as c:c.execute('UPDATE case_challenges SET expires=? WHERE id=?',(now()-1,q['challenge_id']))
+ assert client.post('/scouting/challenges/'+q['challenge_id']+'/continue').status_code==409
+ # Old, caller-labeled live diagnostic selection cannot start a research run.
+ assert client.post('/candidates',json={'payload':d}).status_code==200
+ s=client.post('/candidates/'+d['candidate_id']+'/selection',headers={'Idempotency-Key':'legacy-701'},json={'kind':'diagnostic_exception','actor':'not authenticated','reason':'test'}).json()
+ assert client.post('/investigations',headers={'Idempotency-Key':'legacy-run-701'},json={'candidate_id':d['candidate_id'],'selection_id':s['id']}).status_code==403
+
+def test_mocked_auto_gate_dedup_and_tamper_fail_closed(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));d=with_sources(record(702),tmp_path);case=case_engine.ingest_record(d,tmp_path)
+ with db() as c: decision=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();did=decision['id']
+ run=case_engine.start_decision(did);assert case_engine.start_decision(did)==run
+ assert worker.work_one() # duplicate actor message cannot create a second run
+ assert worker.work_one() # bounded investigation task records unavailable producers
+ assert client.get('/investigations/'+run).json()['status']=='incomplete'
+ detail=client.get('/scouting/cases/'+case).json();assert detail['lane']=='unavailable' and detail['research']['status']=='incomplete'
+ assert len(detail['research']['pillars'])==5 and {x['status'] for x in detail['research']['pillars']}=={'unavailable'} and detail['research']['reason']
+ with db() as c:
+  assert c.execute('SELECT count(*) FROM investigations WHERE id=?',(run,)).fetchone()[0]==1
+  assert c.execute('SELECT count(*) FROM pillars WHERE run_id=?',(run,)).fetchone()[0]==5
+  assert c.execute('SELECT kind FROM selections WHERE id=(SELECT selection_id FROM investigations WHERE id=?)',(run,)).fetchone()[0]=='qualified'
+ d2=with_sources(record(703),tmp_path);case2=case_engine.ingest_record(d2,tmp_path)
+ with db() as c:
+  decision=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case2,)).fetchone();did2=decision['id'];c.execute("UPDATE case_snapshots SET record='{}' WHERE id=?",(decision['snapshot_id'],))
+ with pytest.raises(ValueError,match='tampered'):case_engine.start_decision(did2)
+ with db() as c:c.execute('DELETE FROM case_decisions WHERE id=?',(did2,));c.execute('DELETE FROM cases WHERE id=?',(case2,));c.execute('DELETE FROM case_snapshots WHERE id=?',(decision['snapshot_id'],))
+
+def test_expired_or_changed_policy_cannot_start(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));case=case_engine.ingest_record(with_sources(record(704),tmp_path),tmp_path)
+ with db() as c:
+  decision=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();c.execute('UPDATE case_snapshots SET expires=? WHERE id=?',(now()-1,decision['snapshot_id']))
+ with pytest.raises(ValueError,match='stale'):case_engine.start_decision(decision['id'])
+ case2=case_engine.ingest_record(with_sources(record(705),tmp_path),tmp_path)
+ with db() as c: decision2=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case2,)).fetchone()
+ monkeypatch.setattr(case_engine,'policy_digest',lambda:'different')
+ with pytest.raises(ValueError,match='stale'):case_engine.start_decision(decision2['id'])
+
+
+def test_reddit_is_explicitly_unavailable_without_retention():
+ sources=client.get('/scouting/sources').json();reddit=next(x for x in sources['sources'] if x['id']=='reddit');assert reddit['status']=='unavailable'
+ assert client.get('/scouting/leads').json()['leads']==[]
+
+def test_missing_evidence_never_qualifies(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r))
+ case=case_engine.ingest_record(record(706),tmp_path)
+ with db() as c:assert c.execute('SELECT count(*) FROM case_decisions WHERE case_id=?',(case,)).fetchone()[0]==0
+
+def test_unsupported_chain_rejected(tmp_path):
+ d=record(707);d['identity']['chain_id']=56;d['candidate_id']='56:'+d['identity']['address']
+ with pytest.raises((ValueError,ValidationError)):case_engine.ingest_record(d,tmp_path)
+
+def test_snapshot_change_supersedes_human_challenge(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(1,r));d=with_sources(record(708),tmp_path);case=case_engine.ingest_record(d,tmp_path)
+ snap=client.get('/scouting/cases/'+case).json()['snapshot_digest'];h={'Idempotency-Key':'challenge-708'};r=client.post('/scouting/cases/'+case+'/challenge',headers=h,json={'expected_revision':snap});assert r.status_code==200
+ changed=copy.deepcopy(d);changed['screening']['quality_issues'].append('Synthetic changed coverage');case_engine.ingest_record(changed,tmp_path)
+ assert client.post('/scouting/challenges/'+r.json()['challenge_id']+'/continue').status_code==409
+ assert client.post('/scouting/cases/'+case+'/challenge',headers={'Idempotency-Key':'stale-708'},json={'expected_revision':snap}).status_code==409
+
+def test_assessment_tamper_fails_read_and_dispatch(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));case=case_engine.ingest_record(with_sources(record(709),tmp_path),tmp_path)
+ with db() as c:
+  dec=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();c.execute("UPDATE case_snapshots SET assessment='{}' WHERE id=?",(dec['snapshot_id'],))
+ assert client.get('/scouting/cases/'+case).status_code==409
+ with pytest.raises(ValueError,match='tampered'):case_engine.start_decision(dec['id'])
+ with db() as c:c.execute('DELETE FROM case_decisions WHERE id=?',(dec['id'],));c.execute('DELETE FROM cases WHERE id=?',(case,));c.execute('DELETE FROM case_snapshots WHERE id=?',(dec['snapshot_id'],))
+
+def test_actual_discovery_adapter_cannot_qualify_unknowns(tmp_path):
+ d=record(710);case=case_engine.ingest_record(d,tmp_path)
+ with db() as c:
+  assert c.execute('SELECT count(*) FROM case_decisions WHERE case_id=?',(case,)).fetchone()[0]==0
+  saved=c.execute('SELECT state FROM cases WHERE id=?',(case,)).fetchone()[0];assert saved in ('awaiting_human','monitoring')
+
+def test_periodic_sync_opt_in_and_backpressure(monkeypatch):
+ monkeypatch.delenv('SCOOBY_CASE_SYNC_ENABLED',raising=False);assert worker.enqueue_periodic_case_sync() is None
+ monkeypatch.setenv('SCOOBY_CASE_SYNC_ENABLED','true');monkeypatch.setenv('SCOOBY_CASE_SYNC_LIMIT','500');jid=worker.enqueue_periodic_case_sync()
+ if jid:
+  with db() as c: assert c.execute('SELECT ref FROM jobs WHERE id=?',(jid,)).fetchone()[0]=='25'
+ assert worker.enqueue_periodic_case_sync() is None
+
+def test_case_list_matches_runtime_schema(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(1,r));case_engine.ingest_record(with_sources(record(1909),tmp_path),tmp_path)
+ from jsonschema import Draft202012Validator
+ schema=json.loads((BASE.parent/'schemas/runtime/scouting-case-list-v1.schema.json').read_text(encoding='utf-8-sig'))
+ Draft202012Validator(schema).validate(client.get('/scouting/cases').json())
+
+def test_human_attention_order_uses_verified_count_not_score(tmp_path,monkeypatch):
+ def fake(r,_): return result({'711':1,'712':3,'713':4}[str(int(r['identity']['address'],16))],r)
+ monkeypatch.setattr(case_engine,'evaluate',fake)
+ for n in (711,712,713):case_engine.ingest_record(with_sources(record(n),tmp_path),tmp_path)
+ rows=[x for x in client.get('/scouting/cases').json()['cases'] if int(x['identity']['address'],16) in (711,712,713)]
+ assert [int(x['identity']['address'],16) for x in rows]==[712,711,713]
+ assert [x['verified_triggered_count'] for x in rows]==[3,1,4]
+ assert [x['lane'] for x in rows]==['human_review_required','human_review_required','auto_qualified']
+
+def test_new_snapshot_cannot_duplicate_existing_candidate_research(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));d=with_sources(record(714),tmp_path);case=case_engine.ingest_record(d,tmp_path)
+ with db() as c:first=c.execute('SELECT id FROM case_decisions WHERE case_id=?',(case,)).fetchone()['id']
+ run=case_engine.start_decision(first)
+ changed=copy.deepcopy(d);changed['screening']['quality_issues'].append('new synthetic snapshot')
+ case_engine.ingest_record(changed,tmp_path)
+ with db() as c:
+  assert c.execute('SELECT count(*) FROM case_decisions WHERE case_id=?',(case,)).fetchone()[0]==1
+  assert c.execute('SELECT count(*) FROM investigations WHERE id=?',(run,)).fetchone()[0]==1
+
+def test_older_urgent_case_not_lost_before_truncation(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'policy_digest',lambda:'f'*64)
+ template=with_sources(record(1800),tmp_path)
+ def fake(r,_): return result(3 if int(r['identity']['address'],16)==1800 else 0,r)
+ monkeypatch.setattr(case_engine,'evaluate',fake)
+ for n in range(1800,1905):
+  d=record(n);d['evidence']=copy.deepcopy(template['evidence']);case_engine.ingest_record(d,tmp_path)
+ urgent=case_engine.digest(template['candidate_id'].encode())
+ with db() as c:c.execute('UPDATE cases SET updated=1 WHERE id=?',(urgent,))
+ result_list=client.get('/scouting/cases').json();assert result_list['truncated'] is True and len(result_list['cases'])==100
+ assert result_list['cases'][0]['candidate_id']==template['candidate_id'] and result_list['cases'][0]['human_action_required'] is True
+
+def test_reddit_derived_content_not_persisted(tmp_path):
+ d=record(1906);d['triggers'][0]['description']='Synthetic reddit mention only'
+ with pytest.raises(ValueError,match='Reddit-derived'):case_engine.ingest_record(d,tmp_path)
+ d=record(1907);folder=tmp_path/'snapshots';folder.mkdir(exist_ok=True);raw=b'{"synthetic_source":"reddit"}';sha=hashlib.sha256(raw).hexdigest();(folder/(sha+'.json')).write_bytes(raw);stamp=datetime.datetime.now(datetime.timezone.utc).isoformat();d['evidence']=[{'id':sha,'source':'snapshots/'+sha+'.json','sha256':sha,'observed_at':stamp,'fetched_at':stamp,'block_number':None,'kind':'live_observation','limitations':['synthetic test only']}]
+ with pytest.raises(ValueError,match='Reddit-derived'):case_engine.ingest_record(d,tmp_path)
+
+def test_reference_lane_creates_no_research_job(tmp_path):
+ d=record(1908);assert client.post('/candidates',json={'payload':d}).status_code==200
+ sel=client.post('/candidates/'+d['candidate_id']+'/selection',headers={'Idempotency-Key':'ref-selection-1908'},json={'kind':'diagnostic_exception','actor':'local operator','reason':'separately authorized reference import only'}).json()
+ payload={'candidate_id':d['candidate_id'],'selection_id':sel['id']};r=client.post('/reference-runs',headers={'Idempotency-Key':'ref-run-1908'},json=payload);assert r.status_code==200 and r.json()['status']=='reference_only'
+ with db() as c:assert c.execute('SELECT count(*) FROM jobs WHERE kind=\'investigate\' AND ref=?',(r.json()['id'],)).fetchone()[0]==0
+ assert client.post('/investigations/'+r.json()['id']+'/resume',headers={'Idempotency-Key':'resume-ref-1908'}).status_code==403
+
+
+def test_evidence_bytes_tamper_blocks_auto_dispatch(tmp_path,monkeypatch):
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));case=case_engine.ingest_record(with_sources(record(1910),tmp_path),tmp_path)
+ with db() as c:
+  dec=c.execute('SELECT * FROM case_decisions WHERE case_id=?',(case,)).fetchone();snapshot=c.execute('SELECT evidence FROM case_snapshots WHERE id=?',(dec['snapshot_id'],)).fetchone();evidence=json.loads(snapshot['evidence']);evidence[next(iter(evidence))]='dGFtcGVyZWQ=';c.execute('UPDATE case_snapshots SET evidence=? WHERE id=?',(json.dumps(evidence),dec['snapshot_id']))
+ with pytest.raises(ValueError,match='tampered'):case_engine.start_decision(dec['id'])

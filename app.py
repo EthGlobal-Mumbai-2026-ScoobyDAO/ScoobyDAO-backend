@@ -89,10 +89,27 @@ def investigate(x:Run,idempotency_key:str=Header(None)):
    return row(old)
   s=getrow(c,'SELECT * FROM selections WHERE id=?',(x.selection_id,))
   if s['candidate_id']!=x.candidate_id or s['kind'] not in ('qualified','diagnostic_exception'): err(409,'Selection does not authorize this investigation')
+  candidate_row=getrow(c,'SELECT payload FROM candidates WHERE id=?',(x.candidate_id,))
+  if json.loads(candidate_row['payload']).get('mode')=='live': err(403,'Live research requires a policy decision or a verified human authorization; legacy selection is unverified')
   i=ident(); c.execute('INSERT INTO investigations VALUES(?,?,?,?,?,?)',(i,x.candidate_id,x.selection_id,'queued',now(),k))
   for p in PILLARS: c.execute('INSERT INTO pillars VALUES(?,?,?,?)',(i,p,'queued','Awaiting worker'))
   event(c,i,'created','Local operator selection; human identity not authenticated'); job(c,'investigate',i,'investigate:'+i)
  signal(); return {'id':i,'status':'queued'}
+@app.post('/reference-runs')
+def reference_run(x:Run,idempotency_key:str=Header(None)):
+ """A no-research container for separately authorized, manually imported reference reports."""
+ k=key(idempotency_key)
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE');old=c.execute('SELECT * FROM investigations WHERE idem=?',(k,)).fetchone()
+  if old:
+   if (old['candidate_id'],old['selection_id'],old['status'])!=(x.candidate_id,x.selection_id,'reference_only'):err(409,'Idempotency key conflict')
+   return {'id':old['id'],'status':'reference_only'}
+  selection=getrow(c,'SELECT * FROM selections WHERE id=?',(x.selection_id,))
+  if selection['candidate_id']!=x.candidate_id or selection['kind']!='diagnostic_exception':err(409,'Scoped reference selection required')
+  run=ident();c.execute('INSERT INTO investigations VALUES(?,?,?,?,?,?)',(run,x.candidate_id,x.selection_id,'reference_only',now(),k))
+  for pillar in PILLARS:c.execute('INSERT INTO pillars VALUES(?,?,?,?)',(run,pillar,'unavailable','Reference import only; no research authorized or performed.'))
+  event(c,run,'reference_only','Local source-curated report import only; no research job or authenticated approval')
+  return {'id':run,'status':'reference_only'}
 @app.get('/investigations/{run_id}')
 def run(run_id:str):
  with db() as c:
@@ -115,6 +132,8 @@ def resume(run_id:str,idempotency_key:str=Header(None)):
   if old:
    if old['kind']!='investigate' or old['ref']!=run_id: err(409,'Idempotency key conflict')
    return {'job_id':old['id']}
+  candidate_row=getrow(c,'SELECT payload FROM candidates WHERE id=?',(r['candidate_id'],))
+  if json.loads(candidate_row['payload']).get('mode')=='live': err(403,'Live resumption requires a fresh authorized case decision')
   if r['status'] not in ('incomplete','cancelled'): err(409,'Run is not resumable')
   c.execute("UPDATE investigations SET status='queued' WHERE id=?",(run_id,)); c.execute("UPDATE pillars SET status='queued' WHERE run_id=? AND status IN ('unavailable','failed')",(run_id,)); event(c,run_id,'resumed','Local operator'); j=job(c,'investigate',run_id,k)
  signal(); return {'job_id':j}
@@ -309,6 +328,8 @@ def queue_reason(run_id:str,x:ReasonInput,idempotency_key:str=Header(None)):
  with db() as c:
   run=getrow(c,'SELECT * FROM investigations WHERE id=?',(run_id,))
   if run['status']=='cancelled': err(409,'Run cancelled')
+  source=getrow(c,'SELECT payload FROM candidates WHERE id=?',(run['candidate_id'],))
+  if json.loads(source['payload']).get('mode')=='live': err(403,'Live reasoning requires a bound, authorized evidence adapter')
   old=c.execute('SELECT * FROM jobs WHERE idem=?',(k,)).fetchone()
   if old:
    inp=c.execute('SELECT * FROM reasoning_inputs WHERE id=?',(old['ref'],)).fetchone()
@@ -356,3 +377,102 @@ class PublicationWebCORS(CORSMiddleware):
 if web_origin:
  app.add_middleware(PublicationWebCORS, allow_origins=[web_origin], allow_methods=['GET','POST'],
                     allow_headers=['Content-Type'])
+
+class CaseScan(BaseModel):
+ limit: int = Field(default=10,ge=1,le=25)
+class ChallengeRequest(BaseModel):
+ action: Literal['diagnostic_research'] = 'diagnostic_research'
+ expected_revision: str = Field(pattern=r'^[0-9a-f]{64}$')
+@app.post('/scouting/cases/refresh')
+def refresh_cases(x:CaseScan,idempotency_key:str=Header(None)):
+ with db() as c:
+  try: jid=job(c,'case_scan',str(x.limit),key(idempotency_key))
+  except ValueError: err(409,'Idempotency key conflict')
+ signal();return {'job_id':jid,'status':'queued','scope':'configured local discovery store; no network calls'}
+def case_view(c,case,policy=None):
+ import datetime as dt
+ policy=policy or __import__('case_engine').policy_digest()
+ snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],));record=json.loads(snap['record']);ass=json.loads(snap['assessment']);state=case['state']
+ decision=c.execute('SELECT case_decisions.run_id,case_decisions.budget,investigations.status FROM case_decisions JOIN investigations ON investigations.id=case_decisions.run_id WHERE case_decisions.case_id=? AND case_decisions.run_id IS NOT NULL ORDER BY case_decisions.created DESC LIMIT 1',(case['id'],)).fetchone()
+ if decision: state='investigating' if decision['status'] in ('queued','running') else 'unavailable'
+ captured=json.loads(snap['evidence'])
+ expected=digest(dumps({'record':record,'evidence':captured,'policy':snap['policy_digest'],'assessment':ass}).encode())
+ if expected!=snap['id']: err(409,'Case snapshot integrity failure')
+ if (snap['expires']<=now() or policy!=snap['policy_digest']) and state!='investigating': state='unavailable'
+ lane={'monitoring':'monitoring','awaiting_human':'human_review_required','auto_queued':'auto_qualified','investigating':'research_running','unavailable':'unavailable'}[state]
+ def latest(key):
+  values=[e.get(key) for e in record.get('evidence',[]) if e.get(key)]
+  try:return max(values,key=lambda x:dt.datetime.fromisoformat(x.replace('Z','+00:00'))) if values else None
+  except (ValueError,TypeError):return None
+ reasons=[{'group_id':g['id'],'description':g['detail'],'verification_status':g['status'],'evidence_ids':[e['id'] for e in g.get('evidence',[])],'observed_at':max((e['observed_at'] for e in g.get('evidence',[])),default=None)} for g in ass['groups']]
+ pillars=[row(x) for x in c.execute('SELECT pillar,status,detail FROM pillars WHERE run_id=? ORDER BY pillar',(decision['run_id'],))] if decision else []
+ _,count,_=__import__('case_engine').verified_gate(ass,captured)
+ priority={'human_review_required':0,'auto_qualified':1,'research_running':2,'monitoring':3,'unavailable':4}[lane]*100+(12-min(count,12))
+ return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':'Deterministic screening; not a report or safety verdict.','uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'unavailable','reason':'Authenticated human authorization verifier is not configured.','action_url':None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':None,'report_version':None,'budget':json.loads(decision['budget']),'pillars':pillars,'reason':'One or more research producers are unavailable; no completed report.' if decision['status']=='incomplete' else None} if decision else None}
+@app.get('/cases')
+@app.get('/scouting/cases')
+def scouting_cases():
+ import datetime as dt
+ with db() as c:
+  total=c.execute('SELECT count(*) FROM cases').fetchone()[0]
+  if total>5000: err(503,'Case index exceeds bounded list capacity; cursor pagination required')
+  policy=__import__('case_engine').policy_digest();items=[case_view(c,x,policy) for x in c.execute('SELECT * FROM cases').fetchall()]
+ items.sort(key=lambda x:(x['priority_order'],x['candidate_id']))
+ return {'schema_version':'scouting-case-list/1','generated_at':dt.datetime.now(dt.timezone.utc).isoformat(),'stale_after_seconds':60,'cases':items[:100],'truncated':total>100,'authentication':'none; local operator prototype'}
+@app.get('/cases/{case_id}')
+@app.get('/scouting/cases/{case_id}')
+def scouting_case(case_id:str):
+ with db() as c:return case_view(c,getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,)))
+@app.post('/scouting/cases/{case_id}/challenge')
+def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None)):
+ import secrets
+ k=key(idempotency_key)
+ with db() as c:
+  c.execute('BEGIN IMMEDIATE');case=getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,));snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],))
+  old=c.execute('SELECT * FROM case_challenges WHERE idem=?',(k,)).fetchone()
+  if old:
+   if (old['case_id'],old['snapshot_id'],old['action'])!=(case_id,x.expected_revision,x.action):err(409,'Idempotency key conflict')
+   old_state=old['state']
+   if old_state=='pending' and old['expires']<=now():old_state='expired'
+   if old_state=='pending' and (case['current_snapshot']!=old['snapshot_id'] or __import__('case_engine').policy_digest()!=old['policy_digest']):old_state='superseded'
+   return {'challenge_id':old['id'],'case_id':case_id,'candidate_id':case['candidate_id'],'snapshot_digest':old['snapshot_id'],'policy_digest':old['policy_digest'],'action':old['action'],'nonce':old['nonce'],'state':old_state,'expires_at':old['expires'],'verification':'unavailable'}
+  if snap['id']!=x.expected_revision or snap['expires']<=now() or __import__('case_engine').policy_digest()!=snap['policy_digest']:err(409,'Snapshot is stale or superseded')
+  if case['state'] not in ('awaiting_human','monitoring'):err(409,'Case is not awaiting an exception')
+  i=ident();nonce=secrets.token_hex(32);expires=min(snap['expires'],now()+900)
+  c.execute('INSERT INTO case_challenges VALUES(?,?,?,?,?,?,?,?,?,?)',(i,case_id,snap['id'],snap['policy_digest'],x.action,nonce,'pending',expires,now(),k))
+  c.execute("UPDATE cases SET state='awaiting_human',updated=? WHERE id=?",(now(),case_id))
+  return {'challenge_id':i,'case_id':case_id,'candidate_id':case['candidate_id'],'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'action':x.action,'nonce':nonce,'state':'pending','expires_at':expires,'verification':'unavailable'}
+@app.post('/scouting/challenges/{challenge_id}/continue')
+def continue_challenge(challenge_id:str):
+ # Fail closed until the separately owned verifier checks action, identity, nonce, expiry and revocation.
+ with db() as c:
+  challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,))
+  if challenge['state']!='pending' or challenge['expires']<=now():err(409,'Challenge is expired or superseded')
+  case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],))
+  if case['current_snapshot']!=challenge['snapshot_id'] or __import__('case_engine').policy_digest()!=challenge['policy_digest']:err(409,'Challenge is stale or superseded')
+ err(503,'Authenticated human verification adapter is not configured')
+
+@app.get('/scouting/challenges/{challenge_id}')
+def challenge_status(challenge_id:str):
+ with db() as c:
+  challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],));state=challenge['state']
+  if state=='pending' and challenge['expires']<=now():state='expired'
+  if state=='pending' and (case['current_snapshot']!=challenge['snapshot_id'] or __import__('case_engine').policy_digest()!=challenge['policy_digest']):state='superseded'
+  return {'challenge_id':challenge_id,'candidate_id':case['candidate_id'],'snapshot_digest':challenge['snapshot_id'],'policy_digest':challenge['policy_digest'],'action':challenge['action'],'nonce':challenge['nonce'],'expires_at':challenge['expires'],'state':state,'verification':'unavailable'}
+@app.post('/scouting/challenges/{challenge_id}/{human_action}')
+def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke','revise']):
+ with db() as c:getrow(c,'SELECT id FROM case_challenges WHERE id=?',(challenge_id,))
+ err(503,'Authenticated human verification adapter is not configured')
+
+@app.get('/scouting/sources')
+def scouting_sources():
+ with db() as c:return {'sources':[row(x) for x in c.execute('SELECT * FROM case_sources ORDER BY id')],'reddit_lead_storage':'blocked_pending_retention_and_deletion_review','authentication':'none; local operator prototype'}
+@app.get('/scouting/leads')
+def scouting_leads():
+ # No post identifiers, excerpts, author metadata or derived content are stored until deletion is implemented.
+ return {'leads':[],'status':'unavailable','reason':'Reddit provider access and deletion/retention lifecycle are not implemented; no lead can vote or qualify.'}
+
+@app.get('/scouting/schema')
+def scouting_schema():
+ path=ROOT/'schemas/runtime/scouting-case-list-v1.schema.json';raw=path.read_bytes()
+ return {'schema_version':'scouting-case-list/1','sha256':digest(raw),'schema':json.loads(raw)}
