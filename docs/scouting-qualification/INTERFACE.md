@@ -25,7 +25,7 @@ The scouting transport uses an explicitly configured HTTPS origin or loopback HT
 | Boundary | Owner proposal | Acceptance |
 |---|---|---|
 | Screening result | Discovery: content-bound identity/policy, group outcomes, evidence/freshness, assessment and urgency | Await backend schema mapping and discovery acceptance |
-| Cases read model | `scouting-case-list/1`, lane/priority, freshness, reasons, disabled verified continuation | Accepted for local read-only prototype at the exact tested snapshot below; final consumer commit/merge remains to record |
+| Cases read model | `scouting-case-list/1`, lane/priority, freshness, reasons, disabled verified continuation | Accepted for local read-only prototype at the exact tested snapshot below; consumer PR #6 commit73f4c02b5f7eb268e238ea861af05b7198d5c493 recorded; dependency merge remains |
 | Research authorization | Root build charter: separate scoped candidate action/principal result | Await backend verifier seam and teammate implementation acceptance |
 | Social provider | Investigation transport; discovery consumes lead results | Await callable/result contract and consumer acceptance |
 
@@ -41,4 +41,4 @@ The runtime DTO currently permits only live Ethereum/Base identity and `referenc
 
 Backend orders all cases by human-action attention and distinct verified concern count with stable candidate ties before returning up to100. The bounded index limit is5,000; above that the prototype returns503 rather than silently omitting older urgent records. Human continuation remains unavailable until the teammate verifier and action contract exist. The current challenge wire action is `diagnostic_research`; build-charter scope labels describe intended permission and are not additional deployed endpoints.
 
-Social integration separately accepted14 dated context observations across two successful bounded SearchApi queries, with unresolved token identity and zero concern votes. A RAY-specific query returned provider-declared failure of unknown exact cause; no sentiment inference follows. All3 additional request-budget calls are used, with no retries. These social records are not the four pilot cases and do not prove fresh risk. Final producer/consumer commits, full worker invocation and scoped human verification remain separate checkpoints.
+Social integration separately accepted14 dated context observations across two successful bounded SearchApi queries, with unresolved token identity and zero concern votes. A RAY-specific query returned provider-declared failure of unknown exact cause; no sentiment inference follows. All3 additional request-budget calls are used, with no retries. These social records are not the four pilot cases and do not prove fresh risk. Web consumer PR #6 is pinned at73f4c02b5f7eb268e238ea861af05b7198d5c493 (220 local tests plus build/lint/typecheck). Final dependency merge, full worker invocation and scoped human verification remain separate checkpoints.
