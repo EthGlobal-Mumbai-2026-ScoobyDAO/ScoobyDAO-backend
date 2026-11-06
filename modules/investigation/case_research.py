@@ -586,6 +586,11 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             for key in ('is_open_source', 'is_proxy', 'is_mintable', 'transfer_pausable', 'is_honeypot'):
                 if key in sec and isinstance(sec[key], (str, int, bool)):
                     claim('onchain', 'provider-'+key, f'The security provider reports {key} = {sec[key]}.', 'security', 'Provider field is not independent proof of current contract behavior.')
+            for key in ('is_blacklisted', 'external_call'):
+                value = sec.get(key)
+                if type(value) in (str, int) and str(value) in ('0', '1'):
+                    claim('onchain', 'goplus-'+key, f'GoPlus reports {key} = {value} for the candidate token.', 'security',
+                          'Provider assertion at the capture time; it does not establish an active blacklist, malicious behavior, or a proven external dependency.')
             for key in ('cannot_sell_all', 'buy_tax', 'sell_tax'):
                 value = source_decimal(sec.get(key)) if key in sec else None
                 if value is not None:

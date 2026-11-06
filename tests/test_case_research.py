@@ -98,6 +98,26 @@ def test_captured_honeypot_provider_disagreement_is_identity_and_pool_bound(tmp_
         assert {m['id']: m['value'] for m in pillar['measurements']}['honeypot_holder_failed'] == 20
 
 
+@pytest.mark.parametrize('mismatch', [False, True])
+def test_goplus_blacklist_and_external_call_are_attributed_and_identity_bound(tmp_path, mismatch):
+    payloads = source_payloads()
+    fields = {'is_blacklisted': '1', 'external_call': '1', 'is_honeypot': '0'}
+    payloads['security'] = {'code': 1, 'result': {('0x' + '90' * 20 if mismatch else ADDR): fields}}
+    output = tmp_path / 'bundle'
+    result = run_case(case('automatic_policy'), output, captured_snapshot=captured_snapshot(payloads))
+    report = verify_digest(output, result['report_sha256'])
+    claims = {c['id']: c for c in report['pillars']['onchain']['claims']}
+    if mismatch:
+        assert 'goplus-is_blacklisted' not in claims and 'goplus-external_call' not in claims
+        assert 'security' not in {e['id'] for e in report['evidence']}
+    else:
+        for key in ('is_blacklisted', 'external_call'):
+            claim = claims['goplus-'+key]
+            assert claim['supporting_evidence_ids'] == ['security'] and '= 1' in claim['statement']
+            assert 'does not establish' in claim['uncertainties'][0]
+        assert claims['provider-is_honeypot']['supporting_evidence_ids'] == ['security']
+
+
 @pytest.mark.parametrize('route', ['automatic_policy', 'world_confirmed'])
 def test_both_authorized_routes_produce_valid_pillar_bundle(tmp_path, route):
     calls = []; output = tmp_path / route
