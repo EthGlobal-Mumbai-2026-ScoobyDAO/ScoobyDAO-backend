@@ -41,7 +41,14 @@ class Review(BaseModel):
  reason: str = Field(min_length=1,max_length=1000)
  sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
 @app.get('/health')
-def health(): return {'status':'ok','scope':'local operator only','production_authentication':False}
+def health(): return {'status':'ok','scope':'local operator only','production_authentication':False,'display_only':display_only(),'reference_seed':reference_seed_status()}
+def display_only(): return os.getenv('SCOOBY_DISPLAY_ONLY','').strip().lower() in ('1','true','yes','on')
+def reference_seed_status():
+ # Written by ops/seed_on_start.py at each start; status and pair count only, never paths or secrets.
+ try:
+  with db() as c:r=c.execute('SELECT status,pairs FROM reference_seed_status WHERE id=1').fetchone()
+ except Exception:r=None
+ return {'status':r['status'],'pairs':r['pairs']} if r else {'status':'not_configured','pairs':0}
 @app.get('/status')
 def status():
  with db() as c:
@@ -427,6 +434,8 @@ app.include_router(publication_web.router)
 from publication import admin as publication_admin, admin_routes as publication_admin_routes, review as report_review
 app.include_router(publication_admin_routes.router)
 app.include_router(publication_admin_routes.public_router)
+import reference_display
+app.include_router(reference_display.router)
 app.add_middleware(publication_admin.AdminRouteGuard)
 
 # Subject-matter-expert view of the full rendered report before release (any installed version). Needs an admin
@@ -460,7 +469,8 @@ from publication import reviewers as publication_reviewers
 publication_reviewers.load_from_env()
 if web_origin:
  app.add_middleware(publication_admin_routes.AdminWebCORS, allow_origins=[web_origin], allow_credentials=False,
-                    allow_methods=['GET','POST','DELETE'], allow_headers=['Content-Type','Authorization','Idempotency-Key'])
+                    allow_methods=['GET','POST','DELETE'], allow_headers=['Content-Type','Authorization','Idempotency-Key'],
+                    expose_headers=['X-Report-SHA256','X-File-SHA256'])
 
 class PublicationWebCORS(CORSMiddleware):
  async def __call__(self, scope, receive, send):
@@ -554,7 +564,14 @@ def case_view(c,case,policy=None):
  summary=next((x['description'] for x in clues if x['kind']=='provider_claim'),None) or next((x['description'] for x in clues), 'No captured discovery trigger is available.')
  # A concrete provider claim raises review urgency within the same verified tier; it never adds gate votes.
  priority=(12-min(count,12))*2+(0 if has_concern else 1)+(60 if lane in ('research_running','research_partial','research_complete') else 100 if lane=='unavailable' else 0)
- return {'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':summary,'scouting_clues':clues,'routing_rationale':routing,'evidence_freshness':freshness,'uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'available' if world_ready and lane in ('human_review_required','monitoring') and snap['expires']>now() else 'unavailable','reason':'World ID confirmation required for this case.' if world_ready else 'World ID administrator authorization is not configured.','action_url':('/scouting/cases/'+case['id']+'/challenge') if world_ready and lane in ('human_review_required','monitoring') and snap['expires']>now() else None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':linked['id'] if linked else None,'report_version':linked['version'] if linked else None,'budget':json.loads(decision['budget']) if decision['budget'] else None,'authorization':('world_id_human' if decision['run_id'] and c.execute("SELECT 1 FROM case_decisions WHERE run_id=? AND action='human_research'",(decision['run_id'],)).fetchone() else 'policy_qualified_local') if decision['budget'] else 'unverified_legacy','pillars':pillars,'reason':'No usable evidence under the authorized budget; no report generated.' if decision['status']=='blocked' else 'Evidence-linked draft is partial and pending review.' if decision['status']=='partial' else 'Research is incomplete; inspect the per-pillar states.' if decision['status']=='incomplete' else None} if decision else None}
+ result={'case_id':case['id'],'candidate_id':record['candidate_id'],'identity':record['identity'],'mode':record['mode'],'reference':None,'lane':lane,'human_action_required':lane=='human_review_required','priority_order':priority,'verified_triggered_count':count,'status_label':lane.replace('_',' '),'summary':summary,'scouting_clues':clues,'routing_rationale':routing,'evidence_freshness':freshness,'uncertainties':record['screening'].get('quality_issues',[]),'observed_at':latest('observed_at'),'fetched_at':latest('fetched_at'),'reasons':reasons,'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'expires_at':dt.datetime.fromtimestamp(snap['expires'],dt.timezone.utc).isoformat(),'continuation':{'availability':'available' if world_ready and lane in ('human_review_required','monitoring') and snap['expires']>now() else 'unavailable','reason':'World ID confirmation required for this case.' if world_ready else 'World ID administrator authorization is not configured.','action_url':('/scouting/cases/'+case['id']+'/challenge') if world_ready and lane in ('human_review_required','monitoring') and snap['expires']>now() else None,'expected_revision':snap['id']},'research':{'run_id':decision['run_id'],'status':decision['status'],'report_id':linked['id'] if linked else None,'report_version':linked['version'] if linked else None,'budget':json.loads(decision['budget']) if decision['budget'] else None,'authorization':('world_id_human' if decision['run_id'] and c.execute("SELECT 1 FROM case_decisions WHERE run_id=? AND action='human_research'",(decision['run_id'],)).fetchone() else 'policy_qualified_local') if decision['budget'] else 'unverified_legacy','pillars':pillars,'reason':'No usable evidence under the authorized budget; no report generated.' if decision['status']=='blocked' else 'Evidence-linked draft is partial and pending review.' if decision['status']=='partial' else 'Research is incomplete; inspect the per-pillar states.' if decision['status']=='incomplete' else None} if decision else None}
+ reference=__import__('reference_display').case_reference(c,case['id'])
+ if reference:
+  # Display-only historical reference (docs/reference-display-contract.md): no lane, continuation, research or gate claim.
+  result.update(reference=reference,lane='unavailable',status_label='historical reference',human_action_required=False,priority_order=200,
+   routing_rationale='Historical reference — unreviewed. The captured snapshot is expired; no gate evaluation, investigation or World action is available for this case.',
+   continuation={'availability':'unavailable','reason':'Historical reference cases cannot start an investigation.','action_url':None,'expected_revision':snap['id']},research=None)
+ return result
 @app.get('/cases')
 @app.get('/scouting/cases')
 def scouting_cases():
@@ -575,6 +592,7 @@ def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None),pr
  k=key(idempotency_key)
  with db() as c:
   c.execute('BEGIN IMMEDIATE');case=getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,));snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],))
+  if __import__('reference_display').is_reference_case(c,case_id):err(409,'Historical reference case: no investigation or World action is available')
   old=c.execute('SELECT * FROM case_challenges WHERE idem=?',(k,)).fetchone()
   if old:
    __import__('case_world').require_owner(c,old['id'],principal)
@@ -596,6 +614,7 @@ def continue_challenge(challenge_id:str,principal=Depends(_require_admin('case_i
  with db() as c:
   challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,))
   __import__('case_world').require_owner(c,challenge_id,principal)
+  if __import__('reference_display').is_reference_case(c,challenge['case_id']):err(409,'Historical reference case: no investigation or World action is available')
   if challenge['state']!='pending' or challenge['expires']<=now():err(409,'Challenge is expired or superseded')
   case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],))
   if case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']:err(409,'Challenge is stale or superseded')
@@ -611,6 +630,9 @@ def challenge_status(challenge_id:str,principal=Depends(_require_admin('case_inv
 @app.post('/scouting/challenges/{challenge_id}/world-attempt')
 def case_world_start(challenge_id:str,world=Depends(get_world_optional),principal=Depends(_require_admin('case_investigation'))):
  import case_world
+ with db() as c:
+  ch=c.execute('SELECT case_id FROM case_challenges WHERE id=?',(challenge_id,)).fetchone()
+  if ch and __import__('reference_display').is_reference_case(c,ch['case_id']):err(409,'Historical reference case: no investigation or World action is available')
  return case_world.start(challenge_id,world,principal)
 @app.get('/scouting/world-attempts/{attempt_id}')
 def case_world_poll(attempt_id:str,world=Depends(get_world_optional),principal=Depends(_require_admin('case_investigation'))):
@@ -737,4 +759,21 @@ async def _deny(send, code):
  body=b'{"detail":"Not found"}'
  await send({'type':'http.response.start','status':code,'headers':[(b'content-type',b'application/json'),(b'content-length',str(len(body)).encode())]})
  await send({'type':'http.response.body','body':body})
+# SCOOBY_DISPLAY_ONLY=true: refuse every route that can queue research, scans, case sync, renders, model reasoning or a
+# case-checkpoint World attempt. Review sessions, reads and report sign-off stay available (they enqueue nothing).
+DISPLAY_ONLY_BLOCKED=_re.compile(r'^/(?:investigations|reference-runs|scans|reports/import|scouting/cases/refresh'
+                                 r'|investigations/[^/]+/(?:resume|reason)|reports/[^/]+/[^/]+/render'
+                                 r'|scouting/cases/[^/]+/challenge|scouting/challenges/[^/]+/(?:continue|world-attempt))/?$')
+DISPLAY_ONLY_BLOCKED_READ=_re.compile(r'^/scouting/world-attempts/[^/]+/?$')  # polling can complete a checkpoint-1 approval
+class DisplayOnlyGate:
+ def __init__(self, app): self.app=app
+ async def __call__(self, scope, receive, send):
+  if scope['type']=='http' and display_only():
+   path,method=scope['path'],scope.get('method','GET')
+   if (method=='POST' and DISPLAY_ONLY_BLOCKED.fullmatch(path)) or (method=='GET' and DISPLAY_ONLY_BLOCKED_READ.fullmatch(path)):
+    body=b'{"detail":"Display-only deployment: research, scans, renders, reasoning and case actions are disabled"}'
+    await send({'type':'http.response.start','status':503,'headers':[(b'content-type',b'application/json'),(b'content-length',str(len(body)).encode())]})
+    return await send({'type':'http.response.body','body':body})
+  return await self.app(scope, receive, send)
+app.add_middleware(DisplayOnlyGate)
 app.add_middleware(PublicGate)

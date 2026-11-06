@@ -28,6 +28,8 @@ def validate_render(out,ref):
  return digest(manifest.read_bytes())
 
 def work_one():
+ # SCOOBY_DISPLAY_ONLY=true: never consume queued work, even if a worker was started by mistake.
+ if os.getenv('SCOOBY_DISPLAY_ONLY','').strip().lower() in ('1','true','yes','on'): return False
  with db() as c:
   c.execute('BEGIN IMMEDIATE')
   c.execute("UPDATE jobs SET state='failed', lease=NULL, error='Scout interrupted; manual inspection required' WHERE kind='scout_collect' AND state='running' AND lease<?",(now(),))
@@ -178,6 +180,7 @@ def work_one():
 @huey.task()
 def wake(): work_one()
 def enqueue_periodic_case_sync():
+ if os.getenv('SCOOBY_DISPLAY_ONLY','').strip().lower() in ('1','true','yes','on'): return None
  # Local DB reconciliation only; discovery owns all outbound collection.
  if os.getenv('SCOOBY_CASE_SYNC_ENABLED','false').lower()!='true': return None
  try: limit=max(1,min(25,int(os.getenv('SCOOBY_CASE_SYNC_LIMIT','10'))))
@@ -187,6 +190,7 @@ def enqueue_periodic_case_sync():
   if c.execute("SELECT 1 FROM jobs WHERE kind='case_scan' AND state IN ('queued','running') LIMIT 1").fetchone(): return None
   return job(c,'case_scan',str(limit),'case-period:'+str(int(now()//60)))
 def enqueue_periodic_scout():
+ if os.getenv('SCOOBY_DISPLAY_ONLY','').strip().lower() in ('1','true','yes','on'):return None
  if os.getenv('SCOOBY_SCOUT_ENABLED','false').lower()!='true':return None
  with db() as c:
   c.execute('BEGIN IMMEDIATE')

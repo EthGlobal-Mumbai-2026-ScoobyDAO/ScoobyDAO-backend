@@ -84,3 +84,7 @@ Case board (public) shows six reference cards with historical/unreviewed label a
 → review desk per-report World ID session → graphical five-pillar reader. No agent/model/investigation/on-chain
 action is reachable from these cards or the reader (challenge/continue/World-attempt buttons hidden or disabled for
 reference cases; review sign-off remains the existing separate desk action and is not triggered by reading).
+
+## Clarifications (orchestrator-approved, 7 November 2026)
+- Admin read 3 (`/web/v1/admin/cases/{case_id}/reference-reports`): a per-report session is accepted only when its report is linked to that case, and the response then lists only that report (any other case → 403); with `SCOOBY_REVIEW_PER_REPORT=true` a general session receives 403, as on admin reads 1–2.
+- Public case items: `scouting-case-list/2` is amended additively so `reference` is `null` or exactly the object above (closed schema); see `contract-amendments.md`.

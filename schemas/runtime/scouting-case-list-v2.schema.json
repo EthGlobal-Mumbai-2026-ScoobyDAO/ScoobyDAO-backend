@@ -39,6 +39,34 @@
     }
   },
   "$defs": {
+    "reference": {
+      "description": "scooby.reference-display/1 historical reference (docs/reference-display-contract.md); additive amendment, null for every other case.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label", "reports"],
+      "properties": {
+        "kind": {"const": "historical_reference"},
+        "label": {"const": "Historical reference \u2014 unreviewed"},
+        "reports": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["report_id", "report_version", "report_sha256", "association", "review_state", "world_verified", "gate_effect"],
+            "properties": {
+              "report_id": {"type": "string"},
+              "report_version": {"type": "string"},
+              "report_sha256": {"$ref": "#/$defs/hash"},
+              "association": {"const": "historical_reference"},
+              "review_state": {"enum": ["pending_review", "approved", "rejected", "revision_requested", "unavailable"]},
+              "world_verified": {"type": "boolean"},
+              "gate_effect": {"const": "none"}
+            }
+          }
+        }
+      }
+    },
     "hash": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
@@ -161,7 +189,14 @@
           "const": "live"
         },
         "reference": {
-          "type": "null"
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/reference"
+            }
+          ]
         },
         "lane": {
           "enum": [

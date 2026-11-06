@@ -320,24 +320,74 @@ def restore(data: bytes, expected_sha: str) -> dict:
     return {'pairs': len(verified), 'rows_written': rows, 'bundles_installed': len(created_dirs)}
 
 
-def settings() -> tuple[Path, str] | None:
+FETCH_TIMEOUT = 30.0
+FETCH_MAX = 10_000_000
+HEADER_NAME = re.compile(r"[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}")
+
+
+def settings() -> dict | None:
+    """SCOOBY_REFERENCE_SEED_ARCHIVE (a local .zip/.b64 path) or SCOOBY_REFERENCE_SEED_URL (one HTTPS GET), never both."""
     archive = os.getenv('SCOOBY_REFERENCE_SEED_ARCHIVE', '').strip()
-    if not archive:
+    url = os.getenv('SCOOBY_REFERENCE_SEED_URL', '').strip()
+    if not archive and not url:
         return None
+    if archive and url:
+        raise ReferenceSeedError('set SCOOBY_REFERENCE_SEED_ARCHIVE or SCOOBY_REFERENCE_SEED_URL, not both')
     sha = os.getenv('SCOOBY_REFERENCE_SEED_SHA256', '').strip().lower()
     if not SHA.fullmatch(sha):
         raise ReferenceSeedError('SCOOBY_REFERENCE_SEED_SHA256 must be a 64-character hex SHA-256')
-    return Path(archive), sha
+    header = None
+    raw_header = os.getenv('SCOOBY_REFERENCE_SEED_AUTH_HEADER', '').strip()
+    if raw_header:
+        name, sep, value = raw_header.partition(':')
+        if not url or not sep or not HEADER_NAME.fullmatch(name.strip()) or not value.strip() or any(ch in value for ch in '\r\n'):
+            raise ReferenceSeedError('SCOOBY_REFERENCE_SEED_AUTH_HEADER must be "Name: value" and needs SCOOBY_REFERENCE_SEED_URL')
+        header = (name.strip(), value.strip())
+    if url:
+        from urllib.parse import urlsplit
+        parts = urlsplit(url)
+        if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
+            raise ReferenceSeedError('SCOOBY_REFERENCE_SEED_URL must be an https URL without credentials')
+    return {'archive': Path(archive) if archive else None, 'url': url or None, 'header': header, 'sha256': sha}
 
 
-def run_from_env() -> dict | None:
+def fetch(url: str, header: tuple[str, str] | None, dest: Path, transport=None) -> bytes:
+    """One storage GET: HTTPS, no redirects, bounded time and size, streamed to `dest`. Bytes are returned unparsed;
+    the caller checks the pinned digest before anything reads them. Never logs the URL query or the header."""
+    import httpx
+    headers = {header[0]: header[1]} if header else {}
+    try:
+        with httpx.Client(transport=transport, timeout=FETCH_TIMEOUT, follow_redirects=False, trust_env=False) as client:
+            with client.stream('GET', url, headers=headers) as r:
+                if r.status_code != 200:
+                    raise ReferenceSeedError(f'reference seed fetch returned HTTP {r.status_code} (redirects are not followed)')
+                declared = r.headers.get('content-length')
+                if declared and declared.isdigit() and int(declared) > FETCH_MAX:
+                    raise ReferenceSeedError('reference seed download exceeds the size limit')
+                size = 0
+                with open(dest, 'wb') as out:
+                    for chunk in r.iter_bytes():
+                        size += len(chunk)
+                        if size > FETCH_MAX:
+                            raise ReferenceSeedError('reference seed download exceeds the size limit')
+                        out.write(chunk)
+    except httpx.HTTPError as e:
+        raise ReferenceSeedError(f'reference seed fetch failed: {type(e).__name__}') from None
+    return archive_bytes(dest)
+
+
+def run_from_env(transport=None) -> dict | None:
     cfg = settings()
     if cfg is None:
         return None
-    path, sha = cfg
-    if not path.is_file():
-        raise ReferenceSeedError(f'no reference seed archive at {path}')
-    return restore(archive_bytes(path), sha)
+    if cfg['archive'] is not None:
+        if not cfg['archive'].is_file():
+            raise ReferenceSeedError('no reference seed archive at the configured path')
+        return restore(archive_bytes(cfg['archive']), cfg['sha256'])
+    import store
+    with tempfile.TemporaryDirectory(dir=store.DATA, prefix='reference-seed-fetch-') as tmp:
+        data = fetch(cfg['url'], cfg['header'], Path(tmp) / 'seed.download', transport)
+    return restore(data, cfg['sha256'])
 
 
 def main(argv=None) -> int:

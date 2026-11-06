@@ -89,3 +89,38 @@ A fresh image and volume contain no authored RAY report. The repo includes test 
 Each start verifies the archive checksum, then `seed_restore` verifies the manifest and every report digest, records the versions as pending human review and queues renders; it is idempotent. A failed seed is logged (`seed: not imported: …`) and the API starts anyway. Nothing here admits a case, verifies World ID, approves, publishes or calls a model, and the archive never enters the image or the repository.
 
 **Limits.** This is not persistence: review decisions, sessions and anything else written at runtime are lost on every restart or redeploy, and the seeded reports return as pending review. PDF rendering needs `SCOOBY_BROWSER=/usr/bin/chromium`, which may exceed a 512 MB instance; HTML drafts render without it. For the persistent, backed-up deployment the seed instructions describe, use a plan with a disk mounted at `/data` and run `seed_restore.py` from a shell instead.
+
+## Display-only six-reference deployment
+
+The display-only milestone (`docs/reference-display-contract.md`) shows six historical, unreviewed case/report reference pairs. It runs no scouting, case sync, investigation, VAE/model, LLM, provider, render or on-chain work, and it creates no decisions, reviews, World attempts, gate results, approvals or publication.
+
+| Variable | Display-only value |
+|---|---|
+| `SCOOBY_DISPLAY_ONLY` | `true`: 503 on `POST /investigations`, `/reference-runs`, `/investigations/{id}/resume`, `/investigations/{id}/reason`, `/scans`, `/reports/import`, `/reports/{id}/{v}/render`, `/scouting/cases/refresh`, `/scouting/cases/{id}/challenge`, `/scouting/challenges/{id}/continue` and `/world-attempt`, and on `GET /scouting/world-attempts/{id}`. The worker never starts (even with `SCOOBY_EMBEDDED_WORKER=true`) and `worker.work_one` consumes nothing. Review desk sessions, reads and report sign-off keep working: they enqueue no jobs. |
+| `SCOOBY_SCOUT_ENABLED`, `SCOOBY_CASE_SYNC_ENABLED` | `false` |
+| `SCOOBY_MODEL_CALL_BUDGET`, `SCOOBY_CASE_MODEL_MAX_CALLS` | `0` |
+| `SCOOBY_PUBLISH_ENABLED`, `SCOOBY_DEMO_AUTOPUBLISH` | `false`: publication stays blocked |
+| `SCOOBY_REPORT_RELEASE` | `approved`. Linked reference reports need a genuine World-confirmed approval under any policy. |
+| `SCOOBY_WEB_ORIGIN` | the exact trusted frontend origin |
+| `SCOOBY_REFERENCE_SEED_SHA256` | `c9fcbf2a32b7c58142389075511989357431b4d457ae89997ebae2261697b8a0`, also pinned in `reference_seed.py`. A mismatch imports nothing. |
+| `SCOOBY_REFERENCE_SEED_ARCHIVE` **or** `SCOOBY_REFERENCE_SEED_URL` | The private ZIP (or its base64). Use a path on a persistent disk or local file, or one HTTPS URL. Set one, never both. |
+| `SCOOBY_REFERENCE_SEED_AUTH_HEADER` | optional secret, e.g. `Authorization: Bearer <token>`, sent only with the URL request |
+
+**Seed input and size.** The ZIP is about 2.6 MB, or 3.5 MB as base64. Render limits the combined size of all Secret Files per service to 1 MB, so the archive cannot be a Render Secret File. Use one of these instead:
+- `SCOOBY_REFERENCE_SEED_ARCHIVE` on a persistent disk, or with a one-time `python reference_seed.py restore --archive PATH --sha256 HEX`.
+- `SCOOBY_REFERENCE_SEED_URL`: one HTTPS GET at start. Redirects are never followed. The request has a 30 s timeout and a 10 MB cap, and is streamed to a temporary file under `SCOOBY_DATA`. The pinned and configured SHA-256 is checked before anything is parsed.
+
+Choosing and configuring that storage is the operator's decision. On a host without a disk (Render free plan) every restart re-fetches the archive and re-imports it into the fresh database. This fetch is a storage read, not a provider or model call. With the display-only settings above it is the only outbound request at boot. At run time the only outbound requests are the World ID login/poll calls a reviewer starts from the review desk.
+
+**Import semantics.** `reference_seed.py` reads only `manifest.json` and `bundles/**`. Every member, including the archive's `backend/` snapshot and `restore.py`, is hash-checked against `manifest.files` in memory; those two are never written or executed. The six identities are pinned in code. One `BEGIN IMMEDIATE` transaction installs:
+- candidates;
+- `diagnostic_exception` selections with the manifest description;
+- `reference_only` runs, pillars and diagnostic imports;
+- reports, case snapshots (digest re-verified, already expired) and cases in state `unavailable`;
+- the `case_reference_reports` links.
+
+An identical re-run changes nothing. A conflicting existing row refuses the whole import and changes nothing. Bundle directories created by a failed run are removed. No jobs are queued. A failure is logged (`reference seed: not imported, nothing written: ...`) and never blocks startup. `GET /health` reports `reference_seed: {status: not_configured|imported|already_present|failed, pairs}` (no paths or secrets). Verify a copy offline with `python reference_seed.py verify --archive PATH --sha256 HEX`, which writes nothing.
+
+**Reads.** `/scouting/cases` items carry `reference` (identifiers and labels only). For the six cases, lane and continuation are `unavailable` and `research` is `null`. Report metadata and files are served only under `/web/v1/admin/reference-reports/...` with a World ID `report_review` session (per-report sessions honoured). Files are re-hashed on every request.
+
+**Still separate.** Live scouting, render workers, PDFs and approved public release are outside this milestone. The existing `SCOOBY_SEED_*` report seed is unchanged; under display-only its queued renders are not processed.

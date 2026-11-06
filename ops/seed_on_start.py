@@ -15,6 +15,10 @@ never logged.
     SCOOBY_SEED_ARCHIVE_SHA256=<sha256 of the .zip bytes>
     SCOOBY_SEED_MANIFEST_SHA256=<sha256 of manifest.json>
     SCOOBY_SEED_REPORT_IDS=ethereum-ray-reference,case-diagnostic_hex,...
+
+Separately, the six-reference display seed (reference_seed.py) runs when SCOOBY_REFERENCE_SEED_ARCHIVE or
+SCOOBY_REFERENCE_SEED_URL is set, with SCOOBY_REFERENCE_SEED_SHA256. Its failure is logged, imports nothing and never
+stops startup; GET /health reports its status.
 """
 from __future__ import annotations
 import base64
@@ -85,15 +89,51 @@ def run(restore=None) -> int:
         return restore(zip_path, manifest_sha, ids)
 
 
+def record_reference_status(status: str, pairs: int) -> None:
+    """Read-only status for GET /health: a state and a pair count, never paths, URLs or secrets."""
+    from store import db, now
+    with db() as c:
+        c.execute('INSERT INTO reference_seed_status(id,status,pairs,updated) VALUES(1,?,?,?) '
+                  'ON CONFLICT(id) DO UPDATE SET status=excluded.status,pairs=excluded.pairs,updated=excluded.updated',
+                  (status, pairs, now()))
+
+
+def run_reference(run_from_env=None) -> str:
+    """Six-reference display seed (docs/reference-display-contract.md). Never raises: a failure imports nothing,
+    is logged and recorded as 'failed', and startup continues."""
+    try:
+        if run_from_env is None:
+            from reference_seed import run_from_env
+        result = run_from_env()
+    except Exception as e:
+        print(f'reference seed: not imported, nothing written: {type(e).__name__}: {e}', flush=True)
+        status, pairs = 'failed', 0
+    else:
+        if result is None:
+            status, pairs = 'not_configured', 0
+        else:
+            status, pairs = ('imported' if result['rows_written'] else 'already_present'), result['pairs']
+            print(f'reference seed: {status}; {pairs} historical reference pairs pending review, no jobs queued', flush=True)
+    try:
+        record_reference_status(status, pairs)
+    except Exception as e:
+        print(f'reference seed: status not recorded: {type(e).__name__}', flush=True)
+    return status
+
+
 def main() -> int:
+    code = 0
     try:
         n = run()
     except Exception as e:  # report and let the API start anyway
         print(f'seed: not imported: {type(e).__name__}: {e}', flush=True)
-        return 1
-    if n:
-        print(f'seed: {n} report versions present, pending human review; renders queued if new', flush=True)
-    return 0
+        code = 1
+    else:
+        if n:
+            print(f'seed: {n} report versions present, pending human review; renders queued if new', flush=True)
+    # Independent of the report seed above; a reference seed failure never blocks startup (exit status unaffected).
+    run_reference()
+    return code
 
 
 if __name__ == '__main__':
