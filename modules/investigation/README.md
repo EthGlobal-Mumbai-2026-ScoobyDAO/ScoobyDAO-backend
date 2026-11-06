@@ -53,3 +53,7 @@ Backend owns queue/actor state, discovery and human review. It must isolate work
 ## Terra case reasoning
 
 `case_research.run_case` optionally performs one bounded GPT-6.1 Terra Chat Completions request for all five pillars and the conclusion before installing a report bundle. Default model budget is zero. See `docs/terra-case-reasoning.md` for callbacks, checkpoints, validation, model/output caps and backend budget ownership. Synthetic clients only were used for testing; live model access and full product integration remain unverified.
+
+## Graph token-level history
+
+An optional source-typed, offline Graph `tokenDayDatas` replay path preserves raw pages and binds its separately captured VAE output to the same token-level history. It does not relabel the data as GeckoTerminal selected-pool candles or choose a VaR horizon. See `docs/case-research-producer.md` for arguments, provenance checks and limitations.

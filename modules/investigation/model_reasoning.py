@@ -100,6 +100,17 @@ def _verified_legacy_math(report, root):
                     or manifest.get('reconstructions_sha256') != _hash(data[1])
                     or manifest.get('source_candles_sha256') not in {e['sha256'] for e in report['evidence']}):
                 return False
+            if manifest.get('source_type') == 'graph_token_day':
+                from . import graph_history
+                capture = graph_history.verify_capture(root / 'evidence' / 'graph', report['candidate_id'])
+                graph = graph_history.verify_model(root / 'evidence' / 'graph_model', capture, manifest.get('graph_technical_sha256'))
+                if (manifest.get('source_candles_sha256') != graph_history.sha(capture['normalized_raw'])
+                        or manifest.get('graph_run_manifest_sha256') != graph_history.sha(graph['manifest_raw'])
+                        or data[1] != graph['recon_raw'] or metrics.get('risk_assessment') != graph['risk']):
+                    return False
+                technical = graph['technical'] or {'technical_health': {}, 'technical_series': {}}
+                if metrics.get('technical_health') != technical['technical_health'] or metrics.get('technical_series') != technical['technical_series']:
+                    return False
             rows = csv.reader(io.StringIO(data[1].decode('utf-8-sig'), newline=''))
             header = next(rows, [])
             if len(header) != 51 or len(set(header)) != 51: return False
