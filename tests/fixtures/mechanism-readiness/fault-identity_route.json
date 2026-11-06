@@ -1,0 +1,256 @@
+{
+  "profile": "scooby.mechanism-observations/1",
+  "candidate_id": "1:0x1111111111111111111111111111111111111111",
+  "block": {
+    "number": 123,
+    "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "observed_at": "2026-11-06T00:00:00Z"
+  },
+  "environment": {
+    "mode": "offline_fixture",
+    "engine": "synthetic-records",
+    "version": "1"
+  },
+  "evidence": [
+    {
+      "id": "fixture",
+      "path": "synthetic-evidence.json",
+      "sha256": "50401f5cc04d6cf3460a8ac289aaccd338c247de8772116dc2afa690d75797ab"
+    }
+  ],
+  "mechanism": {
+    "runtime_matched": true,
+    "control_path_attributed": true,
+    "controller_state_pinned": true,
+    "evidence_ids": [
+      "fixture"
+    ],
+    "review": {
+      "status": "offline_fixture",
+      "record_id": "synthetic-not-a-human-review",
+      "evidence_ids": [
+        "fixture"
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "0-buy",
+      "wallet": "0x2222222222222222222222222222222222222222",
+      "role": "ordinary",
+      "direction": "buy",
+      "router": "0x8888888888888888888888888888888888888888",
+      "pool": "0x9999999999999999999999999999999999999999",
+      "input_amount": "100",
+      "received_amount": "100",
+      "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state_id": "reset-0",
+      "sequence_id": "sequence-0",
+      "replication_id": "run-0",
+      "overrides": [],
+      "outcome": "success",
+      "controls": {
+        "identity_route": true,
+        "balance": true,
+        "allowance": true,
+        "gas": true,
+        "deadline": true,
+        "slippage": true,
+        "liquidity": true,
+        "ordinary_tax": true,
+        "launch_controls": true,
+        "engine_support": true
+      },
+      "evidence_ids": [
+        "fixture"
+      ],
+      "trace_evidence_ids": [
+        "fixture"
+      ],
+      "parent_scenario_id": null,
+      "pre_state_id": "initial-0",
+      "post_state_id": "after-buy-0",
+      "balance_before": "0",
+      "balance_after": "100",
+      "sequence_proof": {
+        "mode": "fork_sequence",
+        "review_status": "reviewed",
+        "evidence_ids": [
+          "fixture"
+        ],
+        "notice": "Synthetic linkage for offline tests only."
+      },
+      "input_asset": "1:0x7777777777777777777777777777777777777777",
+      "output_asset": "1:0x1111111111111111111111111111111111111111"
+    },
+    {
+      "id": "0-sell",
+      "wallet": "0x2222222222222222222222222222222222222222",
+      "role": "ordinary",
+      "direction": "sell",
+      "router": "0x8888888888888888888888888888888888888888",
+      "pool": "0x9999999999999999999999999999999999999999",
+      "input_amount": "100",
+      "received_amount": "0",
+      "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state_id": "reset-0",
+      "sequence_id": "sequence-0",
+      "replication_id": "run-0",
+      "overrides": [],
+      "outcome": "token_restriction",
+      "controls": {
+        "identity_route": false,
+        "balance": true,
+        "allowance": true,
+        "gas": true,
+        "deadline": true,
+        "slippage": true,
+        "liquidity": true,
+        "ordinary_tax": true,
+        "launch_controls": true,
+        "engine_support": true
+      },
+      "evidence_ids": [
+        "fixture"
+      ],
+      "trace_evidence_ids": [
+        "fixture"
+      ],
+      "parent_scenario_id": "0-buy",
+      "pre_state_id": "after-buy-0",
+      "post_state_id": "after-sell-0",
+      "balance_before": "100",
+      "balance_after": "0",
+      "sequence_proof": {
+        "mode": "fork_sequence",
+        "review_status": "reviewed",
+        "evidence_ids": [
+          "fixture"
+        ],
+        "notice": "Synthetic linkage for offline tests only."
+      },
+      "input_asset": "1:0x1111111111111111111111111111111111111111",
+      "output_asset": "1:0x7777777777777777777777777777777777777777"
+    },
+    {
+      "id": "1-buy",
+      "wallet": "0x3333333333333333333333333333333333333333",
+      "role": "ordinary",
+      "direction": "buy",
+      "router": "0x8888888888888888888888888888888888888888",
+      "pool": "0x9999999999999999999999999999999999999999",
+      "input_amount": "100",
+      "received_amount": "100",
+      "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state_id": "reset-1",
+      "sequence_id": "sequence-1",
+      "replication_id": "run-1",
+      "overrides": [],
+      "outcome": "success",
+      "controls": {
+        "identity_route": true,
+        "balance": true,
+        "allowance": true,
+        "gas": true,
+        "deadline": true,
+        "slippage": true,
+        "liquidity": true,
+        "ordinary_tax": true,
+        "launch_controls": true,
+        "engine_support": true
+      },
+      "evidence_ids": [
+        "fixture"
+      ],
+      "trace_evidence_ids": [
+        "fixture"
+      ],
+      "parent_scenario_id": null,
+      "pre_state_id": "initial-1",
+      "post_state_id": "after-buy-1",
+      "balance_before": "0",
+      "balance_after": "100",
+      "sequence_proof": {
+        "mode": "fork_sequence",
+        "review_status": "reviewed",
+        "evidence_ids": [
+          "fixture"
+        ],
+        "notice": "Synthetic linkage for offline tests only."
+      },
+      "input_asset": "1:0x7777777777777777777777777777777777777777",
+      "output_asset": "1:0x1111111111111111111111111111111111111111"
+    },
+    {
+      "id": "1-sell",
+      "wallet": "0x3333333333333333333333333333333333333333",
+      "role": "ordinary",
+      "direction": "sell",
+      "router": "0x8888888888888888888888888888888888888888",
+      "pool": "0x9999999999999999999999999999999999999999",
+      "input_amount": "100",
+      "received_amount": "0",
+      "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state_id": "reset-1",
+      "sequence_id": "sequence-1",
+      "replication_id": "run-1",
+      "overrides": [],
+      "outcome": "token_restriction",
+      "controls": {
+        "identity_route": false,
+        "balance": true,
+        "allowance": true,
+        "gas": true,
+        "deadline": true,
+        "slippage": true,
+        "liquidity": true,
+        "ordinary_tax": true,
+        "launch_controls": true,
+        "engine_support": true
+      },
+      "evidence_ids": [
+        "fixture"
+      ],
+      "trace_evidence_ids": [
+        "fixture"
+      ],
+      "parent_scenario_id": "1-buy",
+      "pre_state_id": "after-buy-1",
+      "post_state_id": "after-sell-1",
+      "balance_before": "100",
+      "balance_after": "0",
+      "sequence_proof": {
+        "mode": "fork_sequence",
+        "review_status": "reviewed",
+        "evidence_ids": [
+          "fixture"
+        ],
+        "notice": "Synthetic linkage for offline tests only."
+      },
+      "input_asset": "1:0x1111111111111111111111111111111111111111",
+      "output_asset": "1:0x7777777777777777777777777777777777777777"
+    }
+  ],
+  "pillar_coverage": {
+    "microstructure": {
+      "status": "unavailable",
+      "reason": "Synthetic mechanism control; this is not a full token investigation."
+    },
+    "onchain": {
+      "status": "unavailable",
+      "reason": "Synthetic mechanism control; this is not a full token investigation."
+    },
+    "fundamentals": {
+      "status": "unavailable",
+      "reason": "Synthetic mechanism control; this is not a full token investigation."
+    },
+    "statistical_risk": {
+      "status": "unavailable",
+      "reason": "Synthetic mechanism control; this is not a full token investigation."
+    },
+    "technical_health": {
+      "status": "unavailable",
+      "reason": "Synthetic mechanism control; this is not a full token investigation."
+    }
+  }
+}

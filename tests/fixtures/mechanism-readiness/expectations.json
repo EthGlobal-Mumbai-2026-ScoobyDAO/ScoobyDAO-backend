@@ -1,0 +1,21 @@
+{
+  "repeated-restriction": "restriction_reproduced",
+  "known-sellable": "no_restriction_observed_in_tested_scope",
+  "ordinary-success-counterexample": "selective_restriction_reproduced",
+  "privileged-success-only": "restriction_reproduced",
+  "fault-identity_route": "inconclusive",
+  "fault-balance": "inconclusive",
+  "fault-allowance": "inconclusive",
+  "fault-gas": "inconclusive",
+  "fault-deadline": "inconclusive",
+  "fault-slippage": "inconclusive",
+  "fault-liquidity": "inconclusive",
+  "fault-ordinary_tax": "inconclusive",
+  "fault-launch_controls": "inconclusive",
+  "fault-engine_support": "inconclusive",
+  "source-failure": "inconclusive",
+  "missing-trace": "inconclusive",
+  "buy-fails-too": "inconclusive",
+  "unknown-controller": "restriction_reproduced",
+  "size-effect": "selective_restriction_reproduced"
+}

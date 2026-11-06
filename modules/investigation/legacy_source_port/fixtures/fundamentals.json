@@ -1,0 +1,15 @@
+{
+  "coin": "TEST-ONLY",
+  "github_activity": {
+    "repos": [],
+    "stars": 0
+  },
+  "market_data": {
+    "latest_price": 123.0,
+    "daily_returns": [
+      0.1,
+      -0.1
+    ]
+  },
+  "reddit_sentiment": "FABRICATED TEST DATA ONLY"
+}

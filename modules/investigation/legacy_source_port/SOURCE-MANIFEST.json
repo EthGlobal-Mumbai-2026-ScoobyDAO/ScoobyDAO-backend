@@ -1,0 +1,117 @@
+[
+  {
+    "source": "microstructure_analyzer/microstructure/math_utils.py",
+    "source_sha256": "e731009d124c7064d4747057d38dab0912697f84b5c8f3536a2088359be010b2",
+    "target": "legacy/math_utils.py",
+    "target_sha256": "1938d3468ccf560e7b9bcf71c450030f1800ff509aed8ae91eab96980b41320f",
+    "definitions": [
+      "sqrtX96_to_unscaled_sqrt",
+      "unscaled_sqrt_to_sqrtX96",
+      "price_from_sqrtX96",
+      "sqrt_price_at_tick_unscaled",
+      "price_at_tick_human",
+      "to_float"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "microstructure_analyzer/microstructure/v3_swapmath.py",
+    "source_sha256": "f3f9c4169df3673af0f2ea7af615c2c04e02ffb62ad1b15b916b752dfb11f67f",
+    "target": "legacy/swapmath.py",
+    "target_sha256": "5eb791162d0a79f0dcf2107c17971bc36122d734c83ec151435d2debe93b6f71",
+    "definitions": [
+      "TickLadder",
+      "_walk_up_to_s",
+      "_walk_down_to_s",
+      "notional_for_pct_moves",
+      "slippage_curve_for_quote_in"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "microstructure_analyzer/microstructure/cliffs.py",
+    "source_sha256": "65fe64e2ce0def73aeecc9d0bff3515345d56c605e76ed9daafdcadd6f2eed71",
+    "target": "legacy/cliffs.py",
+    "target_sha256": "1de16e2d90dce8f296d0a783f041d822e2622d1e7d1609f9c584534fcb500a82",
+    "definitions": [
+      "_clean_ticks",
+      "detect_liquidity_cliffs",
+      "active_liquidity_ratio"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "microstructure_analyzer/microstructure/score.py",
+    "source_sha256": "102fa1a9b9ca2c908ea7058974f87e342c5274de81f9d1cd9cdf74741d98ee50",
+    "target": "legacy/market_score.py",
+    "target_sha256": "842fa6e26206a7a961aa41c07c47d6e01ac615769d26822e6feb30a498c16ef3",
+    "definitions": [
+      "clamp",
+      "microstructure_score"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "microstructure_analyzer/microstructure/mev_proxy.py",
+    "source_sha256": "a37d86bdf44152f73564c3ccc816b7ab23dab0361aed914b64ddaa85795d4459",
+    "target": "legacy/mev.py",
+    "target_sha256": "5c8be03cc1a4f8f168977ecc82128f47e4949185493e55745ba9f65adafaafba",
+    "definitions": [
+      "mev_exposure_proxy"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "microstructure_analyzer/microstructure/lp_active.py",
+    "source_sha256": "0416b6d4359365f6ea9160fbf06438aabde91d3ccc65adcbff8b5306f7ba62f6",
+    "target": "legacy/lp.py",
+    "target_sha256": "ed80eb0f8852efcc9281e9523724d0d0859faf604b55f8d7cabec6b0d076126b",
+    "definitions": [
+      "lp_concentration"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "contract_analyzer/score.py",
+    "source_sha256": "7a58404f97def56876a1afba17d37d3c728030344c2ed30b234b4d4ad04dda52",
+    "target": "legacy/control_score.py",
+    "target_sha256": "02a081b9962d48f636f209a0876a17067b3217b8d2e3995795423a50e2b0bd9e",
+    "definitions": [
+      "compute_score"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "contract_analyzer/utils.py",
+    "source_sha256": "066a2a5ba4bce49144efaa09c38371cca6709d8b5e1b2fdb5675eadef2150c31",
+    "target": "legacy/labels.py",
+    "target_sha256": "cd46576962363e2f51650b74a9d19de95238989e3d5516f831d5ecaf55a31632",
+    "definitions": [
+      "label_from_pct"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "contract_analyzer/liquidity.py",
+    "source_sha256": "2dae03eebf23f6c1645933c10e5192df8753bb7e249c9e819111a5f93c59baee",
+    "target": "legacy/locks.py",
+    "target_sha256": "4df11b6643aec595fa3b22226ea3cc71d102914bc6c5faa542d9cdf7e25a3c9a",
+    "definitions": [
+      "lp_locked_evidence_v2"
+    ],
+    "preservation": "Original function/class source segments; only module imports/constants isolated. No network clients or runner side effects imported."
+  },
+  {
+    "source": "contract_analyzer/privileges.py",
+    "source_sha256": "6c909472a253eb66743402852d8356497cb68c7e2f97fcdb7eb9e1946c692d8f",
+    "target": "legacy/privileges.py",
+    "target_sha256": "93f0bcd2d1183a4bfe00e845ba6667e9198a1c104c0ad44f2b6846d35b40ebd3",
+    "definitions": [
+      "scan_abi_for_keywords",
+      "privileged_facts"
+    ],
+    "constant_source": "contract_analyzer/constants.py",
+    "constant_source_sha256": "b493564e7a7d59760642798ddcc1b30585a28470c2709545f64aa188c5fda5e6",
+    "preservation": "Exact original function/class source segments and PRIV_KEYWORDS literal; caller supplies captured pause result."
+  }
+]
