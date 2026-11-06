@@ -1,0 +1,195 @@
+{
+  "profile": "scooby.validation-audit/1",
+  "candidate_id": "1:0x1111111111111111111111111111111111111111",
+  "report_id": "synthetic-v2-compatibility",
+  "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z-v1",
+  "checks": {
+    "bundle_hashes": "passed",
+    "identity": "passed",
+    "legacy_calculation_parity": "not_applicable_or_not_proven"
+  },
+  "entries": [
+    {
+      "pillar": "microstructure",
+      "item_id": "microstructure-claim",
+      "item_type": "claims",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "microstructure",
+      "item_id": "microstructure-metric",
+      "item_type": "measurements",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "onchain",
+      "item_id": "onchain-claim",
+      "item_type": "claims",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "onchain",
+      "item_id": "onchain-metric",
+      "item_type": "measurements",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "fundamentals",
+      "item_id": "fundamentals-claim",
+      "item_type": "claims",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "fundamentals",
+      "item_id": "fundamentals-metric",
+      "item_type": "measurements",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "statistical_risk",
+      "item_id": "statistical_risk-claim",
+      "item_type": "claims",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "statistical_risk",
+      "item_id": "statistical_risk-metric",
+      "item_type": "measurements",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "technical_health",
+      "item_id": "technical_health-claim",
+      "item_type": "claims",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "technical_health",
+      "item_id": "technical_health-metric",
+      "item_type": "measurements",
+      "status": "source_record_bound",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Referenced source bytes and report identity/version validated; this is a source observation, not independent confirmation.",
+      "remaining_check": "Review whether the cited source supports the precise statement; corroborate its scope/time and any substantive inference."
+    },
+    {
+      "pillar": "microstructure",
+      "item_id": "microstructure-reasoning-1",
+      "item_type": "model_paragraph",
+      "status": "interpretation_requires_review",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Real API-generated interpretation; citation IDs resolve. Reference existence does not establish factual entailment.",
+      "remaining_check": "Review the paragraph against the actual referenced source and mathematical method; do not infer confirmation from model wording."
+    },
+    {
+      "pillar": "onchain",
+      "item_id": "onchain-reasoning-1",
+      "item_type": "model_paragraph",
+      "status": "interpretation_requires_review",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Real API-generated interpretation; citation IDs resolve. Reference existence does not establish factual entailment.",
+      "remaining_check": "Review the paragraph against the actual referenced source and mathematical method; do not infer confirmation from model wording."
+    },
+    {
+      "pillar": "fundamentals",
+      "item_id": "fundamentals-reasoning-1",
+      "item_type": "model_paragraph",
+      "status": "interpretation_requires_review",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Real API-generated interpretation; citation IDs resolve. Reference existence does not establish factual entailment.",
+      "remaining_check": "Review the paragraph against the actual referenced source and mathematical method; do not infer confirmation from model wording."
+    },
+    {
+      "pillar": "statistical_risk",
+      "item_id": "statistical_risk-reasoning-1",
+      "item_type": "model_paragraph",
+      "status": "interpretation_requires_review",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Real API-generated interpretation; citation IDs resolve. Reference existence does not establish factual entailment.",
+      "remaining_check": "Review the paragraph against the actual referenced source and mathematical method; do not infer confirmation from model wording."
+    },
+    {
+      "pillar": "technical_health",
+      "item_id": "technical_health-reasoning-1",
+      "item_type": "model_paragraph",
+      "status": "interpretation_requires_review",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Real API-generated interpretation; citation IDs resolve. Reference existence does not establish factual entailment.",
+      "remaining_check": "Review the paragraph against the actual referenced source and mathematical method; do not infer confirmation from model wording."
+    },
+    {
+      "pillar": "conclusion",
+      "item_id": "conclusion-reasoning-1",
+      "item_type": "model_paragraph",
+      "status": "interpretation_requires_review",
+      "evidence_ids": [
+        "test-a"
+      ],
+      "basis": "Real API-generated interpretation; citation IDs resolve. Reference existence does not establish factual entailment.",
+      "remaining_check": "Review the paragraph against the actual referenced source and mathematical method; do not infer confirmation from model wording."
+    }
+  ],
+  "scope": "A scoped audit of every typed item and model paragraph. It does not certify every assertion as true or convert a schema check into factual validation."
+}

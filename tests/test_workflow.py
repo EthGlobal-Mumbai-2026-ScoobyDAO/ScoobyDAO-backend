@@ -8,6 +8,8 @@ os.environ['SCOOBY_FRONTEND_DIR']=str(Path(__file__).resolve().parent.parent/'ve
 from fastapi.testclient import TestClient
 from app import app
 from worker import work_one
+import worker
+import hashlib
 from store import db
 import provider
 client=TestClient(app)
@@ -39,6 +41,21 @@ def test_lifecycle(monkeypatch):
  draft=post(path+'/render',{},'render-before'); assert draft.status_code==200
  assert work_one(); assert client.get('/jobs/'+draft.json()['job_id']).json()['state']=='done'
  assert 'PENDING REVIEW' in client.get('/artifacts/'+draft.json()['job_id']+'/index.html').text
+ # Simulate an at-least-once redelivery after atomic installation: never rebuild or replace bytes.
+ first_path=Path(os.environ['SCOOBY_DATA'])/'artifacts'/draft.json()['job_id']/'index.html'; first=first_path.read_bytes()
+ with db() as c: c.execute("UPDATE jobs SET state='queued' WHERE id=?",(draft.json()['job_id'],))
+ with monkeypatch.context() as patch:
+  patch.setattr(worker.subprocess,'run',lambda *a,**k: (_ for _ in ()).throw(AssertionError('must not rebuild installed package')))
+  assert work_one()
+ assert first_path.read_bytes()==first and client.get('/jobs/'+draft.json()['job_id']).json()['state']=='done'
+ # Collision with tampered installed output must fail closed, never overwrite it.
+ first_path.write_bytes(first+b'tampered')
+ with db() as c: c.execute("UPDATE jobs SET state='queued' WHERE id=?",(draft.json()['job_id'],))
+ assert work_one(); assert first_path.read_bytes()==first+b'tampered'
+ assert client.get('/jobs/'+draft.json()['job_id']).json()['state'] in ('queued','failed')
+ first_path.write_bytes(first)
+ with db() as c: c.execute("UPDATE jobs SET state='queued',available=0 WHERE id=?",(draft.json()['job_id'],))
+ assert work_one() and client.get('/jobs/'+draft.json()['job_id']).json()['state']=='done'
  review={'decision':'approve','actor':'local tester','reason':'fixture test only','sha256':report['sha256']}
  assert post(path+'/review',dict(review,sha256='0'*64),'bad').status_code==409
  assert post(path+'/review',review,'approval').status_code==200
@@ -46,6 +63,17 @@ def test_lifecycle(monkeypatch):
  assert work_one(); j=client.get('/jobs/'+out.json()['job_id']).json(); assert j['state']=='done',j
  html=client.get('/artifacts/'+out.json()['job_id']+'/index.html'); assert html.status_code==200
  listing=client.get(path+'/artifacts').json(); assert listing['report_sha256']==report['sha256']
+ package=listing['package']; assert package['availability']=='available'
+ descriptor=client.get(package['url']).json(); assert descriptor['report_sha256']==report['sha256']
+ root_bytes=client.get(descriptor['manifest']['url']).content; assert hashlib.sha256(root_bytes).hexdigest()==package['package_sha256']
+ report_bytes=client.get(descriptor['report']['url']).content; assert hashlib.sha256(report_bytes).hexdigest()==report['sha256']
+ report_doc=json.loads(report_bytes); assert {x['path'] for x in descriptor['evidence']}=={x['path'] for x in report_doc['evidence']}
+ assert [(x['kind'],x['path'],x['sha256']) for x in descriptor['artifacts']]==[(x['kind'],x['path'],x['sha256']) for x in report_doc['artifacts']]
+ evidence=descriptor['evidence'][0]; source=client.get(evidence['url']); assert source.status_code==200 and hashlib.sha256(source.content).hexdigest()==evidence['sha256']
+ unknown=client.get('/packages/'+package['package_sha256']+'/assets/not-a-declared-asset'); assert unknown.status_code==404
+ with db() as c: package_job=c.execute("SELECT jobs.id FROM jobs JOIN render_manifests ON jobs.id=render_manifests.job_id WHERE render_manifests.sha256=? AND jobs.state='done' LIMIT 1",(package['package_sha256'],)).fetchone()[0]
+ ev_path=Path(os.environ['SCOOBY_DATA'])/'artifacts'/package_job/'assets'/evidence['path']; ev_orig=ev_path.read_bytes(); ev_path.write_bytes(ev_orig+b'x'); assert client.get(evidence['url']).status_code==409; ev_path.write_bytes(ev_orig)
+ assert descriptor['report_review_snapshot']['authentication']=='unverified report assertion'
  assert listing['artifacts']['html']['availability']=='available' and listing['artifacts']['html']['report_sha256']==report['sha256']
  manifest=client.get('/artifacts/'+out.json()['job_id']+'/manifest.json').json()
  assert manifest['report_sha256']==report['sha256'] and manifest['markdown_sha256']
@@ -67,6 +95,7 @@ def test_lifecycle(monkeypatch):
   assert manifest['pdf_content']=='expanded reader and bound full Markdown'
   print('PDF_TEST_PATH='+str(Path(os.environ['SCOOBY_DATA'])/'artifacts'/out.json()['job_id']/'report.pdf'))
  assert post(path+'/review',dict(review,decision='revise'),'revise').status_code==200
+ assert client.get(package['url']).json()==descriptor # frozen report snapshot does not follow live review
  assert post(path+'/render',{},'render-after-revision').status_code==200
 
 def test_provider_transport_and_failure():

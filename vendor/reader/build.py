@@ -101,7 +101,7 @@ def build(source, dest, unit_evidence=None):
  if len(reasoning_art)>1: raise ValueError('duplicate reasoning artifact')
  if reasoning_art:
   reasoning=load(safe(root,reasoning_art[0]['path']))
-  if reasoning.get('profile')!='scooby.reasoning/1' or any(reasoning.get(k)!=d[k] for k in ('candidate_id','report_id','report_version')): raise ValueError('reasoning identity mismatch')
+  if reasoning.get('profile') not in ('scooby.reasoning/1','scooby.reasoning/2') or any(reasoning.get(k)!=d[k] for k in ('candidate_id','report_id','report_version')): raise ValueError('reasoning identity mismatch')
   content=reasoning.get('reasoning',{}); sections=content.get('pillars',[]);conclusion=content.get('conclusion',{})
   if not isinstance(sections,list) or len(sections)!=len(d['pillars']) or {x.get('name') for x in sections}!=set(d['pillars']) or not isinstance(conclusion,dict): raise ValueError('reasoning sections mismatch')
   input_ids={x['id'] for p in d['pillars'].values() for x in p['claims']+p['measurements']+p['series']}
@@ -109,6 +109,19 @@ def build(source, dest, unit_evidence=None):
    if not isinstance(part.get('summary'),str) or not isinstance(part.get('analysis'),list): raise ValueError('invalid reasoning section')
    for para in part['analysis']:
     if not isinstance(para.get('text'),str) or not isinstance(para.get('evidence_ids'),list) or not isinstance(para.get('input_ids'),list) or not set(para['evidence_ids'])<=evidence or not set(para['input_ids'])<=input_ids: raise ValueError('unresolved reasoning reference')
+  if reasoning.get('profile')=='scooby.reasoning/2':
+   rec=conclusion.get('recommendation')
+   if not isinstance(rec,dict) or set(rec)!={'action','rationale','counterevidence','reversal_conditions'} or not isinstance(rec['action'],str) or not rec['action'].strip(): raise ValueError('invalid recommendation')
+   if not isinstance(rec['counterevidence'],list) or not isinstance(rec['reversal_conditions'],list) or not rec['reversal_conditions'] or any(not isinstance(x,str) or not x.strip() for x in rec['reversal_conditions']): raise ValueError('invalid recommendation review conditions')
+   items={x['id']:x for p in d['pillars'].values() for x in p['claims']+p['measurements']+p['series']}
+   for paragraph in [rec['rationale']]+rec['counterevidence']:
+    if not isinstance(paragraph,dict) or set(paragraph)!={'text','evidence_ids','input_ids'} or not isinstance(paragraph['text'],str) or not paragraph['text'].strip() or not isinstance(paragraph['evidence_ids'],list) or not isinstance(paragraph['input_ids'],list): raise ValueError('invalid recommendation citation')
+    if not set(paragraph['evidence_ids'])<=evidence or not set(paragraph['input_ids'])<=set(items): raise ValueError('unresolved recommendation citation')
+    if paragraph['input_ids'] and not paragraph['evidence_ids']: raise ValueError('recommendation inputs require evidence')
+    for input_id in paragraph['input_ids']:
+     item=items[input_id]; bound=item.get('evidence_ids',item.get('supporting_evidence_ids',[])+item.get('counterevidence_ids',[]))
+     if not set(paragraph['evidence_ids']) & set(bound): raise ValueError('recommendation input citation must link to evidence')
+   if evidence and not rec['rationale']['evidence_ids']: raise ValueError('recommendation rationale requires evidence')
   for key in ('supporting_claim_ids','counterevidence_claim_ids'):
    if not set(conclusion.get(key,[]))<=set(claims): raise ValueError('unresolved conclusion claim')
  irc=None
@@ -138,6 +151,10 @@ def build(source, dest, unit_evidence=None):
    for sec in reasoning['reasoning']['pillars']:
     paras.update((sec['name'],'model_paragraph',sec['name']+'-reasoning-'+str(i+1)) for i in range(len(sec['analysis'])))
    paras.update(('conclusion','model_paragraph','conclusion-reasoning-'+str(i+1)) for i in range(len(reasoning['reasoning']['conclusion']['analysis'])))
+   rec=reasoning['reasoning']['conclusion'].get('recommendation')
+   if rec:
+    paras.add(('conclusion','model_paragraph','recommendation-rationale'))
+    paras.update(('conclusion','model_paragraph','recommendation-counterevidence-'+str(i+1)) for i in range(len(rec['counterevidence'])))
   seen=set()
   if not isinstance(audit.get('entries'),list): raise ValueError('invalid audit entries')
   for entry in audit['entries']:

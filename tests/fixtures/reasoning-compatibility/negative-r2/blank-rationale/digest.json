@@ -1,0 +1,6 @@
+{
+  "algorithm": "sha256",
+  "target": "report.json exact UTF-8 bytes",
+  "sha256": "488bc9c8801527954e98a0782ebcb14cfed9497dac0919a109c082c61a44cba2",
+  "status": "pending; not approval"
+}

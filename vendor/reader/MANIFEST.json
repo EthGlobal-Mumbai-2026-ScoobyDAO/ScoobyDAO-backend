@@ -4,11 +4,11 @@
   "files": [
     {
       "path": "app.js",
-      "sha256": "5f62793e80b12c8ae3aaa5aa509f4de98625daef7aaa9324a162c3055146b370"
+      "sha256": "1e8a299ffbd615244cfb1a7282a64bf44fe1d33ca83118a131dba622f4bc8cce"
     },
     {
       "path": "build.py",
-      "sha256": "b33a20db746667ca6b169d7bb36b49d9a574d9db42fc298a84f45954860ae61a"
+      "sha256": "d0c285eea45d5a546f7301dec00fb8fc9431ce7189ff05b7ee811f552c1f65ba"
     },
     {
       "path": "reader.html",
@@ -16,7 +16,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "e77d07cce3a70b8f00ae1ee67fbb106ac0fcdb39c90038fa6b17c1f5b1a4bf3f"
+      "sha256": "e57b4ab161649ae1d05cb35f564419192bfc12c1efc2882afc6496d4195e7d67"
     },
     {
       "path": "report.schema.json",
