@@ -54,6 +54,12 @@ def init():
   CREATE TABLE IF NOT EXISTS heartbeats(name TEXT PRIMARY KEY, seen REAL NOT NULL, detail TEXT NOT NULL);
   ''')
   if 'binding_hash' not in {r['name'] for r in c.execute('PRAGMA table_info(case_world_attempts)')}:c.execute('ALTER TABLE case_world_attempts ADD COLUMN binding_hash TEXT')
+  # PR23 wrote these stable, paired idempotency keys before seed_imports existed.
+  c.execute("""INSERT OR IGNORE INTO seed_imports(report_id,version)
+               SELECT r.id,r.version FROM reports r JOIN investigations i ON i.id=r.run_id
+               JOIN selections s ON s.id=i.selection_id
+               WHERE i.idem='seed-run:'||i.id AND s.idem='seed-sel:'||i.id
+                 AND i.status='reference_only' AND s.kind='diagnostic_exception'""")
   c.execute("INSERT OR IGNORE INTO case_sources VALUES('discovery','unavailable','Local discovery store not yet synchronized.',?)",(now(),))
   c.execute("INSERT OR IGNORE INTO case_sources VALUES('reddit','unavailable','No current social metadata configured; SearchApi access and durable retention are separate.',?)",(now(),))
 def row(r): return dict(r) if r else None
