@@ -1,6 +1,6 @@
 # Deployment-readiness checkpoint — 6 November 2026 IST
 
-**Status: private single-host staging is prepared but not locally container-tested; public deployment is blocked.** There is no verified production authentication, authorization, hardened upload boundary, migration path, production queue or release topology. An exact-origin CORS rule does not prevent direct requests. Binding the current operator API to a public interface or routing all of it through a public reverse proxy would expose candidate import, local file import, review assertions, job mutation and model operations. Do not expose those routes until a reviewed trust boundary is enforced and tested.
+**Status: private single-host staging source is merged and Linux Compose build/API/worker smoke passed in CI; no actual deployment exists. Public exposure requires a reviewed access boundary.** There is no verified production authentication, authorization, hardened upload boundary, migration path, production queue or release topology. An exact-origin CORS rule does not prevent direct requests. Binding the current operator API to a public interface or routing all of it through a public reverse proxy would expose candidate import, local file import, review assertions, job mutation and model operations. Do not expose those routes until a reviewed trust boundary is enforced and tested.
 
 ## What is implemented
 
@@ -32,7 +32,7 @@ Run as separate supervised processes with the same `SCOOBY_DATA`, and explicitly
 ## Verified and remaining
 
 - Local tests and exact commands/results are recorded in `HANDOFF.md`; current branch work includes offline v1/v2 and atomic package checks. Fresh CI/PR evidence must be attached to the actual commit.
-- No production host, domain, TLS, approved callback, secret manager, IAM, persistent volume, load test, safe external-access configuration or authenticated sign-off has been selected or validated. World ID contract and owner inputs are pending. No deployment or infrastructure spend is authorized by this checkpoint.
+- No production host, domain, TLS, approved callback, secret manager, IAM, persistent volume, load test, safe external-access configuration or authenticated sign-off has been selected or validated. World ID integration is explicitly deferred for this checkpoint. No deployment or infrastructure spend is authorized by this checkpoint.
 
 ## Two distinct web API contracts — do not conflate
 
@@ -51,7 +51,7 @@ curl --fail http://127.0.0.1:8000/status
 docker compose exec -T worker python /app/ops/worker_health.py
 ```
 
-The API check is process-only. The worker heartbeat can take two minutes to appear. First validate Chromium sandbox, fonts and rendering on the target. Then explicitly set `SCOOBY_BROWSER=/usr/bin/chromium` when starting Compose and use a synthetic bundle to smoke-test rendering, hashes and CORS. The current PDF removes links, including internal navigation; it is a draft with known portability limitations until the separately owned PDF adapter is reviewed. Stop with `docker compose stop`; do not remove the data volume. With both processes stopped, identify the actual named volume using `docker volume ls` and `docker volume inspect`, take an encrypted, access-controlled backup of its complete contents through a read-only mount, and test restoration to a separate empty volume. For example, after creating a workspace `backups` directory and replacing `<actual-volume>` with the inspected volume name:
+The API check is process-only. The worker heartbeat can take two minutes to appear. First validate Chromium sandbox, fonts and rendering on the target. Then explicitly set `SCOOBY_BROWSER=/usr/bin/chromium` when starting Compose and use a synthetic bundle to smoke-test rendering, hashes and CORS. The merged portable PDF adapter converts recognized source links into internal destinations in a companion-file/hash index and removes unbound external targets. Evidence bytes remain in the companion bundle; every-page reading-size/accessibility and target-browser QA remain open. Stop with `docker compose stop`; do not remove the data volume. With both processes stopped, identify the actual named volume using `docker volume ls` and `docker volume inspect`, take an encrypted, access-controlled backup of its complete contents through a read-only mount, and test restoration to a separate empty volume. For example, after creating a workspace `backups` directory and replacing `<actual-volume>` with the inspected volume name:
 
 ```sh
 docker run --rm -v <actual-volume>:/data:ro -v "$(pwd)/backups:/backup" alpine tar -czf /backup/scooby-data.tar.gz -C /data .
@@ -67,4 +67,8 @@ docker run --rm -v <new-recovery-volume>:/data -v "$(pwd)/backups:/backup:ro" al
 
 Mount the recovery volume in an isolated test stack; validate SQLite, queue, digests and ownership before cutover. For rollback, stop both services, preserve current state, restore a compatible complete backup and prior image/config privately, then verify before resuming. SQLite migration and downgrade tooling is not implemented.
 
-CI defines a Compose build and process/worker-heartbeat smoke; it does not establish PDF quality or public security. Docker is unavailable on the authoring workstation, so this image and stack are **not locally built or run**. Check the actual PR CI result before calling the private-stage image verified. World ID is not a prerequisite for private staging; publication remains outside this checkpoint.
+CI defines a Compose build and process/worker-heartbeat smoke; it does not establish PDF quality or public security. Docker is unavailable on the authoring workstation, so this image and stack are **not locally built or run**. The exact merged PDF PR head passed Linux Compose build/API/worker-heartbeat smoke; see LIVE-STATE.md for the CI links. CI did not render a PDF in the container. World ID is not a prerequisite for private staging; publication remains outside this checkpoint.
+
+## Initial report data
+
+A fresh image and volume contain no authored RAY report. The repo includes test fixtures only. Transfer the complete source packet and import/render it using [docs/report-assets.md](docs/report-assets.md), or perform a separately tested full runtime migration. The named data volume owns both databases and all bound bundles/artifacts; rebuilding the app does not recreate that data. The frontend reads these assets from the API. Do not remove the volume during normal releases.
