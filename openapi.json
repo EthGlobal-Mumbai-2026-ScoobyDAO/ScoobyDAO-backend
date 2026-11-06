@@ -861,6 +861,25 @@
           }
         }
       }
+    },
+    "/readiness/honeypot": {
+      "get": {
+        "tags": [
+          "readiness"
+        ],
+        "summary": "Honeypot Readiness",
+        "operationId": "honeypot_readiness_readiness_honeypot_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

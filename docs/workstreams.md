@@ -17,3 +17,7 @@ Use a separate branch and introduce a self-contained publication/sign-off module
 Proposed next steps: (1) inspect `GET /reports/{report_id}/{version}`, review and render endpoints plus `schemas/CONTRACT.md`; (2) propose a versioned receipt and publication interface specifying identity, nonce/replay prevention, digest binding, decisions, revocation and idempotency; (3) agree ownership and threat model with backend; (4) implement an isolated adapter with mock provider/contract tests; (5) integrate only after end-to-end validation and explicit publishing authorization. This is a proposed seam, not an accepted shared schema.
 
 Topic branches and reviewed pull requests prevent overlapping edits. The orchestrator coordinates portable workstream handoffs. Schema changes require acceptance across discovery, investigation, frontend and backend.
+
+## Active M0–M6 validation milestone
+
+[Milestone protocol](honeypot-validation-milestones.md) and [backend readiness](honeypot-readiness.md) govern this work. Discovery owns M1 scouting and gate evidence; the user owns M2 selection or a scoped exception; investigation owns M3 neutral mechanism evidence; backend and frontend jointly own M4 integration and full PDF; root and user own M5 assessment/review; the **human teammate** owns M6 publication and World ID/AgentKit. Two narrow discovery verifiers exist in a separate unmerged worktree; the committed backend worker remains unwired. Do not convert a source-code presence claim into operational readiness.
