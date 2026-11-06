@@ -1,0 +1,441 @@
+"""Bounded case research and frozen-v0.2 report bundle producer.
+
+The backend authenticates admission, owns the durable job and renders HTML/PDF.
+This module does not authorize a case, run a model, or write to any remote service.
+"""
+from __future__ import annotations
+
+import csv
+import datetime as dt
+import hashlib
+import json
+import math
+import os
+import re
+import tempfile
+from pathlib import Path
+from urllib.parse import urlencode
+
+import httpx
+
+from . import contract_analysis, contract_validate, history
+from .legacy_source_port import producer as legacy_producer
+
+PILLARS = ('microstructure', 'onchain', 'fundamentals', 'statistical_risk', 'technical_health')
+NETWORKS = {1: ('ethereum', 'eth'), 8453: ('base', 'base')}
+EMPTY_WINDOW = {'start': None, 'end': None, 'precision': None}
+_ID = re.compile(r'^[A-Za-z0-9_-]{1,120}$')
+
+
+def _sha(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _bytes(value) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n').encode('utf-8')
+
+
+def _number(value):
+    try:
+        if value is None or isinstance(value, bool):
+            return None
+        n = float(value)
+        return n if math.isfinite(n) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _legacy_model(model_dir: Path, candidate: str, daily_sha256: str | None):
+    """Verify the actual 50-column run and its identity/candle hashes before using it."""
+    root = Path(model_dir).resolve()
+    paths = [root / 'run-manifest.json', root / 'legacy-metrics.json', root / 'output' / 'vae' / 'VAE_TOKEN.csv']
+    for path in paths:
+        if not path.is_file() or any(p.is_symlink() for p in (path, *path.parents) if p != root.parent):
+            raise ValueError('legacy model evidence missing or unsafe')
+    manifest = json.loads(paths[0].read_bytes()); metrics = json.loads(paths[1].read_bytes())
+    if (manifest.get('candidate_id') != candidate or metrics.get('identity') != candidate
+            or manifest.get('reconstructions') != 50 or not daily_sha256
+            or manifest.get('source_candles_sha256') != daily_sha256
+            or manifest.get('metrics_sha256') != _sha(paths[1].read_bytes())
+            or manifest.get('reconstructions_sha256') != _sha(paths[2].read_bytes())):
+        raise ValueError('legacy model candidate, reconstruction count, candle or output hash mismatch')
+    with paths[2].open(encoding='utf-8-sig', newline='') as f:
+        reader = csv.reader(f); header = next(reader, []); rows = 0
+        if len(header) != 51 or len(set(header)) != 51:
+            raise ValueError('legacy reconstruction CSV must contain timestamp and 50 distinct series')
+        for row in reader:
+            rows += 1
+            if len(row) != 51 or not row[0] or any(_number(v) is None for v in row[1:]):
+                raise ValueError('invalid legacy reconstruction row')
+        if not rows:
+            raise ValueError('legacy reconstruction CSV has no observations')
+    return manifest, metrics, [path.read_bytes() for path in paths]
+
+
+def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0,
+             transport: httpx.BaseTransport | None = None, legacy_model_dir: str | Path | None = None,
+             pinned_contract_capture: dict | None = None, legacy_capture_root: str | Path | None = None,
+             legacy_records: dict | None = None, vae_config: dict | None = None,
+             vae_runner=None, cancelled=None) -> dict:
+    """Research one backend-authorized case and atomically assemble a report bundle.
+
+    `case` contains case_id, run_id, candidate_id, mode and an authorization reference
+    with route `automatic_policy` or `world_confirmed` and reference_id. This validates
+    shape, not authorization. The backend must verify/consume authorization before calling.
+    `max_source_requests` bounds all HTTP GET attempts; default zero makes no source call.
+    Inject MockTransport for synthetic tests. Retry uses a new run/output directory.
+    """
+    case_id, run_id, candidate_id = case.get('case_id'), case.get('run_id'), case.get('candidate_id')
+    if not all(isinstance(x, str) and _ID.fullmatch(x) for x in (case_id, run_id)):
+        raise ValueError('case and run IDs must be bounded safe identifiers')
+    try:
+        chain_text, address = candidate_id.split(':', 1); chain = int(chain_text)
+        canonical = history.identity(chain, address)
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError('supported canonical chain:address candidate required') from None
+    if canonical != candidate_id:
+        raise ValueError('candidate ID must be canonical lowercase')
+    auth = case.get('authorization', {})
+    if (not isinstance(auth, dict) or auth.get('route') not in ('automatic_policy', 'world_confirmed')
+            or not isinstance(auth.get('reference_id'), str) or not _ID.fullmatch(auth['reference_id'])):
+        raise ValueError('backend authorization route and reference required')
+    mode = case.get('mode', 'live')
+    if mode not in ('live', 'synthetic_demo', 'historical_replay'):
+        raise ValueError('invalid evidence mode')
+    if mode != 'live' and transport is None and max_source_requests:
+        raise ValueError('synthetic or historical mode requires injected source transport')
+    if isinstance(max_source_requests, bool) or not isinstance(max_source_requests, int) or not 0 <= max_source_requests <= 5:
+        raise ValueError('source request budget must be an integer between zero and five')
+    if vae_config is not None:
+        if legacy_model_dir is not None or not isinstance(vae_config, dict):
+            raise ValueError('choose either legacy model artifacts or an explicit VAE execution configuration')
+        if (not isinstance(vae_config.get('legacy_repo'), (str, Path)) or isinstance(vae_config.get('days'), bool)
+                or not isinstance(vae_config.get('days'), int) or vae_config['days'] < 1):
+            raise ValueError('VAE execution requires a legacy repository and explicit positive horizon in days')
+    output = Path(output_dir).resolve()
+    if output.exists():
+        raise ValueError('output already exists; retry with a new run directory')
+    if not output.parent.is_dir():
+        raise ValueError('output parent must already exist')
+    started = dt.datetime.now(dt.timezone.utc).isoformat()
+    attempts = []; captured = {}; stops = []
+    with httpx.Client(transport=transport, timeout=15, follow_redirects=False, headers={'User-Agent': 'ScoobyDAO-research/1.0'}) as client:
+        def fetch(name, url):
+            if cancelled and cancelled():
+                stops.append('cancelled'); return None
+            if len(attempts) >= max_source_requests:
+                stops.append('source_request_budget_exhausted'); return None
+            record = {'name': name, 'url': url, 'status': 'unavailable', 'fetched_at': None,
+                      'transport_mode': 'injected_transport' if transport is not None else 'direct_http', 'evidence_mode': mode}
+            attempts.append(record)
+            try:
+                response = client.get(url); record['http_status'] = response.status_code
+                response.raise_for_status()
+                raw = response.content
+                if len(raw) > 10_000_000:
+                    raise ValueError('response too large')
+                doc = json.loads(raw, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('non-finite JSON')))
+                record.update(status='captured', fetched_at=dt.datetime.now(dt.timezone.utc).isoformat() if mode == 'live' else None, sha256=_sha(raw))
+                captured[name] = (doc, raw, record)
+                return doc
+            except (httpx.HTTPError, ValueError, TypeError):
+                record['status'] = 'unavailable'; record['reason'] = 'source_http_transport_or_format_failure'
+                return None
+
+        network, gecko = NETWORKS[chain]
+        market = fetch('market', f'https://api.dexscreener.com/token-pairs/v1/{network}/{address}')
+        security = fetch('security', f'https://api.gopluslabs.io/api/v1/token_security/{chain}?'+urlencode({'contract_addresses': address}))
+        source = fetch('source', f'https://sourcify.dev/server/v2/contract/{chain}/{address}?fields=all')
+        pools = fetch('pools', f'https://api.geckoterminal.com/api/v2/networks/{gecko}/tokens/{address}/pools?page=1')
+        chosen = None; candles = None
+        if isinstance(pools, dict):
+            try:
+                chosen, _ = history.select_pool(pools, chain, address)
+            except (ValueError, KeyError, TypeError, AttributeError):
+                stops.append('no_identity_matched_pool')
+        if chosen:
+            url = f'https://api.geckoterminal.com/api/v2/networks/{gecko}/pools/{chosen["address"]}/ohlcv/day?'+urlencode({'aggregate': 1, 'limit': 1000, 'currency': 'usd', 'token': chosen['side']})
+            candles = fetch('daily', url)
+    if 'cancelled' in stops:
+        return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                'source_attempts': attempts, 'reason': 'cancelled_before_bundle_commit'}
+
+    # Reject an unrelated/malformed response as a source for this candidate.
+    valid = {}
+    pair = None
+    if isinstance(market, list):
+        pair = next((x for x in market if isinstance(x, dict) and str(x.get('chainId', '')).lower() == network
+                     and isinstance(x.get('baseToken'), dict) and str(x['baseToken'].get('address', '')).lower() == address), None)
+        if pair: valid['market'] = captured['market']
+    sec = security.get('result', {}).get(address) if isinstance(security, dict) and isinstance(security.get('result'), dict) else None
+    if isinstance(sec, dict) and sec: valid['security'] = captured['security']
+    if isinstance(source, dict) and str(source.get('address', '')).lower() == address and str(source.get('chainId')) == str(chain):
+        valid['source'] = captured['source']
+    daily_prepared = None; gecko_row = None
+    if chosen:
+        valid['pools'] = captured['pools']
+        gecko_row = next((p for p in pools.get('data', []) if isinstance(p, dict)
+                          and isinstance(p.get('attributes'), dict)
+                          and str(p['attributes'].get('address', '')).lower() == chosen['address']), None)
+    if chosen and isinstance(candles, dict):
+        try:
+            daily_prepared = history.prepare(candles, dt.datetime.now(dt.timezone.utc).date().isoformat())
+            valid['daily'] = captured['daily']
+        except (ValueError, KeyError, TypeError, OverflowError, OSError):
+            stops.append('invalid_daily_candles')
+    if pinned_contract_capture is not None:
+        try:
+            analysis = contract_analysis.analyze({'chain_id': chain, 'address': address}, pinned_contract_capture)
+        except (ValueError, KeyError, TypeError):
+            analysis = None; stops.append('pinned_contract_capture_rejected')
+    else:
+        analysis = None
+    legacy = None
+    if legacy_records is not None or legacy_capture_root is not None:
+        try:
+            if not legacy_capture_root or not isinstance(legacy_records, dict) or not set(legacy_records) <= {'microstructure', 'onchain'}:
+                raise ValueError('only identity-bound legacy microstructure/onchain captures are supported')
+            legacy = legacy_producer.run_captured({'candidate_id': candidate_id}, legacy_capture_root, legacy_records)
+            # Re-read only paths independently verified by load_capture; no arbitrary source paths are trusted.
+            legacy_inputs = {name: (Path(legacy_capture_root) / record['path']).read_bytes() for name, record in legacy_records.items()}
+        except (ValueError, KeyError, TypeError, OSError):
+            legacy = None; stops.append('legacy_pillar_capture_rejected')
+    if not valid and analysis is None and not (legacy and any(legacy[k]['status'] == 'partial' for k in ('microstructure', 'onchain'))):
+        return {'state': 'blocked', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                'source_attempts': attempts, 'reason': 'no_identity_bound_source_evidence', 'limitations': stops}
+
+    model = None
+    if legacy_model_dir is not None:
+        try:
+            model = _legacy_model(Path(legacy_model_dir), candidate_id, valid.get('daily', (None, None, {}))[2].get('sha256'))
+        except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError):
+            stops.append('legacy_50_reconstruction_evidence_rejected')
+    elif vae_config is not None:
+        if not daily_prepared or daily_prepared['gaps'] or len(daily_prepared['returns']) < 2:
+            stops.append('legacy_vae_pending_insufficient_or_gapped_history')
+        elif cancelled and cancelled():
+            return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                    'source_attempts': attempts, 'reason': 'cancelled_before_vae'}
+        else:
+            try:
+                with tempfile.TemporaryDirectory(prefix='.case-vae-', dir=output.parent) as scratch:
+                    scratch = Path(scratch); source_dir = scratch / 'source'; source_dir.mkdir()
+                    (source_dir / 'pools.json').write_bytes(valid['pools'][1]); (source_dir / 'daily.json').write_bytes(valid['daily'][1])
+                    (source_dir / 'returns.json').write_bytes(_bytes(daily_prepared))
+                    source_status = {'candidate_id': candidate_id, 'pool': chosen,
+                        'history': {'cutoff_utc_date': daily_prepared['cutoff_utc_date']},
+                        'requests': [{'path': name + '.json', 'sha256': valid[name][2]['sha256']} for name in ('pools', 'daily')]}
+                    (source_dir / 'source-status.json').write_bytes(_bytes(source_status))
+                    if vae_runner is None:
+                        from .legacy_vae import run as vae_runner
+                    model_dir = scratch / 'model'
+                    vae_runner(source_dir, model_dir, vae_config['days'], Path(vae_config['legacy_repo']))
+                    model = _legacy_model(model_dir, candidate_id, valid['daily'][2]['sha256'])
+            except (ValueError, KeyError, TypeError, OSError, RuntimeError, ImportError):
+                stops.append('legacy_vae_execution_failed')
+    report_id = 'case-' + case_id; version = 'run-' + run_id
+    symbol = str(pair.get('baseToken', {}).get('symbol') or 'UNKNOWN')[:80] if pair else 'UNKNOWN'
+    if symbol == 'UNKNOWN' and isinstance(candles, dict) and isinstance(candles.get('meta'), dict):
+        for token in candles['meta'].values():
+            if isinstance(token, dict) and str(token.get('address', '')).lower() == address and token.get('symbol'):
+                symbol = str(token['symbol'])[:80]; break
+    pillars = {p: {'status': 'unavailable', 'summary': 'Required source evidence was not available.', 'evidence_ids': [],
+                   'measurements': [], 'series': [], 'claims': [], 'quality_issues': [], 'raw_payload_path': None} for p in PILLARS}
+    evidence = []; ledger = []
+    with tempfile.TemporaryDirectory(prefix='.case-research-', dir=output.parent) as temp:
+        root = Path(temp); (root / 'evidence').mkdir()
+        def add_evidence(name, raw, record, kind='live_observation'):
+            rel = f'evidence/{name}.json'; (root / rel).write_bytes(raw)
+            evidence.append({'id': name, 'path': rel, 'sha256': _sha(raw), 'kind': kind,
+                'observed_at': None, 'fetched_at': record.get('fetched_at'), 'block_number': None,
+                'window': dict(EMPTY_WINDOW), 'coverage': 'Bounded identity-checked source response.',
+                'limitations': ['Provider response and identity assertions require independent verification.']})
+            ledger.append({'id': name, 'url': record.get('url'), 'fetched_at': record.get('fetched_at'), 'sha256': _sha(raw)})
+        for name, (_, raw, rec) in valid.items():
+            kind = {'synthetic_demo': 'synthetic', 'historical_replay': 'historical_observation', 'live': 'live_observation'}[mode]
+            add_evidence(name, raw, rec, kind)
+        if analysis is not None:
+            add_evidence('contract_analysis', _bytes(analysis), {'url': None, 'fetched_at': started}, 'derived')
+            evidence_input = {k: pinned_contract_capture[k] for k in ('chain_id', 'address', 'block', 'runtime_hex', 'source', 'proxy') if k in pinned_contract_capture}
+            add_evidence('pinned_contract_capture', _bytes(evidence_input), {'url': None, 'fetched_at': started}, 'derived')
+        if legacy:
+            for name, raw in legacy_inputs.items():
+                add_evidence('legacy_' + name + '_input', raw, {'url': None, 'fetched_at': started}, 'derived')
+                add_evidence('legacy_' + name + '_result', _bytes(legacy[name]), {'url': None, 'fetched_at': started}, 'derived')
+        if model:
+            manifest, metrics, files = model
+            add_evidence('legacy_manifest', files[0], {'url': None, 'fetched_at': started}, 'derived')
+            add_evidence('legacy_metrics', files[1], {'url': None, 'fetched_at': started}, 'derived')
+            # CSV is retained as CSV, not mislabelled JSON.
+            csv_path = root / 'evidence' / 'legacy_reconstructions.csv'; csv_path.write_bytes(files[2])
+            evidence.append({'id': 'legacy_reconstructions', 'path': 'evidence/legacy_reconstructions.csv', 'sha256': _sha(files[2]),
+                'kind': 'derived', 'observed_at': None, 'fetched_at': started, 'block_number': None,
+                'window': dict(EMPTY_WINDOW), 'coverage': 'Original 50-reconstruction output.',
+                'limitations': ['Legacy model calibration is not independently verified.']})
+        def claim(p, identifier, text, evidence_id, limitation):
+            v = pillars[p]; v['status'] = 'partial'; v['evidence_ids'] = sorted(set(v['evidence_ids'] + [evidence_id]))
+            v['claims'].append({'id': identifier, 'statement': text, 'kind': 'observation',
+                'supporting_evidence_ids': [evidence_id], 'counterevidence_ids': [], 'contradiction_claim_ids': [], 'uncertainties': [limitation]})
+        def measurement(p, identifier, value, unit, evidence_id, method):
+            n = _number(value)
+            if n is None: return
+            v = pillars[p]; v['status'] = 'partial'; v['evidence_ids'] = sorted(set(v['evidence_ids'] + [evidence_id]))
+            v['measurements'].append({'id': identifier, 'value': n, 'unit': unit, 'method': method,
+                'quality': 'unvalidated', 'evidence_ids': [evidence_id], 'window': dict(EMPTY_WINDOW), 'unknown_reason': None})
+        if pair:
+            pool = pair.get('pairAddress', 'unknown')
+            claim('microstructure', 'market-pool', f'The market provider returned an identity-matched base-token pool {pool}.', 'market', 'A provider snapshot is not executable market-wide liquidity.')
+            liquidity = pair.get('liquidity') if isinstance(pair.get('liquidity'), dict) else {}
+            volume = pair.get('volume') if isinstance(pair.get('volume'), dict) else {}
+            measurement('microstructure', 'liquidity_usd', liquidity.get('usd'), 'USD', 'market', 'DEX Screener reported pool liquidity snapshot')
+            measurement('microstructure', 'volume_24h_usd', volume.get('h24'), 'USD', 'market', 'DEX Screener reported 24-hour pool volume')
+            claim('fundamentals', 'market-symbol', f'The market provider identifies the base token symbol as {symbol}.', 'market', 'Ticker alone does not establish project identity or social attribution.')
+        elif gecko_row:
+            attrs = gecko_row['attributes']
+            claim('microstructure', 'gecko-pool', f'GeckoTerminal returned an identity-matched {chosen["side"]}-token pool {chosen["address"]}.', 'pools', 'A provider snapshot is not executable market-wide liquidity.')
+            measurement('microstructure', 'liquidity_usd', attrs.get('reserve_in_usd'), 'USD', 'pools', 'GeckoTerminal reported pool reserve snapshot')
+            volume = attrs.get('volume_usd') if isinstance(attrs.get('volume_usd'), dict) else {}
+            measurement('microstructure', 'volume_24h_usd', volume.get('h24'), 'USD', 'pools', 'GeckoTerminal reported 24-hour pool volume')
+            if symbol != 'UNKNOWN' and 'daily' in valid:
+                claim('fundamentals', 'gecko-symbol', f'The candle provider identifies the token symbol as {symbol}.', 'daily', 'Ticker alone does not establish project identity or social attribution.')
+        if sec:
+            for key in ('is_open_source', 'is_proxy', 'is_mintable', 'transfer_pausable', 'is_honeypot'):
+                if key in sec and isinstance(sec[key], (str, int, bool)):
+                    claim('onchain', 'provider-'+key, f'The security provider reports {key} = {sec[key]}.', 'security', 'Provider field is not independent proof of current contract behavior.')
+        if 'source' in valid:
+            claim('onchain', 'source-status', f'The source provider reports runtime match status: {source.get("runtimeMatch", "unknown")}.', 'source', 'Provider match does not establish safety, current state or sell behavior.')
+        if analysis:
+            seen_categories = set()
+            for finding in analysis.get('findings', []):
+                if finding.get('category') in seen_categories:
+                    continue
+                seen_categories.add(finding['category'])
+                claim('onchain', 'contract-indicator-'+str(len(seen_categories)),
+                      f'Source navigation found a {finding["category"]} indicator in {finding["function"]} at {finding["path"]}:{finding["line"]}.',
+                      'contract_analysis', 'Lexical indicator is not proof of live control, reachability or safety.')
+                pillars['onchain']['claims'][-1]['supporting_evidence_ids'].append('pinned_contract_capture')
+                pillars['onchain']['evidence_ids'] = sorted(set(pillars['onchain']['evidence_ids'] + ['pinned_contract_capture']))
+            for i, hypothesis in enumerate(analysis.get('mechanism_hypotheses', [])):
+                claim('onchain', f'contract-hypothesis-{i+1}', hypothesis['rationale'], 'contract_analysis', 'Lexical source hypothesis needs provenance, control-flow and runtime review.')
+                pillars['onchain']['claims'][-1]['supporting_evidence_ids'].append('pinned_contract_capture')
+                pillars['onchain']['evidence_ids'] = sorted(set(pillars['onchain']['evidence_ids'] + ['pinned_contract_capture']))
+            pillars['onchain']['quality_issues'].extend(analysis.get('unknowns', []))
+        if legacy:
+            for name in ('microstructure', 'onchain'):
+                if name not in legacy_inputs or legacy[name]['status'] != 'partial':
+                    continue
+                payload = legacy[name]['payload']; ref = 'legacy_' + name + '_result'
+                if name == 'microstructure':
+                    measurement(name, 'legacy_microstructure_score', payload.get('microstructure_score'), None, ref, 'Original legacy microstructure score and scale')
+                    measurement(name, 'legacy_mev_score', (payload.get('mevExposure') or {}).get('score'), None, ref, 'Original legacy MEV proxy score and scale')
+                else:
+                    score = payload.get('legacy_summary') or {}
+                    measurement(name, 'legacy_fundamentals_score', score.get('fundamentals_score'), None, ref, 'Original legacy contract-control score and scale')
+                    if score.get('label'):
+                        claim(name, 'legacy-control-label', f'Original legacy contract-control label: {score["label"]}.', ref, 'Legacy label is not a safety or honeypot certification.')
+                pillars[name]['evidence_ids'] = sorted(set(pillars[name]['evidence_ids'] + ['legacy_' + name + '_input']))
+                pillars[name]['quality_issues'].extend(payload.get('quality_issues', []))
+        if daily_prepared and daily_prepared['close_count']:
+            p = pillars['technical_health']; p['status'] = 'partial'; p['evidence_ids'] = ['daily', 'pools']
+            rows = candles['data']['attributes']['ohlcv_list']; cutoff = dt.date.fromisoformat(daily_prepared['cutoff_utc_date'])
+            closes = sorted([{'time': dt.datetime.fromtimestamp(row[0], dt.timezone.utc).date().isoformat(), 'value': float(row[4])}
+                             for row in rows if dt.datetime.fromtimestamp(row[0], dt.timezone.utc).date() < cutoff], key=lambda x: x['time'])
+            p['series'].append({'id': 'observed_daily_closes', 'unit': 'USD per token', 'method': 'Provider token-side closed daily prices; missing dates not filled',
+                'quality': 'unvalidated', 'evidence_ids': ['daily', 'pools'],
+                'window': {'start': closes[0]['time'], 'end': closes[-1]['time'], 'precision': 'day'}, 'points': closes, 'unknown_reason': None})
+            claim('technical_health', 'daily-coverage', f'The price provider returned {len(closes)} closed daily observations for the selected token-side pool.',
+                  'daily', 'Observation count and coverage do not establish a trend or model-history adequacy.')
+            if daily_prepared['returns']:
+                points = [{'time': x['date'], 'value': x['return']} for x in daily_prepared['returns']]
+                p['series'].append({'id': 'observed_daily_returns', 'unit': 'fraction', 'method': 'Adjacent closed daily close ratios; no filled gaps',
+                    'quality': 'unvalidated', 'evidence_ids': ['daily', 'pools'],
+                    'window': {'start': points[0]['time'], 'end': points[-1]['time'], 'precision': 'day'}, 'points': points, 'unknown_reason': None})
+            p['quality_issues'].append('Observed daily prices and returns are not the legacy VAE technical score or a calibrated trading signal.')
+            if daily_prepared['gaps']: p['quality_issues'].append('Daily candle gaps were excluded; series is not continuously sampled.')
+        if model:
+            for key, target in [('risk_assessment', 'statistical_risk'), ('technical_health', 'technical_health')]:
+                def walk(value, path):
+                    if isinstance(value, dict):
+                        for k, x in value.items(): walk(x, path + [str(k)])
+                    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                        measurement(target, 'legacy_' + '_'.join(path), value, None, 'legacy_metrics', 'Original legacy 50-reconstruction method and original scale')
+                    elif isinstance(value, str):
+                        claim(target, 'legacy-' + '-'.join(path), f'Legacy output {".".join(path)}: {value}', 'legacy_metrics', 'Original label is retained; independent calibration is not established.')
+                walk(metrics.get(key, {}), [])
+            ts = metrics.get('technical_series', {})
+            dates = ts.get('dates') if isinstance(ts, dict) else None
+            if isinstance(dates, list):
+                for key, values in ts.items():
+                    if key == 'dates' or not isinstance(values, list) or len(values) != len(dates) or not dates:
+                        continue
+                    if any(not isinstance(t, str) or _number(v) is None for t, v in zip(dates, values)):
+                        continue
+                    pillars['technical_health']['series'].append({'id': 'legacy_' + str(key), 'unit': None,
+                        'method': 'Original legacy technical-health series on 50 reconstructions', 'quality': 'unvalidated',
+                        'evidence_ids': ['legacy_metrics'], 'window': {'start': dates[0], 'end': dates[-1], 'precision': 'day'},
+                        'points': [{'time': t, 'value': float(v)} for t, v in zip(dates, values)], 'unknown_reason': None})
+            for p in ('statistical_risk', 'technical_health'):
+                pillars[p]['quality_issues'].append('Original legacy metrics use 50 reconstructions; model calibration is not independently verified.')
+        else:
+            pillars['statistical_risk']['quality_issues'].append('Legacy VAE risk is pending until an identity- and candle-bound 50-reconstruction run is supplied.')
+            pillars['technical_health']['quality_issues'].append('Legacy VAE technical metrics are pending; observed history, if present, remains separate.')
+        pillars['fundamentals']['quality_issues'].append('Project attribution, social context and development require additional evidence; no Reddit content is persisted here.')
+        for p in pillars.values():
+            if p['claims']: p['summary'] = p['claims'][0]['statement']
+            elif p['series']: p['summary'] = 'Observed daily price history is available; legacy VAE metrics may remain pending.'
+            elif p['measurements']: p['summary'] = 'Legacy measurements are available with their original scale and source evidence.'
+            elif p['quality_issues']: p['summary'] = p['quality_issues'][0]
+        available = [name for name, p in pillars.items() if p['status'] == 'partial']
+        if not available:
+            return {'state': 'blocked', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                    'source_attempts': attempts, 'reason': 'sources_contain_no_usable_pillar_observation'}
+        report = {'schema_version': '0.2', 'report_id': report_id, 'report_version': version,
+            'candidate_id': candidate_id, 'identity': {'chain_id': chain, 'address': address, 'symbol': symbol}, 'mode': mode,
+            'assessment': {'status': 'not_assessed', 'label': None,
+                'summary': 'Evidence-linked draft: review source observations, control hypotheses and coverage before a final conclusion.',
+                'unknowns': ['Independent source verification', 'Current contract control state and executable sells', 'Authenticated report review'],
+                'supporting_claim_ids': [], 'counterevidence_claim_ids': []}, 'pillars': pillars, 'evidence': evidence,
+            'artifacts': [], 'review': {'status': 'pending', 'reviewer': None, 'reviewed_at': None,
+                'reviewed_version': None, 'content_sha256': None, 'authentication': 'none'},
+            'limitations': ['Bounded source snapshots may be incomplete or taken at different times.',
+                            'No paid model interpretation, final report approval or publication was performed.']}
+        tldr = {'profile': 'scooby.pillar-tldr/1', 'report_id': report_id, 'report_version': version, 'pillars': {}}
+        lines = ['# Investigation report — pending review', '', f'Case {case_id}; candidate `{candidate_id}`; run {run_id}.', '']
+        for name, p in pillars.items():
+            tldr['pillars'][name] = [{'role': 'finding', 'text': x['statement'], 'claim_ids': [x['id']],
+                                      'evidence_ids': x['supporting_evidence_ids']} for x in p['claims'][:2]]
+            if p['claims'] and p['claims'][0]['uncertainties']:
+                first = p['claims'][0]
+                tldr['pillars'][name].append({'role': 'interpretation', 'text': first['uncertainties'][0],
+                    'claim_ids': [first['id']], 'evidence_ids': first['supporting_evidence_ids']})
+            elif p['measurements']:
+                first = p['measurements'][0]
+                tldr['pillars'][name].append({'role': 'finding', 'text': f'{first["id"]}: {first["value"]} (original or provider scale; not independently validated).',
+                    'claim_ids': [], 'evidence_ids': first['evidence_ids']})
+            if p['evidence_ids'] and p['quality_issues']:
+                tldr['pillars'][name].append({'role': 'caveat', 'text': p['quality_issues'][0], 'claim_ids': [], 'evidence_ids': [p['evidence_ids'][0]]})
+            lines.extend(['## ' + name.replace('_', ' ').title(), '', p['summary'], '', 'Status: ' + p['status']])
+            lines.extend('- ' + c['statement'] + ' [' + ', '.join(c['supporting_evidence_ids']) + ']' for c in p['claims'])
+            lines.extend('- ' + q for q in p['quality_issues']); lines.append('')
+        (root / 'report.md').write_text('\n'.join(lines), encoding='utf-8')
+        (root / 'pillar-tldr.json').write_bytes(_bytes(tldr))
+        (root / 'source-ledger.json').write_bytes(_bytes({'candidate_id': candidate_id, 'sources': ledger, 'attempts': attempts, 'limits': stops}))
+        (root / 'case-lineage.json').write_bytes(_bytes({'case_id': case_id, 'run_id': run_id, 'candidate_id': candidate_id,
+                                                         'authorization_route': auth['route'], 'authorization_reference_id': auth['reference_id']}))
+        for kind, filename, mime in [('markdown', 'report.md', 'text/markdown'), ('pillar_tldr', 'pillar-tldr.json', 'application/json'),
+                                     ('source_ledger', 'source-ledger.json', 'application/json'), ('case_lineage', 'case-lineage.json', 'application/json')]:
+            report['artifacts'].append({'kind': kind, 'availability': 'available', 'path': filename,
+                'sha256': _sha((root / filename).read_bytes()), 'report_id': report_id, 'report_version': version, 'media_type': mime})
+        report['artifacts'].append({'kind': 'pdf', 'availability': 'unavailable', 'path': None, 'sha256': None,
+                                    'report_id': report_id, 'report_version': version, 'media_type': None})
+        contract_validate.validate(root, report)
+        raw = _bytes(report); (root / 'report.json').write_bytes(raw)
+        (root / 'digest.json').write_bytes(_bytes({'algorithm': 'sha256', 'target': 'report.json exact UTF-8 bytes', 'sha256': _sha(raw), 'status': 'pending; not approval'}))
+        contract_validate.verify_digest(root, _sha(raw))
+        if cancelled and cancelled():
+            return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                    'source_attempts': attempts, 'reason': 'cancelled_before_bundle_commit'}
+        os.rename(root, output)
+    return {'state': 'partial', 'bundle_path': str(output), 'case_id': case_id, 'run_id': run_id,
+            'report_id': report_id, 'report_version': version, 'report_sha256': _sha(raw),
+            'pillar_status': {k: v['status'] for k, v in pillars.items()}, 'source_attempts': attempts, 'limitations': stops}

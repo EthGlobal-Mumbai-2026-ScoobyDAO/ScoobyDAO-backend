@@ -45,3 +45,7 @@ Backend owns queue/actor state, discovery and human review. It must isolate work
 ## Social and contract investigation adapters
 
 `reddit_search.search_leads`, `reddit_search.collect`, and `reddit_search.summarize` provide bounded SearchApi-backed source capture and auditable literal-language counts. `contract_analysis.rpc_plan`, `from_pinned_capture`, `source_from_sourcify`, and `analyze` support identity-bound code navigation with explicit proxy, provenance and live-verdict gaps. See `docs/social-contract-adapters.md` for exact contracts, Reddit access retirement and mandatory deletion-lifecycle caveats. These are not wired into backend jobs or immutable reports.
+
+## Case research producer
+
+`case_research.run_case` invokes bounded source collection, optional original 50-reconstruction VAE/legacy scores, per-pillar partial handling and a validated v0.2 report bundle for either backend-authorized route. See `docs/case-research-producer.md` for exact arguments, budget/authorization boundary and remaining report-reasoning limitations. Backend must wire durable authorization/jobs/import/render; passing route-shaped references here does not verify a World confirmation.
