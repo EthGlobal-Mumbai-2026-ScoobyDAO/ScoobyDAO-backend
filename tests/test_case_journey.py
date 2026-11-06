@@ -1,6 +1,7 @@
 """End-to-end case journeys with synthetic verifier and mock-only source transport."""
 import json
 from types import SimpleNamespace
+from pathlib import Path
 import httpx,pytest
 from fastapi.testclient import TestClient
 import app as app_module
@@ -47,12 +48,35 @@ def test_both_routes_generate_and_link_report_using_synthetic_dependencies(tmp_p
  with db() as c:assert c.execute('SELECT count(*) FROM investigations').fetchone()[0]==1 and c.execute('SELECT count(*) FROM reports').fetchone()[0]==1
 
 
-def test_real_producer_at_zero_budget_blocks_without_fabricated_report(tmp_path,monkeypatch):
+def test_real_producer_rejects_invalid_captured_bytes_without_report(tmp_path,monkeypatch):
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r))
  d=with_sources(record(int(ADDR[2:],16)),tmp_path);case=case_engine.ingest_record(d,tmp_path)
  with db() as c:decision=c.execute('SELECT id FROM case_decisions WHERE case_id=?',(case,)).fetchone()['id']
- run=case_engine.start_decision(decision);assert case_jobs.run_case(run)=='blocked'
+ run=case_engine.start_decision(decision)
+ with pytest.raises(ValueError,match='not valid JSON'):case_jobs.run_case(run)
+ with db() as c:assert c.execute('SELECT count(*) FROM reports').fetchone()[0]==0
+
+
+@pytest.mark.parametrize('route',['automatic','world'])
+def test_case_journey_replays_bound_capture_with_zero_requests(tmp_path,monkeypatch,route):
+ import base64,datetime
+ from test_case_research import captured_snapshot
+ snap=captured_snapshot(source_payloads());d=snap['record'];d['mode']='live';stamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
+ for e in d['evidence']:
+  e.update(kind='live_observation',observed_at=stamp,fetched_at=stamp);path=tmp_path/e['source'];path.parent.mkdir(exist_ok=True);path.write_bytes(base64.b64decode(snap['evidence'][e['source']]))
+ monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4 if route=='automatic' else 1,r));case=case_engine.ingest_record(d,tmp_path);client=TestClient(app)
+ if route=='world':
+  class FakeWorld:
+   config=SimpleNamespace(accepted_acr=('synthetic',))
+   def start_device(self,_):return DeviceStart(device_code='synthetic',user_code='TEST',verification_uri='https://auth.world.org/device',expires_in=100,interval=0)
+   def poll(self,_):return Tokens('synthetic')
+   def validate_id_token(self,*a,**kw):return SimpleNamespace(iss='synthetic',sub='synthetic')
+  app.dependency_overrides[get_world_optional]=lambda:FakeWorld();rev=client.get('/scouting/cases/'+case).json()['snapshot_digest'];ch=client.post('/scouting/cases/'+case+'/challenge',json={'expected_revision':rev},headers={'Idempotency-Key':'replay-challenge'}).json();aid=client.post('/scouting/challenges/'+ch['challenge_id']+'/world-attempt').json()['attempt_id'];assert client.get('/scouting/world-attempts/'+aid).json()['state']=='approved'
+ # Disallow any accidental HTTP: the producer must replay only immutable captured bytes.
+ monkeypatch.setattr(httpx,'Client',lambda *a,**kw:(_ for _ in ()).throw(AssertionError('network forbidden')))
+ for _ in range(8):
+  if not worker.work_one():break
+ view=client.get('/scouting/cases/'+case).json();assert view['research']['status']=='partial' and view['research']['report_id'];assert view['research']['budget']=={'max_source_requests':0,'max_model_calls':0}
+ reports=client.get('/reports').json();assert reports[0]['case_id']==case and reports[0]['mode']=='historical_replay'
  with db() as c:
-  assert c.execute('SELECT status FROM investigations WHERE id=?',(run,)).fetchone()[0]=='blocked'
-  assert c.execute('SELECT count(*) FROM reports').fetchone()[0]==0
-  assert {r[0] for r in c.execute('SELECT status FROM pillars WHERE run_id=?',(run,))}=={'unavailable'}
+  bundle=Path(c.execute('SELECT path FROM reports').fetchone()[0]);ledger=json.loads((bundle/'source-ledger.json').read_text());assert ledger['attempts']==[]
