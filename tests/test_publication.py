@@ -245,6 +245,32 @@ def test_access_denied_no_receipt_publish_409(env):
     assert publish(t['id']).status_code == 409
 
 
+def test_cli_enroll_reports_issuer_error_description(env, capsys):
+    from publication import cli
+    env.fw.script('denied_detail')
+    with pytest.raises(SystemExit) as e:
+        cli.enroll('x', env.world, sleep=lambda s: env.clock.advance(s))
+    assert str(e.value) == 'Enrollment denied (account does not meet the requested acr); reviewer not added.'
+
+
+def test_cli_world_check_and_environment_label(env):
+    from publication import cli
+    lines = cli.world_check(env.world)
+    assert any(l.startswith('Issuer:') and ISSUER in l for l in lines)
+    assert env.fw.token_requests == 0 and not env.fw.device_requests  # no login started
+    assert cli.environment_label('https://sandbox.auth.world.org').startswith('SANDBOX')
+    assert cli.environment_label('https://auth.world.org') == 'PRODUCTION'
+
+
+def test_cli_enroll_without_acr_request_still_validates_acr(env):
+    from publication import cli
+    env.fw.script(('success', {'acr': 'https://world.org/oidc/acr/selfie'}))
+    with pytest.raises(SystemExit) as e:
+        cli.enroll('x', env.world, sleep=lambda s: env.clock.advance(s), request_acr=False)
+    assert 'claims' not in env.fw.device_requests[-1]
+    assert 'acr not accepted' in str(e.value)
+
+
 def test_expired_token_and_local_deadline(env):
     t = make_target(env)
     a = start(env, t['id'], 'approve', 'expired')
