@@ -65,6 +65,16 @@ def candidate(x:Candidate):
 @app.get('/candidates')
 def candidates():
  with db() as c: return [{'candidate_id':x['id'],'gate':'unknown','monitoring':True} for x in c.execute('SELECT * FROM candidates')]
+@app.get('/diagnostics')
+def diagnostics():
+ with db() as c:
+  result=[]
+  for x in c.execute('SELECT * FROM diagnostic_shortlist ORDER BY rowid'):
+   attempt=c.execute('SELECT * FROM diagnostic_attempts WHERE candidate_id=?',(x['candidate_id'],)).fetchone()
+   installed=c.execute('SELECT r.id,r.version,r.sha256 FROM reports r JOIN diagnostic_imports d ON d.run_id=r.run_id WHERE d.candidate_id=?',(x['candidate_id'],)).fetchone()
+   reference=c.execute("SELECT r.id,r.version,r.sha256 FROM reports r JOIN investigations i ON i.id=r.run_id WHERE i.candidate_id=? AND i.status='reference_only' AND NOT EXISTS (SELECT 1 FROM diagnostic_imports d WHERE d.run_id=i.id) ORDER BY r.created DESC LIMIT 1",(x['candidate_id'],)).fetchone()
+   result.append(dict(row(x),attempt=row(attempt),report=row(installed),reference=dict(row(reference),provenance='source_curated_reference') if reference else None,case_admitted=False,world_verified=False,provenance='user_requested_historical_diagnostic'))
+  return result
 @app.get('/candidates/{candidate_id}')
 def candidate_detail(candidate_id:str):
  with db() as c: r=getrow(c,'SELECT * FROM candidates WHERE id=?',(candidate_id,))
@@ -194,9 +204,10 @@ def report_metadata(c,r):
  doc=json.loads(raw)
  latest=c.execute('SELECT decision,created FROM reviews WHERE report_id=? AND version=? ORDER BY created DESC',(r['id'],r['version'])).fetchone()
  case_decision=c.execute('SELECT id,action,case_id FROM case_decisions WHERE run_id=?',(run['id'],)).fetchone()
+ diagnostic=c.execute('SELECT * FROM diagnostic_imports WHERE run_id=?',(run['id'],)).fetchone()
  admission_auth='world_id' if case_decision and case_decision['action']=='human_research' else 'policy_engine' if case_decision else 'unverified local operator'
  return {'metadata_status':'available','integrity':'verified','report_id':r['id'],'report_version':r['version'],'run_id':run['id'],'run_status':run['status'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
-         'graph_source':__import__('case_graph').summary(c,case_decision['id']) if case_decision else None,'mode':doc.get('mode'),'provenance':'source_curated_reference' if run['status']=='reference_only' else 'case_investigation' if case_decision else 'imported','case_id':case_decision['case_id'] if case_decision else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),'fetch_times':sorted({e['fetched_at'] for e in doc.get('evidence',[]) if e.get('fetched_at')}),'pillars':{name:{'status':pillar['status'],'quality_issues':pillar.get('quality_issues',[])} for name,pillar in doc.get('pillars',{}).items()},'release':{'status':'unavailable','consumer_visible':None,'reason':'Admin review and release authorization are not implemented in this case workflow.'},
+         'graph_source':__import__('case_graph').summary(c,case_decision['id']) if case_decision else None,'mode':doc.get('mode'),'provenance':'user_requested_historical_diagnostic' if diagnostic else 'source_curated_reference' if run['status']=='reference_only' else 'case_investigation' if case_decision else 'imported','diagnostic':{'description':diagnostic['description'],'model_status':diagnostic['model_status'],'case_admitted':False,'world_verified':False} if diagnostic else None,'case_id':case_decision['case_id'] if case_decision else None,'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),'fetch_times':sorted({e['fetched_at'] for e in doc.get('evidence',[]) if e.get('fetched_at')}),'pillars':{name:{'status':pillar['status'],'quality_issues':pillar.get('quality_issues',[])} for name,pillar in doc.get('pillars',{}).items()},'release':{'status':'unavailable','consumer_visible':None,'reason':'Admin review and release authorization are not implemented in this case workflow.'},
          'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':admission_auth},
          'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
 def unavailable_report_metadata(c,r):

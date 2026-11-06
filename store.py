@@ -31,6 +31,9 @@ def init():
   CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, kind TEXT NOT NULL, ref TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, available REAL NOT NULL, lease REAL, error TEXT, idem TEXT UNIQUE NOT NULL, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS reports(id TEXT NOT NULL, version TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES investigations(id), sha256 TEXT NOT NULL, path TEXT NOT NULL, created REAL NOT NULL, PRIMARY KEY(id,version));
+  CREATE TABLE IF NOT EXISTS diagnostic_imports(run_id TEXT PRIMARY KEY REFERENCES investigations(id), candidate_id TEXT NOT NULL, description TEXT NOT NULL, model_status TEXT NOT NULL, created REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS diagnostic_shortlist(candidate_id TEXT PRIMARY KEY, label TEXT NOT NULL, state TEXT NOT NULL, detail TEXT NOT NULL, updated REAL NOT NULL);
+  CREATE TABLE IF NOT EXISTS diagnostic_attempts(candidate_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, report_id TEXT NOT NULL, report_version TEXT NOT NULL, report_sha256 TEXT NOT NULL, model_status TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, report_id TEXT NOT NULL, version TEXT NOT NULL, sha256 TEXT NOT NULL, decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, created REAL NOT NULL, idem TEXT UNIQUE NOT NULL, FOREIGN KEY(report_id,version) REFERENCES reports(id,version));
   CREATE TABLE IF NOT EXISTS reasoning_inputs(id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES investigations(id), pillar TEXT NOT NULL, evidence TEXT NOT NULL, output TEXT, status TEXT NOT NULL, created REAL NOT NULL);
   CREATE TABLE IF NOT EXISTS budget_reservations(job_id TEXT PRIMARY KEY, created REAL NOT NULL);
