@@ -1,7 +1,8 @@
 """Bounded case research and frozen-v0.2 report bundle producer.
 
 The backend authenticates admission, owns the durable job and renders HTML/PDF.
-This module does not authorize a case, run a model, or write to any remote service.
+This module does not authorize a case. Optional model requests require an explicit
+positive budget; remote source requests also default to zero.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from urllib.parse import urlencode, urlsplit, parse_qs
 import httpx
 from jsonschema import Draft202012Validator
 
-from . import contract_analysis, contract_validate, history
+from . import contract_analysis, contract_validate, history, model_reasoning
 from .legacy_source_port import producer as legacy_producer
 
 PILLARS = ('microstructure', 'onchain', 'fundamentals', 'statistical_risk', 'technical_health')
@@ -178,7 +179,9 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
              transport: httpx.BaseTransport | None = None, legacy_model_dir: str | Path | None = None,
              pinned_contract_capture: dict | None = None, legacy_capture_root: str | Path | None = None,
              legacy_records: dict | None = None, vae_config: dict | None = None,
-             vae_runner=None, captured_snapshot: dict | None = None, cancelled=None) -> dict:
+             vae_runner=None, captured_snapshot: dict | None = None, cancelled=None,
+             max_model_calls: int = 0, model_client=None, max_model_output_tokens: int = 4096,
+             max_model_context_chars: int = 120000, stage_callback=None, reasoning_checkpoint: dict | None = None) -> dict:
     """Research one backend-authorized case and atomically assemble a report bundle.
 
     `case` contains case_id, run_id, candidate_id, mode and an authorization reference
@@ -188,6 +191,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
     `captured_snapshot` accepts the backend's immutable record and base64 evidence; it
     requires a zero source budget, makes no HTTP calls and preserves source timestamps.
     Inject MockTransport for synthetic network tests. Retry uses a new output directory.
+    Optional Terra reasoning defaults to zero calls; see docs/terra-case-reasoning.md
+    for durable budget, callback and trusted checkpoint responsibilities.
     """
     case_id, run_id, candidate_id = case.get('case_id'), case.get('run_id'), case.get('candidate_id')
     if not all(isinstance(x, str) and _ID.fullmatch(x) for x in (case_id, run_id)):
@@ -218,6 +223,8 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         if (not isinstance(vae_config.get('legacy_repo'), (str, Path)) or isinstance(vae_config.get('days'), bool)
                 or not isinstance(vae_config.get('days'), int) or vae_config['days'] < 1):
             raise ValueError('VAE execution requires a legacy repository and explicit positive horizon in days')
+    if isinstance(max_model_calls, bool) or not isinstance(max_model_calls, int) or max_model_calls not in (0, 1):
+        raise ValueError('model call budget must be zero or one')
     output = Path(output_dir).resolve()
     if output.exists():
         raise ValueError('output already exists; retry with a new run directory')
@@ -225,11 +232,15 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         raise ValueError('output parent must already exist')
     started = dt.datetime.now(dt.timezone.utc).isoformat()
     attempts = []; captured = {}; stops = []; replay_ignored = []; network, gecko = NETWORKS[chain]
+    model_reasoning._emit(stage_callback, {'stage': 'sources', 'state': 'started',
+                                           'mode': 'captured_replay' if captured_snapshot is not None else 'bounded_fetch'})
     if cancelled and cancelled():
         return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
                 'source_attempts': attempts, 'reason': 'cancelled_before_source_read'}
     if captured_snapshot is not None:
         captured, replay_ignored = _replay_sources(captured_snapshot, candidate_id, mode)
+        for name in captured:
+            model_reasoning._emit(stage_callback, {'stage': 'source', 'name': name, 'state': 'captured_replay'})
         mode = 'synthetic_demo' if mode == 'synthetic_demo' else 'historical_replay'
         market, security, source, pools = (captured.get(k, (None,))[0] for k in ('market', 'security', 'source', 'pools'))
         chosen = None; candles = None
@@ -250,7 +261,9 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             if cancelled and cancelled():
                 stops.append('cancelled'); return None
             if len(attempts) >= max_source_requests:
-                stops.append('source_request_budget_exhausted'); return None
+                stops.append('source_request_budget_exhausted')
+                model_reasoning._emit(stage_callback, {'stage': 'source', 'name': name, 'state': 'skipped_budget'})
+                return None
             record = {'name': name, 'url': url, 'status': 'unavailable', 'fetched_at': None,
                       'transport_mode': 'injected_transport' if transport is not None else 'direct_http', 'evidence_mode': mode}
             attempts.append(record)
@@ -263,9 +276,11 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                 doc = json.loads(raw, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('non-finite JSON')))
                 record.update(status='captured', fetched_at=dt.datetime.now(dt.timezone.utc).isoformat() if mode == 'live' else None, sha256=_sha(raw))
                 captured[name] = (doc, raw, record)
+                model_reasoning._emit(stage_callback, {'stage': 'source', 'name': name, 'state': 'captured'})
                 return doc
             except (httpx.HTTPError, ValueError, TypeError):
                 record['status'] = 'unavailable'; record['reason'] = 'source_http_transport_or_format_failure'
+                model_reasoning._emit(stage_callback, {'stage': 'source', 'name': name, 'state': 'unavailable'})
                 return None
 
         market = fetch('market', f'https://api.dexscreener.com/token-pairs/v1/{network}/{address}')
@@ -282,8 +297,10 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             url = f'https://api.geckoterminal.com/api/v2/networks/{gecko}/pools/{chosen["address"]}/ohlcv/day?'+urlencode({'aggregate': 1, 'limit': 1000, 'currency': 'usd', 'token': chosen['side'], 'include_empty_intervals': 'false'})
             candles = fetch('daily', url)
     if 'cancelled' in stops:
+        model_reasoning._emit(stage_callback, {'stage': 'sources', 'state': 'cancelled'})
         return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
                 'source_attempts': attempts, 'reason': 'cancelled_before_bundle_commit'}
+    model_reasoning._emit(stage_callback, {'stage': 'sources', 'state': 'completed', 'attempts': len(attempts), 'captured': len(captured)})
 
     # Reject an unrelated/malformed response as a source for this candidate.
     valid = {}
@@ -327,6 +344,7 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         except (ValueError, KeyError, TypeError, OSError):
             legacy = None; stops.append('legacy_pillar_capture_rejected')
     if not valid and analysis is None and not (legacy and any(legacy[k]['status'] == 'partial' for k in ('microstructure', 'onchain'))):
+        model_reasoning._emit(stage_callback, {'stage': 'report', 'state': 'blocked', 'reason': 'no_identity_bound_source_evidence'})
         return {'state': 'blocked', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
                 'source_attempts': attempts, 'reason': 'no_identity_bound_source_evidence',
                 'replay_sources': 0, 'replay_ignored': replay_ignored, 'limitations': stops}
@@ -516,8 +534,19 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             elif p['quality_issues']: p['summary'] = p['quality_issues'][0]
         available = [name for name, p in pillars.items() if p['status'] == 'partial']
         if not available:
+            model_reasoning._emit(stage_callback, {'stage': 'report', 'state': 'blocked', 'reason': 'sources_contain_no_usable_pillar_observation'})
             return {'state': 'blocked', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
                     'source_attempts': attempts, 'reason': 'sources_contain_no_usable_pillar_observation'}
+        # Coverage records are real run-state evidence, not token-risk measurements.
+        # They let the IRC present missing pillars without citing an unrelated source.
+        if max_model_calls or reasoning_checkpoint is not None:
+            for name, p in pillars.items():
+                if p['status'] not in ('partial', 'complete'):
+                    eid = 'coverage_' + name
+                    add_evidence(eid, _bytes({'candidate_id': candidate_id, 'pillar': name, 'status': p['status'],
+                                              'reason': p['summary'], 'quality_issues': p['quality_issues']}),
+                                 {'url': None, 'fetched_at': None}, 'derived')
+                    p['evidence_ids'].append(eid)
         report = {'schema_version': '0.2', 'report_id': report_id, 'report_version': version,
             'candidate_id': candidate_id, 'identity': {'chain_id': chain, 'address': address, 'symbol': symbol}, 'mode': mode,
             'assessment': {'status': 'not_assessed', 'label': None,
@@ -529,7 +558,32 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             'limitations': ['Bounded source snapshots may be incomplete or taken at different times.',
                             'No paid model interpretation, final report approval or publication was performed.']
                             + (['Replayed captured evidence retains its original timestamps; this is not fresh source collection.'] if captured_snapshot is not None else [])}
+        model = model_reasoning.run(report, root, max_model_calls=max_model_calls, client=model_client,
+            max_output_tokens=max_model_output_tokens, max_context_chars=max_model_context_chars,
+            stage_callback=stage_callback, checkpoint=reasoning_checkpoint, cancelled=cancelled)
+        if model['status'] == 'cancelled':
+            return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
+                    'source_attempts': attempts, 'model_status': 'cancelled', 'model_calls': model['calls'],
+                    'model_usage': model.get('usage'), 'reason': 'cancelled_before_bundle_commit'}
+        sidecar = model.get('sidecar')
+        analyzed = {x['name']: x for x in sidecar['reasoning']['pillars']} if sidecar else {}
+        if sidecar:
+            conclusion = sidecar['reasoning']['conclusion']
+            report['assessment'] = {'status': 'proposed', 'label': conclusion['label'], 'summary': conclusion['summary'],
+                'unknowns': conclusion['unknowns'], 'supporting_claim_ids': conclusion['supporting_claim_ids'],
+                'counterevidence_claim_ids': conclusion['counterevidence_claim_ids']}
+            report['limitations'] = [x for x in report['limitations'] if not x.startswith('No paid model interpretation')]
+            report['limitations'].append('Model reasoning is a proposed draft; citation links are checked but factual entailment and human approval are not established.')
+            sidecar['model_call'] = {'model': model_reasoning.MODEL, 'transport': 'chat.completions',
+                                     'provider': 'resumed_checkpoint' if model['status'] == 'resumed' else ('injected_client' if model_client is not None else 'openai'),
+                                     'status': model['status'], 'scope': 'one_shared_five_pillar_and_conclusion_call',
+                                     'usage': model.get('usage')}
+            (root / 'reasoning.json').write_bytes(_bytes(sidecar))
+        elif model['status'] != 'skipped_budget':
+            report['limitations'].append('Model analysis was not produced: ' + model['status'] + '.')
         tldr = {'profile': 'scooby.pillar-tldr/1', 'report_id': report_id, 'report_version': version, 'pillars': {}}
+        irc = {'profile': 'scooby.pillar-irc/1', 'report_id': report_id, 'report_version': version,
+               'candidate_id': candidate_id, 'pillars': {}}
         lines = ['# Investigation report — pending review', '', f'Case {case_id}; candidate `{candidate_id}`; run {run_id}.', '']
         for name, p in pillars.items():
             tldr['pillars'][name] = [{'role': 'finding', 'text': x['statement'], 'claim_ids': [x['id']],
@@ -544,11 +598,45 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                     'claim_ids': [], 'evidence_ids': first['evidence_ids']})
             if p['evidence_ids'] and p['quality_issues']:
                 tldr['pillars'][name].append({'role': 'caveat', 'text': p['quality_issues'][0], 'claim_ids': [], 'evidence_ids': [p['evidence_ids'][0]]})
+            if sidecar:
+                section = analyzed[name]; first = section['analysis'][0]
+                claim_ids = [i for i in first['input_ids'] if i in {c['id'] for c in p['claims']}]
+                ev_ids = first['evidence_ids'] or (p['evidence_ids'] if p['status'] not in ('partial', 'complete') else [])
+                if p['claims']:
+                    observed = p['claims'][0]
+                    tldr['pillars'][name] = [{'role': 'finding', 'text': observed['statement'],
+                        'claim_ids': [observed['id']], 'evidence_ids': observed['supporting_evidence_ids']}]
+                elif p['measurements']:
+                    observed = p['measurements'][0]
+                    tldr['pillars'][name] = [{'role': 'finding', 'text': f'{observed["id"]}: {observed["value"]} (source scale; not independently validated).',
+                        'claim_ids': [], 'evidence_ids': observed['evidence_ids']}]
+                else:
+                    tldr['pillars'][name] = [{'role': 'caveat', 'text': p['summary'], 'claim_ids': [], 'evidence_ids': ev_ids}]
+                tldr['pillars'][name] += [{'role': 'interpretation', 'text': section['summary'], 'claim_ids': claim_ids, 'evidence_ids': ev_ids},
+                    {'role': 'interpretation', 'text': first['text'], 'claim_ids': claim_ids, 'evidence_ids': ev_ids}]
+                irc['pillars'][name] = {'insight': {'text': section['summary'], 'claim_ids': claim_ids, 'evidence_ids': ev_ids},
+                    'reasoning': {'text': first['text'], 'claim_ids': claim_ids, 'evidence_ids': ev_ids},
+                    'citations': {'claim_ids': claim_ids, 'input_ids': first['input_ids'], 'evidence_ids': ev_ids},
+                    'limitations': section['limitations'], 'questions': section['questions']}
             lines.extend(['## ' + name.replace('_', ' ').title(), '', p['summary'], '', 'Status: ' + p['status']])
             lines.extend('- ' + c['statement'] + ' [' + ', '.join(c['supporting_evidence_ids']) + ']' for c in p['claims'])
+            if sidecar:
+                lines.extend(['', '### Proposed analysis', '', analyzed[name]['summary']])
+                lines.extend('- ' + a['text'] + ' [evidence: ' + ', '.join(a['evidence_ids']) + '; inputs: ' + ', '.join(a['input_ids']) + ']' for a in analyzed[name]['analysis'])
+                lines.extend('- Limitation: ' + x for x in analyzed[name]['limitations'])
+                lines.extend('- Follow-up: ' + x for x in analyzed[name]['questions'])
             lines.extend('- ' + q for q in p['quality_issues']); lines.append('')
+        if sidecar:
+            c = sidecar['reasoning']['conclusion']; rec = c['recommendation']
+            lines.extend(['## Proposed conclusion', '', c['summary'], '', 'Proposed action: ' + rec['action'], '',
+                          rec['rationale']['text'] + ' [evidence: ' + ', '.join(rec['rationale']['evidence_ids']) +
+                          '; inputs: ' + ', '.join(rec['rationale']['input_ids']) + ']'])
+            lines.extend('- Counterevidence: ' + a['text'] + ' [' + ', '.join(a['evidence_ids']) + ']' for a in rec['counterevidence'])
+            lines.extend('- Would change this view: ' + q for q in rec['reversal_conditions']); lines.append('')
         (root / 'report.md').write_text('\n'.join(lines), encoding='utf-8')
         (root / 'pillar-tldr.json').write_bytes(_bytes(tldr))
+        if sidecar:
+            (root / 'pillar-irc.json').write_bytes(_bytes(irc))
         (root / 'source-ledger.json').write_bytes(_bytes({'candidate_id': candidate_id, 'sources': ledger, 'attempts': attempts,
                                                            'limits': stops, 'replay_ignored': replay_ignored}))
         (root / 'case-lineage.json').write_bytes(_bytes({'case_id': case_id, 'run_id': run_id, 'candidate_id': candidate_id,
@@ -557,6 +645,11 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                                      ('source_ledger', 'source-ledger.json', 'application/json'), ('case_lineage', 'case-lineage.json', 'application/json')]:
             report['artifacts'].append({'kind': kind, 'availability': 'available', 'path': filename,
                 'sha256': _sha((root / filename).read_bytes()), 'report_id': report_id, 'report_version': version, 'media_type': mime})
+        if sidecar:
+            for kind, filename in [('reasoning', 'reasoning.json'), ('pillar_irc', 'pillar-irc.json')]:
+                report['artifacts'].append({'kind': kind, 'availability': 'available', 'path': filename,
+                    'sha256': _sha((root / filename).read_bytes()), 'report_id': report_id, 'report_version': version,
+                    'media_type': 'application/json'})
         report['artifacts'].append({'kind': 'pdf', 'availability': 'unavailable', 'path': None, 'sha256': None,
                                     'report_id': report_id, 'report_version': version, 'media_type': None})
         contract_validate.validate(root, report)
@@ -566,9 +659,12 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         if cancelled and cancelled():
             return {'state': 'cancelled', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
                     'source_attempts': attempts, 'reason': 'cancelled_before_bundle_commit'}
+        model_reasoning._emit(stage_callback, {'stage': 'report', 'state': 'validated', 'report_sha256': _sha(raw)})
         os.rename(root, output)
     return {'state': 'partial', 'bundle_path': str(output), 'case_id': case_id, 'run_id': run_id,
             'report_id': report_id, 'report_version': version, 'report_sha256': _sha(raw),
             'pillar_status': {k: v['status'] for k, v in pillars.items()}, 'source_attempts': attempts,
+            'model_status': model['status'], 'model_calls': model['calls'],
+            'model_usage': model.get('usage'),
             'replay_sources': len(valid) if captured_snapshot is not None else 0,
             'replay_ignored': replay_ignored, 'limitations': stops}
