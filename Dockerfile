@@ -14,5 +14,6 @@ COPY --chown=scooby:scooby ops ./ops
 COPY --chown=scooby:scooby publication ./publication
 USER scooby
 EXPOSE 8000
-# Render (and similar hosts) set $PORT; local Compose uses the 8000 default.
-CMD ["sh", "-c", "exec python -m uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Render (and similar hosts) set $PORT; local Compose uses the 8000 default. ops/start.sh optionally seeds
+# reports (SCOOBY_SEED_ARCHIVE) and runs the worker in this container (SCOOBY_EMBEDDED_WORKER) before the API.
+CMD ["sh", "/app/ops/start.sh"]

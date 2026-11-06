@@ -72,3 +72,22 @@ CI defines a Compose build and process/worker-heartbeat smoke; it does not estab
 ## Initial report data
 
 A fresh image and volume contain no authored RAY report. The repo includes test fixtures only. Transfer the complete source packet and import/render it using [docs/report-assets.md](docs/report-assets.md), or perform a separately tested full runtime migration. The named data volume owns both databases and all bound bundles/artifacts; rebuilding the app does not recreate that data. The frontend reads these assets from the API. Do not remove the volume during normal releases.
+
+## Hosts without a persistent disk: seed at start (Render free plan)
+
+`seed_restore.py` is meant for a persistent `SCOOBY_DATA` with backups. A host without a disk (Render's free plan: no volume, no Shell, one process) loses all data on every restart, so `ops/start.sh` (the image `CMD`) can instead reapply a verified seed at each start and run the worker in the same container:
+
+| Variable | Value |
+|---|---|
+| `SCOOBY_SEED_ARCHIVE` | Path of the private archive, e.g. `/etc/secrets/report-seed.zip.b64` (a Render Secret File holding the zip's base64 text, or the zip itself) |
+| `SCOOBY_SEED_ARCHIVE_SHA256` | SHA-256 of the `.zip` bytes; anything else is refused and nothing is imported |
+| `SCOOBY_SEED_MANIFEST_SHA256` | SHA-256 of the archive's `manifest.json`, passed to `seed_restore` |
+| `SCOOBY_SEED_REPORT_IDS` | Comma-separated report ids to restore |
+| `SCOOBY_EMBEDDED_WORKER` | `true` runs the Huey worker in the API container so queued renders complete (leave unset with Compose, which has its own worker) |
+| `SCOOBY_REPORT_RELEASE` | must be `approved` (`seed_restore` refuses otherwise), so restored reports reach only the admin review queue |
+
+Each start verifies the archive checksum, then `seed_restore` verifies the manifest and every report digest, records the versions as pending human review and queues renders; it is idempotent. A configured seed failure stops startup. When an embedded worker is enabled, the entrypoint stops the container if either the worker or API exits; `/health/ready` reports a stale or missing worker heartbeat. Verify this behavior on the target host. Nothing here admits a case, verifies World ID, approves, publishes or calls a model, and the archive never enters the image or the repository.
+
+**Limits.** This is not persistence: review decisions, sessions and anything else written at runtime are lost on every restart or redeploy, and the seeded reports return as pending review. PDF rendering needs `SCOOBY_BROWSER=/usr/bin/chromium`, which may exceed a 512 MB instance; HTML drafts render without it. For the persistent, backed-up deployment the seed instructions describe, use a plan with a disk mounted at `/data` and run `seed_restore.py` from a shell instead.
+
+The checked-in Render blueprint still declares a starter plan and persistent `/data` disk; this change does not switch it to free or diskless hosting. Plan and secret-file availability must be confirmed separately.

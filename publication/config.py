@@ -89,13 +89,11 @@ def world_config() -> WorldConfig:
     """Raises ConfigError unless every World setting needed for a live device grant is present."""
     issuer = (os.getenv('WORLD_ISSUER') or '').rstrip('/')
     client_id = os.getenv('WORLD_CLIENT_ID') or ''
-    key_path = os.getenv('WORLD_CLIENT_KEY_PATH') or ''
     if not issuer.startswith('https://'):
         raise ConfigError('WORLD_ISSUER must be an https URL')
     if not client_id:
         raise ConfigError('WORLD_CLIENT_ID is not set')
-    if not key_path or not Path(key_path).is_file():
-        raise ConfigError('WORLD_CLIENT_KEY_PATH does not point to a private key file')
+    private_key_pem = _client_key()
     acr = tuple(a.strip() for a in os.getenv('WORLD_ACCEPTED_ACR', ','.join(DEFAULT_ACR)).split(',') if a.strip())
     if not acr:
         raise ConfigError('WORLD_ACCEPTED_ACR is empty')
@@ -105,7 +103,42 @@ def world_config() -> WorldConfig:
     if aud not in ('endpoint', 'issuer'):
         raise ConfigError('WORLD_ASSERTION_AUD must be endpoint (alias token_endpoint) or issuer')
     return WorldConfig(issuer=issuer, client_id=client_id, key_id=os.getenv('WORLD_CLIENT_KEY_ID') or None,
-                       accepted_acr=acr, assertion_aud=aud, private_key_pem=Path(key_path).read_bytes())
+                       accepted_acr=acr, assertion_aud=aud, private_key_pem=private_key_pem)
+
+
+def _client_key() -> bytes:
+    """The private_key_jwt signing key: WORLD_CLIENT_KEY (PEM text; literal \\n accepted for single-line host settings)
+    or the file at WORLD_CLIENT_KEY_PATH. Errors name the problem but never include key material."""
+    inline = (os.getenv('WORLD_CLIENT_KEY') or '').strip()
+    if inline:
+        pem = inline.replace('\\n', '\n').encode()
+        source = 'WORLD_CLIENT_KEY'
+    else:
+        key_path = os.getenv('WORLD_CLIENT_KEY_PATH') or ''
+        if not key_path:
+            raise ConfigError('set WORLD_CLIENT_KEY (PEM text) or WORLD_CLIENT_KEY_PATH (a private key file)')
+        path = Path(key_path)
+        try:
+            exists = path.is_file()
+        except OSError:
+            exists = False
+        if not exists:
+            raise ConfigError(f'WORLD_CLIENT_KEY_PATH: no file at {key_path} (or its folder is not readable by this process)')
+        try:
+            pem = path.read_bytes()
+        except OSError:
+            raise ConfigError(f'WORLD_CLIENT_KEY_PATH: {key_path} exists but this process cannot read it '
+                              '(file permissions); fix them or set WORLD_CLIENT_KEY instead') from None
+        source = 'WORLD_CLIENT_KEY_PATH'
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = serialization.load_pem_private_key(pem, password=None)
+    except (ValueError, TypeError):
+        raise ConfigError(f'{source} is not an unencrypted PEM private key') from None
+    if not isinstance(key, rsa.RSAPrivateKey) or not 2048 <= key.key_size <= 8192:
+        raise ConfigError(f'{source} must be an RSA key of 2048-8192 bits (World private_key_jwt)')
+    return pem
 
 
 def chain_config() -> ChainConfig:

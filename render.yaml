@@ -51,8 +51,19 @@ services:
         value: approved
       - key: SCOOBY_ADMIN_AUDIENCE
         value: https://scoobydao-backend.onrender.com
-      # Output of `python -m publication.cli export-reviewer --name <label>`; set in the dashboard.
+      # Named reviewer scopes remain required for the admin checkpoints.
       - key: SCOOBY_REVIEWERS
+        sync: false
+      # Optional seed and embedded worker are configured explicitly; persistent disk remains enabled.
+      - key: SCOOBY_EMBEDDED_WORKER
+        sync: false
+      - key: SCOOBY_SEED_ARCHIVE
+        sync: false
+      - key: SCOOBY_SEED_ARCHIVE_SHA256
+        sync: false
+      - key: SCOOBY_SEED_MANIFEST_SHA256
+        sync: false
+      - key: SCOOBY_SEED_REPORT_IDS
         sync: false
       # Set when the frontend is deployed (step 4); exact origin, no trailing slash.
       - key: SCOOBY_WEB_ORIGIN
