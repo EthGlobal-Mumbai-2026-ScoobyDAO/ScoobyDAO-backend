@@ -49,3 +49,7 @@ Backend owns queue/actor state, discovery and human review. It must isolate work
 ## Case research producer
 
 `case_research.run_case` invokes bounded source collection, optional original 50-reconstruction VAE/legacy scores, per-pillar partial handling and a validated v0.2 report bundle for either backend-authorized route. See `docs/case-research-producer.md` for exact arguments, budget/authorization boundary and remaining report-reasoning limitations. Backend must wire durable authorization/jobs/import/render; passing route-shaped references here does not verify a World confirmation.
+
+## Terra case reasoning
+
+`case_research.run_case` optionally performs one bounded GPT-6.1 Terra Chat Completions request for all five pillars and the conclusion before installing a report bundle. Default model budget is zero. See `docs/terra-case-reasoning.md` for callbacks, checkpoints, validation, model/output caps and backend budget ownership. Synthetic clients only were used for testing; live model access and full product integration remain unverified.
