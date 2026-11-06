@@ -22,4 +22,9 @@ def test_seed_archive_idempotence_and_tamper_fails_closed(tmp_path,monkeypatch):
  with store.db() as c:
   assert c.execute('select count(*) from reports').fetchone()[0]==1
   assert c.execute("select count(*) from jobs where kind='investigate'").fetchone()[0]==0
+  from publication import db as publication_db
+  publication_db.init()
+  from publication.review import consumer_visible
+  monkeypatch.setenv('SCOOBY_REPORT_RELEASE','all')
+  assert not consumer_visible(c,doc['report_id'],doc['report_version'])
  with pytest.raises(ValueError):seed_restore.restore(archive,'0'*64,[doc['report_id']])

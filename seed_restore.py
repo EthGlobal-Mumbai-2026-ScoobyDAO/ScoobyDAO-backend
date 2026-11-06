@@ -51,6 +51,7 @@ def restore(root, manifest_sha, selected):
     run=x['original_run_id']; old=c.execute('SELECT * FROM reports WHERE id=? AND version=?',(x['report_id'],x['version'])).fetchone()
     if old:
      if (old['sha256'],old['run_id'])!=(x['report_sha256'],run):raise ValueError('immutable report conflict')
+     c.execute('INSERT OR IGNORE INTO seed_imports VALUES(?,?)',(x['report_id'],x['version']))
      continue
     if c.execute('SELECT 1 FROM investigations WHERE id=?',(run,)).fetchone():raise ValueError('run identity conflict')
     cid=x['candidate_id']; sel='seed-'+run
@@ -63,6 +64,7 @@ def restore(root, manifest_sha, selected):
     for p in PILLARS:c.execute('INSERT INTO pillars VALUES(?,?,?,?)',(run,p,doc['pillars'][p]['status'],doc['pillars'][p]['summary']))
     if diagnostic:c.execute('INSERT INTO diagnostic_imports VALUES(?,?,?,?,?)',(run,cid,description,'restored_pending_review',now()))
     c.execute('INSERT INTO reports VALUES(?,?,?,?,?,?)',(x['report_id'],x['version'],run,x['report_sha256'],str(target),now()))
+    c.execute('INSERT INTO seed_imports VALUES(?,?)',(x['report_id'],x['version']))
     event(c,run,'seed_imported',description)
     job(c,'render',dumps({'id':x['report_id'],'version':x['version'],'sha256':x['report_sha256']}),'seed-render:'+run)
  return len(verified)
