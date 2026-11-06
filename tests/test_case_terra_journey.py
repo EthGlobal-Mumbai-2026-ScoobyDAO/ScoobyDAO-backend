@@ -16,6 +16,7 @@ from test_case_terra_reasoning import FakeClient
 
 @pytest.fixture(autouse=True)
 def state(tmp_path,monkeypatch):
+ monkeypatch.setenv('SCOOBY_REPORT_RELEASE','all')
  monkeypatch.setenv('SCOOBY_CASE_MODEL_MAX_CALLS','1');monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(case_jobs,'DATA',tmp_path);monkeypatch.setattr(worker,'DATA',tmp_path);monkeypatch.setattr(app_module,'DATA',tmp_path);store.init()
  yield
  app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
@@ -25,6 +26,8 @@ def seed(tmp_path,monkeypatch,route):
  for e in record['evidence']:
   e.update(kind='live_observation',observed_at=stamp,fetched_at=stamp);path=tmp_path/e['source'];path.parent.mkdir(exist_ok=True);path.write_bytes(base64.b64decode(snap['evidence'][e['source']]))
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4 if route=='automatic' else 1,r));case=case_engine.ingest_record(record,tmp_path);client=TestClient(app)
+ from admin_support import session_headers
+ client.headers.update(session_headers('synthetic','synthetic-admin','case_investigation'))
  if route=='world':
   class FakeWorld:
    config=SimpleNamespace(accepted_acr=('synthetic',))

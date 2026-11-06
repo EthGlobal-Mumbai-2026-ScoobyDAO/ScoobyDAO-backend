@@ -9,7 +9,7 @@ from test_graph_history import build,CANDIDATE
 
 @pytest.fixture(autouse=True)
 def state(tmp_path,monkeypatch):
- monkeypatch.delenv('SCOOBY_CASE_MODEL_MAX_CALLS',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(case_graph,'DATA',tmp_path);monkeypatch.setattr(case_jobs,'DATA',tmp_path);store.init()
+ monkeypatch.delenv('SCOOBY_CASE_MODEL_MAX_CALLS',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(case_graph,'DATA',tmp_path);monkeypatch.setattr(case_jobs,'DATA',tmp_path);store.init();__import__('publication.db',fromlist=['init']).init()
 
 def decision_for_fixture(tmp_path,monkeypatch):
  d=record(int(CANDIDATE.split(':')[1][2:],16));stamp=datetime.datetime.now(datetime.timezone.utc).isoformat();folder=tmp_path/'snapshots';folder.mkdir(exist_ok=True)

@@ -223,8 +223,7 @@ def list_reports():
   for r in c.execute('SELECT * FROM reports ORDER BY created DESC,id ASC,version ASC').fetchall():
    if not report_review.consumer_visible(c,r['id'],r['version']): continue
    try: items.append(dict(report_metadata(c,r),admin_review=report_review.public_status(c,r['id'],r['version'])))
-   except HTTPException: raise
-   except (OSError,ValueError,KeyError,TypeError,UnicodeError): err(409,'Stored report integrity failure')
+   except (HTTPException,OSError,ValueError,KeyError,TypeError,UnicodeError): items.append(unavailable_report_metadata(c,r))
   return items
 @app.get('/reports/{report_id}/{version}/artifacts')
 def report_artifacts(report_id:str,version:str):

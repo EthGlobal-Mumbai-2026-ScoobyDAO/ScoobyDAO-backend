@@ -345,7 +345,7 @@ def test_changed_bytes_supersede_and_old_approvals_never_carry_over(env):
     assert status(rid, 'v2')['state'] == 'pending_review'
     raw = (bundle / 'report.json').read_bytes()
     (bundle / 'report.json').write_bytes(raw + b'\n')
-    assert client.get('/reports').status_code == 409                  # the consumer library already fails closed
+    assert any(x.get('integrity')=='unavailable' for x in client.get('/reports').json())  # isolate corrupt item without exposing bytes
     queue = client.get('/web/v1/admin/reviews', headers=h).json()['items']
     assert next(i for i in queue if (i['report_id'], i['report_version']) == (rid, ver))['state'] == 'unavailable'
     assert decide(env, h, rid, ver, 'approve', digest='a' * 64).status_code == 409

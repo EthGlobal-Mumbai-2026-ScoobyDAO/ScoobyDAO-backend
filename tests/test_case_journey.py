@@ -16,6 +16,7 @@ from modules.investigation.case_research import run_case as real_producer
 
 @pytest.fixture(autouse=True)
 def state(tmp_path,monkeypatch):
+ monkeypatch.setenv('SCOOBY_REPORT_RELEASE','all')
  monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(case_jobs,'DATA',tmp_path);monkeypatch.setattr(worker,'DATA',tmp_path);monkeypatch.setattr(app_module,'DATA',tmp_path);store.init()
  yield
  app.dependency_overrides.pop(get_world_optional,None);case_world._codes.clear()
@@ -31,6 +32,8 @@ def test_both_routes_generate_and_link_report_using_synthetic_dependencies(tmp_p
  monkeypatch.setattr(case_jobs,'run_case',synthetic_runner)
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4 if route=='automatic' else 1,r))
  d=with_sources(record(int(ADDR[2:],16)),tmp_path);case=case_engine.ingest_record(d,tmp_path);client=TestClient(app)
+ from admin_support import session_headers
+ client.headers.update(session_headers('synthetic','synthetic','case_investigation'))
  if route=='world':
   class FakeWorld:
    config=SimpleNamespace(accepted_acr=('synthetic',))
@@ -66,6 +69,8 @@ def test_case_journey_replays_bound_capture_with_zero_requests(tmp_path,monkeypa
  for e in d['evidence']:
   e.update(kind='live_observation',observed_at=stamp,fetched_at=stamp);path=tmp_path/e['source'];path.parent.mkdir(exist_ok=True);path.write_bytes(base64.b64decode(snap['evidence'][e['source']]))
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4 if route=='automatic' else 1,r));case=case_engine.ingest_record(d,tmp_path);client=TestClient(app)
+ from admin_support import session_headers
+ client.headers.update(session_headers('synthetic','synthetic','case_investigation'))
  if route=='world':
   class FakeWorld:
    config=SimpleNamespace(accepted_acr=('synthetic',))

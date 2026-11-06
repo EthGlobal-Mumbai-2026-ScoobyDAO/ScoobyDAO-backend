@@ -17,7 +17,11 @@ BASE=Path(__file__).parent
 candidate=json.loads((BASE/'candidate.json').read_text(encoding='utf-8-sig'))
 cid=candidate['candidate_id']
 def post(url, body=None, key=None): return client.post(url,json=body,headers={'Idempotency-Key':key} if key else {})
-def test_lifecycle(monkeypatch):
+def test_lifecycle(monkeypatch,tmp_path):
+ import store,app as app_module
+ monkeypatch.setenv('SCOOBY_DATA',str(tmp_path));monkeypatch.setenv('SCOOBY_REPORT_RELEASE','all')
+ monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(worker,'DATA',tmp_path);monkeypatch.setattr(app_module,'DATA',tmp_path)
+ store.init();__import__('publication.db',fromlist=['init']).init()
  assert post('/candidates',{'payload':candidate}).status_code==200
  assert client.get('/candidates/'+cid).json()['gate']=='unknown'
  assert post('/investigations',{'candidate_id':cid,'selection_id':'missing'},'before').status_code==404

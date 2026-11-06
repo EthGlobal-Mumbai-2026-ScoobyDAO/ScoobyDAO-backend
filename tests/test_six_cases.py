@@ -12,7 +12,7 @@ import test_case_research as fixture
 
 @pytest.fixture(autouse=True)
 def state(tmp_path,monkeypatch):
- monkeypatch.delenv('SCOOBY_CASE_MODEL_MAX_CALLS',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(case_jobs,'DATA',tmp_path);monkeypatch.setattr(case_graph,'DATA',tmp_path);monkeypatch.setattr(worker,'DATA',tmp_path);monkeypatch.setattr(app_module,'DATA',tmp_path);store.init()
+ monkeypatch.delenv('SCOOBY_CASE_MODEL_MAX_CALLS',raising=False);monkeypatch.setattr(store,'DB',tmp_path/'state.sqlite3');monkeypatch.setattr(case_jobs,'DATA',tmp_path);monkeypatch.setattr(case_graph,'DATA',tmp_path);monkeypatch.setattr(worker,'DATA',tmp_path);monkeypatch.setattr(app_module,'DATA',tmp_path);store.init();__import__('publication.db',fromlist=['init']).init()
 
 def test_six_distinct_synthetic_cases_create_separate_partial_drafts(tmp_path,monkeypatch):
  monkeypatch.setattr(case_engine,'evaluate',lambda r,_:result(4,r));created=[]
