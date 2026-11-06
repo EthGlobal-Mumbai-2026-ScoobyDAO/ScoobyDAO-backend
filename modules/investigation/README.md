@@ -1,5 +1,9 @@
 # Scooby DAO investigation producer — integration export
 
+## ACTIVE STATE
+
+Social and contract analysis adapters are implemented as local, unwired boundaries; see `docs/social-contract-adapters.md`. Reddit requires an already-approved app and a compliant deletion lifecycle before durable use. Contract source findings are hypotheses until source provenance, runtime state and execution are reviewed. No live Reddit calls were made through these adapters and no model calls were made. A separate no-credential diagnostic returned HTTP 403; its cause is unknown and it returned no data.
+
 This package is a bounded local prototype to integrate into the new backend. Chain ID plus token address is the input. It captures source responses, optionally runs the user's original 50-reconstruction VAE, and emits a v0.2 report, Markdown, evidence and TL;DR sidecar for the existing reader. It does not implement all five research producers, Terra synthesis, authenticated human review, a discovery gate, PDF generation or publication. A direct-token request should be authorized by the backend; discovery must enforce its separate verified gate and selection. Do not deploy as a production service.
 
 ## Interfaces
@@ -37,3 +41,7 @@ Omit `--vae` to create a partial report with statistical/technical VAE sections 
 Backend owns queue/actor state, discovery and human review. It must isolate workspaces, verify evidence references, map partial failure, bind outputs to its authoritative run and expose progress. Existing builder has no automatic Terra-based five-pillar investigation, model provider call, complete project/sentiment or finalized on-chain verification, control/counterevidence synthesis, error-retry orchestration, real approval authentication, complete PDF, live discovery ingestion or durable worker integration. Its raw legacy output is not a report sign-off. Report source fetches are snapshots with differing times, not a single block. Source selection and daily-price conventions require user confirmation before being treated as production policy. Independent end-to-end tests must cover BLISS pending and another selected token with adequate history; the decision on adequacy belongs to the user.
 
 `pillars.run_pillars(context, producers)` is an optional explicit five-pillar callable boundary that isolates missing and failing producers. It is not yet wired into `build_report` or the backend; it does not itself fetch data or establish evidence validity.
+
+## Social and contract investigation adapters
+
+`reddit_search.search_leads`, `reddit_search.collect`, and `reddit_search.summarize` provide bounded OAuth-only source capture and auditable literal-language counts. `contract_analysis.rpc_plan`, `from_pinned_capture`, `source_from_sourcify`, and `analyze` support identity-bound code navigation with explicit proxy, provenance and live-verdict gaps. See `docs/social-contract-adapters.md` for exact contracts, Reddit access retirement and mandatory deletion-lifecycle caveats. These are not wired into backend jobs or immutable reports.

@@ -1,0 +1,25 @@
+{
+  "profile": "scooby.reddit-leads/1",
+  "status": "partial",
+  "query": "synthetic rugpull example",
+  "window": {"start": "2020-01-01T00:00:00+00:00", "end": "2020-02-01T00:00:00+00:00"},
+  "observations": [{
+    "id": "t3_example",
+    "subreddit": "Example",
+    "url": "https://www.reddit.com/r/Example/comments/example/synthetic/",
+    "observed_at": "2020-01-05T00:00:00+00:00",
+    "fetched_at": "2020-02-01T00:00:00+00:00",
+    "query": "synthetic rugpull example",
+    "excerpt": "Synthetic example only; not a real Reddit observation.",
+    "content_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "extracted_identifiers": [{"kind": "evm_address", "value": "0x1212121212121212121212121212121212121212", "chain_id": null}],
+    "attribution": "unresolved",
+    "verified_concern_votes": 0
+  }],
+  "coverage": {
+    "requests": 2, "posts_examined": 1, "max_requests": 5, "max_posts": 40, "complete": true,
+    "scopes": [{"subreddit": "Example", "state": "exhausted", "next_cursor": null}],
+    "reason": "search pages exhausted within bounds"
+  },
+  "limitations": ["Synthetic fixture only; all content, identifiers and hashes are fabricated."]
+}
