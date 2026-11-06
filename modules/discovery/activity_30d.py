@@ -27,7 +27,7 @@ def _stamp(value):
 def _number(value,reason):
  if type(value) not in (int,Decimal):raise ValueError(reason)
  n=Decimal(value)
- if not n.is_finite() or len(n.as_tuple().digits)>30 or not -30<=n.as_tuple().exponent<=30:raise ValueError(reason)
+ if not n.is_finite() or len(n.as_tuple().digits)>60 or not -60<=n.as_tuple().exponent<=60:raise ValueError(reason)
  return n
 
 def _read(capture,as_of):
@@ -93,7 +93,7 @@ def evaluate(candidate_id,pool_id,pools_capture,ohlcv_capture,fx_capture,as_of):
   # Date-only observations cannot prove intraday publication time. Avoid look-ahead.
   if not 1 <= (end.date()-rate_date).days <= FX_MAX_DAYS:raise ValueError('fx_date_unavailable_or_stale')
   with localcontext() as ctx:
-   ctx.prec=100;total=sum(hours.values(),Decimal(0));inr=total*rate
+   ctx.prec=160;total=sum(hours.values(),Decimal(0));inr=total*rate
   result['fx']={'provider':'ECB via Frankfurter','inr_per_usd':str(rate),'rate_date':rate_date.isoformat(),'captured_at_utc':fx_capture['fetched_at'],'evidence_id':fx_capture['sha256'],'method':'single_reference_rate_for_full_window'}
   result['volume_usd']=str(total);result['volume_inr']=str(inr);result['status']='pass' if inr>=THRESHOLD else 'excluded';result['reason']='selected_pool_meets_threshold' if result['status']=='pass' else 'selected_pool_below_threshold';result['token_activity_status']='threshold_reported_by_selected_pool' if result['status']=='pass' else 'unknown'
  except (ValueError,TypeError,KeyError,IndexError,AttributeError,InvalidOperation,OverflowError,json.JSONDecodeError) as exc:

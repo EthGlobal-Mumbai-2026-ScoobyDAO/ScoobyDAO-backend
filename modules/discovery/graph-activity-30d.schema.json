@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scooby.graph-activity-30d/1-proposal",
+  "type": "object",
+  "required": ["profile", "status", "decision_scope", "network", "reason", "evaluated_at_utc", "window_start_utc", "window_end_utc", "threshold_inr", "volume_usd", "volume_inr", "candidate_id", "subgraph_id", "coverage", "context", "fx", "source", "limitations"],
+  "additionalProperties": false,
+  "properties": {
+    "profile": {"const": "scooby.graph-activity-30d/1-proposal"},
+    "status": {"enum": ["pass", "below_indexed_scope_threshold", "unknown"]},
+    "decision_scope": {"const": "ethereum_uniswap_v3_token"},
+    "network": {"const": "ethereum"},
+    "reason": {"type": "string"},
+    "evaluated_at_utc": {"type": "string", "format": "date-time"},
+    "window_start_utc": {"type": "string", "format": "date-time"},
+    "window_end_utc": {"type": "string", "format": "date-time"},
+    "threshold_inr": {"const": "10000000"},
+    "volume_usd": {"type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},
+    "volume_inr": {"type": ["string", "null"], "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "subgraph_id": {"const": "5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV"},
+    "coverage": {"type": "object", "required": ["expected_hours", "observed_hours"], "properties": {"expected_hours": {"const": 720}, "observed_hours": {"type": "integer", "minimum": 0, "maximum": 720}}, "additionalProperties": false},
+    "context": {"type": "object", "required": ["indexed_tvl_usd", "annualized_hourly_log_volatility", "volatility_return_count", "volatility_method", "volatility_unit"], "properties": {"indexed_tvl_usd": {"type": ["string", "null"]}, "annualized_hourly_log_volatility": {"type": ["string", "null"]}, "volatility_return_count": {"type": "integer", "minimum": 0, "maximum": 719}, "volatility_method": {"const": "sample_stddev_hourly_log_returns_times_sqrt_8760"}, "volatility_unit": {"const": "annualized_fraction"}}, "additionalProperties": false},
+    "fx": {"type": ["object", "null"]},
+    "source": {"type": ["object", "null"]},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [{"if": {"properties": {"status": {"const": "unknown"}}}, "then": {"properties": {"volume_usd": {"type": "null"}, "volume_inr": {"type": "null"}}}, "else": {"properties": {"volume_usd": {"type": "string"}, "volume_inr": {"type": "string"}, "fx": {"type": "object", "required": ["provider", "inr_per_usd", "rate_date", "evidence_id", "captured_at_utc", "method"]}, "source": {"type": "object", "required": ["response_sha256", "fetched_at_utc", "subgraph_id", "deployment", "indexed_block_number", "indexed_block_timestamp", "query_sha256", "variables"]}, "coverage": {"properties": {"observed_hours": {"const": 720}}}}}}]
+}
