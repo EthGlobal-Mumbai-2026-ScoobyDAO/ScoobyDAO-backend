@@ -1,0 +1,117 @@
+{
+  "profile": "scooby.pillar-tldr/1",
+  "report_id": "synthetic-v2-compatibility",
+  "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z",
+  "pillars": {
+    "microstructure": [
+      {
+        "role": "finding",
+        "text": "SYNTHETIC microstructure insight",
+        "claim_ids": [
+          "microstructure-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      {
+        "role": "interpretation",
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "microstructure-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      }
+    ],
+    "onchain": [
+      {
+        "role": "finding",
+        "text": "SYNTHETIC onchain insight",
+        "claim_ids": [
+          "onchain-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      {
+        "role": "interpretation",
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "onchain-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      }
+    ],
+    "fundamentals": [
+      {
+        "role": "finding",
+        "text": "SYNTHETIC fundamentals insight",
+        "claim_ids": [
+          "fundamentals-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      {
+        "role": "interpretation",
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "fundamentals-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      }
+    ],
+    "statistical_risk": [
+      {
+        "role": "finding",
+        "text": "SYNTHETIC statistical_risk insight",
+        "claim_ids": [
+          "statistical_risk-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      {
+        "role": "interpretation",
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "statistical_risk-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      }
+    ],
+    "technical_health": [
+      {
+        "role": "finding",
+        "text": "SYNTHETIC technical_health insight",
+        "claim_ids": [
+          "technical_health-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      },
+      {
+        "role": "interpretation",
+        "text": "SYNTHETIC observation and reasoning.",
+        "claim_ids": [
+          "technical_health-claim"
+        ],
+        "evidence_ids": [
+          "test-a"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "profile": "scooby.reasoning-compatibility-fixtures/1",
+  "scope": "SYNTHETIC OFFLINE MOCK ONLY; no real token, no API call, not financial guidance, no report approval.",
+  "positive": [
+    {
+      "name": "v1",
+      "path": "synthetic-v1-r2",
+      "expected": "accept without invented recommendation"
+    },
+    {
+      "name": "v2",
+      "path": "synthetic-v2-r2",
+      "expected": "accept and render actionable recommendation"
+    }
+  ],
+  "negative": [
+    {
+      "name": "stale-sidecar-hash",
+      "path": "negative-r2/stale-sidecar-hash",
+      "hash_rebound": false,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "unsupported-profile",
+      "path": "negative-r2/unsupported-profile",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "wrong-candidate",
+      "path": "negative-r2/wrong-candidate",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "wrong-version",
+      "path": "negative-r2/wrong-version",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "missing-recommendation",
+      "path": "negative-r2/missing-recommendation",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValidationError"
+    },
+    {
+      "name": "blank-action",
+      "path": "negative-r2/blank-action",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "blank-rationale",
+      "path": "negative-r2/blank-rationale",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "empty-reversal",
+      "path": "negative-r2/empty-reversal",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "unresolved-evidence",
+      "path": "negative-r2/unresolved-evidence",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "unrelated-evidence",
+      "path": "negative-r2/unrelated-evidence",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    },
+    {
+      "name": "unresolved-counterevidence",
+      "path": "negative-r2/unresolved-counterevidence",
+      "hash_rebound": true,
+      "producer_validator": "rejected",
+      "error_type": "ValueError"
+    }
+  ],
+  "warning": "Producer-side checks only. Consumers must independently execute these fixtures; source reference integrity does not prove entailment."
+}

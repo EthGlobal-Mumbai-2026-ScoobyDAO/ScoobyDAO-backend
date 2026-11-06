@@ -2,12 +2,19 @@ import hashlib, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Header
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from urllib.parse import quote
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from jsonschema import Draft202012Validator
 from store import ROOT, DATA, db, ident, now, dumps, digest, row, job, event, PILLARS
 from worker import wake
 app=FastAPI(title='Scooby DAO local operator API',version='0.1.0',description='Local-only prototype. Identities and review receipts are not authenticated.')
+web_origin=os.getenv('SCOOBY_WEB_ORIGIN','').strip()
+if web_origin:
+ if not (web_origin.startswith('http://') or web_origin.startswith('https://')) or '*' in web_origin or web_origin.endswith('/'):
+  raise ValueError('SCOOBY_WEB_ORIGIN must be one explicit origin without trailing slash')
+ app.add_middleware(CORSMiddleware,allow_origins=[web_origin],allow_credentials=False,allow_methods=['GET'],allow_headers=['Content-Type'])
 def err(code,msg): raise HTTPException(code,msg)
 def getrow(c,sql,args):
  r=c.execute(sql,args).fetchone()
@@ -139,10 +146,56 @@ def import_report(x:ImportReport):
     if old['sha256']!=sha or old['run_id']!=x.run_id: err(409,'Immutable report version already exists')
     return row(old)
    target=DATA/'bundles'/sha; target.parent.mkdir(exist_ok=True)
-   if not target.exists(): shutil.copytree(snap,target)
+   if not target.exists():
+    try: os.rename(snap,target)
+    except OSError:
+     if not target.exists(): raise
+   # Revalidate the installed bytes, including crash recovery or concurrent imports.
+   try: subprocess.run([sys.executable,str(Path(frontend)/'build.py'),str(target/'report.json'),str(Path(tmp)/'installed-check')],check=True,timeout=120,capture_output=True)
+   except Exception: err(409,'Installed bundle integrity failure')
+   if digest((target/'report.json').read_bytes())!=sha: err(409,'Installed report digest mismatch')
    c.execute('INSERT INTO reports VALUES(?,?,?,?,?,?)',(d['report_id'],d['report_version'],x.run_id,sha,str(target),now()))
    event(c,x.run_id,'report_imported',sha)
    return {'report_id':d['report_id'],'version':d['report_version'],'sha256':sha,'review':'pending'}
+def report_metadata(c,r):
+ run=getrow(c,'SELECT * FROM investigations WHERE id=?',(r['run_id'],))
+ selection=getrow(c,'SELECT * FROM selections WHERE id=?',(run['selection_id'],))
+ path=Path(r['path'])/'report.json'
+ if path.is_symlink() or not path.is_file(): err(409,'Stored report integrity failure')
+ raw=path.read_bytes()
+ if digest(raw)!=r['sha256']: err(409,'Stored report integrity failure')
+ doc=json.loads(raw)
+ latest=c.execute('SELECT decision,created FROM reviews WHERE report_id=? AND version=? ORDER BY created DESC',(r['id'],r['version'])).fetchone()
+ return {'report_id':r['id'],'report_version':r['version'],'candidate_id':run['candidate_id'],'report_sha256':r['sha256'],
+         'mode':doc.get('mode'),'identity':doc.get('identity'),'observation_times':sorted({e['observed_at'] for e in doc.get('evidence',[]) if e.get('observed_at')}),
+         'selection':{'kind':selection['kind'],'reason':selection['reason'],'admission_qualified':False if selection['kind']=='diagnostic_exception' else None,'authentication':'unverified local operator'},
+         'review':{'status':latest['decision'] if latest else 'pending','authentication':'unverified local operator'},'created':r['created']}
+@app.get('/reports')
+def list_reports():
+ with db() as c: return [report_metadata(c,r) for r in c.execute('SELECT * FROM reports ORDER BY created DESC').fetchall()]
+@app.get('/reports/{report_id}/{version}/artifacts')
+def report_artifacts(report_id:str,version:str):
+ with db() as c:
+  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version)); result=report_metadata(c,r)
+  jobs=c.execute("SELECT * FROM jobs WHERE kind='render' AND state='done' ORDER BY created DESC").fetchall()
+  match=next((j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}),None)
+ if not match:
+  result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']='not_rendered'; result['package']={'availability':'unavailable','package_sha256':None,'url':None}; return result
+ out=DATA/'artifacts'/match['id']; manifest_path=out/'manifest.json'
+ if not manifest_path.is_file(): err(409,'Render manifest missing')
+ with db() as c: locked=c.execute('SELECT sha256 FROM render_manifests WHERE job_id=?',(match['id'],)).fetchone()
+ if manifest_path.is_symlink(): err(409,'Render manifest integrity failure')
+ manifest_raw=manifest_path.read_bytes()
+ if not locked or digest(manifest_raw)!=locked['sha256']: err(409,'Render manifest integrity failure')
+ m=json.loads(manifest_raw)
+ if (m.get('report_id'),m.get('report_version'),m.get('report_sha256'))!=(report_id,version,r['sha256']): err(409,'Render manifest identity mismatch')
+ result['render_status']='pending_review_draft'; result['artifacts']={}
+ result['package']={'availability':'available','package_sha256':locked['sha256'],'url':'/packages/'+locked['sha256']}
+ for kind,name,keyname in [('html','index.html','html_sha256'),('markdown','report.md','markdown_sha256'),('pdf','report.pdf','pdf_sha256')]:
+  expected=m.get(keyname); f=out/name
+  if expected and (not f.is_file() or digest(f.read_bytes())!=expected): err(409,'Render artifact integrity failure')
+  result['artifacts'][kind]={'availability':'available' if expected else 'unavailable','sha256':expected,'url':f'/artifacts/{match["id"]}/{name}' if expected else None,'report_sha256':r['sha256']}
+ return result
 @app.get('/reports/{report_id}/{version}')
 def report(report_id:str,version:str):
  with db() as c:
@@ -164,28 +217,85 @@ def render(report_id:str,version:str,idempotency_key:str=Header(None)):
  with db() as c:
   r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version)); ref=dumps({'id':report_id,'version':version,'sha256':r['sha256']}); j=job(c,'render',ref,key(idempotency_key))
  signal(); return {'job_id':j,'status':'pending review draft','pdf':'attempted when SCOOBY_BROWSER is configured'}
-@app.get('/artifacts/{job_id}/{name}')
-def artifact(job_id:str,name:str):
- if name not in ('index.html','report.json','report.pdf','manifest.json'): err(404,'Artifact unavailable')
- with db() as c:
-  j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
-  if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
- path=DATA/'artifacts'/job_id/name
- if not path.is_file(): err(404,'Artifact missing')
- return FileResponse(path,headers={'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;"})
-
-@app.get('/artifacts/{job_id}/assets/{asset_path:path}')
-def artifact_asset(job_id:str,asset_path:str):
+def checked_bytes(path,expected):
+ if path.is_symlink() or not path.is_file(): err(404,'Artifact missing')
+ raw=path.read_bytes()
+ if not expected or digest(raw)!=expected: err(409,'Artifact integrity failure')
+ return raw
+def artifact_headers():
+ return {'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:"}
+def safe_asset(base,asset_path):
  if not asset_path or any(x in asset_path for x in ('\\',':','%','?','#')) or any(x in ('','.','..') for x in asset_path.split('/')): err(400,'Unsafe asset path')
- with db() as c:
-  j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
-  if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
- base=(DATA/'artifacts'/job_id/'assets').resolve(); path=base
+ path=base
  for part in asset_path.split('/'):
   path=path/part
   if path.is_symlink(): err(400,'Symlink forbidden')
- if not path.resolve().is_relative_to(base) or not path.is_file(): err(404,'Asset not found')
- return FileResponse(path,media_type='application/octet-stream',headers={'X-Content-Type-Options':'nosniff','Content-Disposition':'attachment'})
+ if not path.resolve().is_relative_to(base.resolve()): err(400,'Unsafe asset path')
+ return path
+def report_assets(doc):
+ allowed={}
+ for x in doc['evidence']+[a for a in doc['artifacts'] if a['availability']=='available']:
+  name=x['path']; sha=x['sha256']
+  if name in allowed and allowed[name]!=sha: err(409,'Conflicting asset hashes')
+  allowed[name]=sha
+ return allowed
+def package_context(package_sha256):
+ import re
+ if not re.fullmatch('[0-9a-f]{64}',package_sha256): err(404,'Package not found')
+ with db() as c:
+  j=c.execute("SELECT jobs.* FROM jobs JOIN render_manifests ON jobs.id=render_manifests.job_id WHERE render_manifests.sha256=? AND jobs.state='done' AND jobs.kind='render' LIMIT 1",(package_sha256,)).fetchone()
+  if not j: err(404,'Package not found')
+ out=DATA/'artifacts'/j['id']; ref=json.loads(j['ref']); manifest=json.loads(checked_bytes(out/'manifest.json',package_sha256))
+ if (manifest.get('report_id'),manifest.get('report_version'),manifest.get('report_sha256'))!=(ref['id'],ref['version'],ref['sha256']): err(409,'Package identity mismatch')
+ raw=checked_bytes(out/'report.json',ref['sha256']); doc=json.loads(raw)
+ if (doc['report_id'],doc['report_version'])!=(ref['id'],ref['version']): err(409,'Report identity mismatch')
+ return out,ref,manifest,raw,doc
+@app.get('/packages/{package_sha256}')
+def package_descriptor(package_sha256:str):
+ out,ref,m,raw,doc=package_context(package_sha256); report_assets(doc)
+ prefix='/packages/'+package_sha256
+ def asset_url(path): return prefix+'/assets/'+quote(path,safe='/') if path else None
+ artifacts=[{'kind':a['kind'],'path':a['path'],'availability':a['availability'],'media_type':a['media_type'],'sha256':a['sha256'],'url':asset_url(a['path']) if a['availability']=='available' else None} for a in doc['artifacts']]
+ evidence=[{'id':e['id'],'path':e['path'],'availability':'available','media_type':'application/octet-stream','sha256':e['sha256'],'url':asset_url(e['path'])} for e in doc['evidence']]
+ return {'package_sha256':package_sha256,'candidate_id':doc['candidate_id'],'report_id':ref['id'],'report_version':ref['version'],'report_sha256':ref['sha256'],'report_review_snapshot':{'status':doc['review']['status'],'authentication':'unverified report assertion'},'manifest':{'media_type':'application/json','sha256':package_sha256,'url':prefix+'/manifest.json'},'report':{'availability':'available','media_type':'application/json','sha256':ref['sha256'],'url':prefix+'/report.json'},'artifacts':artifacts,'evidence':evidence}
+@app.get('/packages/{package_sha256}/manifest.json')
+def package_manifest(package_sha256:str):
+ out,ref,m,raw,doc=package_context(package_sha256)
+ data=checked_bytes(out/'manifest.json',package_sha256)
+ return Response(content=data,media_type='application/json',headers=artifact_headers())
+@app.get('/packages/{package_sha256}/report.json')
+def package_report(package_sha256:str):
+ out,ref,m,raw,doc=package_context(package_sha256)
+ return Response(content=raw,media_type='application/json',headers=artifact_headers())
+@app.get('/packages/{package_sha256}/assets/{asset_path:path}')
+def package_asset(package_sha256:str,asset_path:str):
+ out,ref,m,raw,doc=package_context(package_sha256); allowed=report_assets(doc)
+ path=safe_asset(out/'assets',asset_path)
+ if asset_path not in allowed: err(404,'Asset not found')
+ data=checked_bytes(path,allowed[asset_path])
+ media=next((a['media_type'] for a in doc['artifacts'] if a['availability']=='available' and a['path']==asset_path),None)
+ return Response(content=data,media_type=media or 'application/octet-stream',headers=artifact_headers())
+@app.get('/artifacts/{job_id}/{name}')
+def artifact(job_id:str,name:str):
+ if name not in ('index.html','report.json','report.md','report.pdf','manifest.json'): err(404,'Artifact unavailable')
+ with db() as c:
+  j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
+  if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
+  locked=getrow(c,'SELECT sha256 FROM render_manifests WHERE job_id=?',(job_id,))
+ out=DATA/'artifacts'/job_id; ref=json.loads(j['ref']); manifest_raw=checked_bytes(out/'manifest.json',locked['sha256']); m=json.loads(manifest_raw)
+ if (m.get('report_id'),m.get('report_version'),m.get('report_sha256'))!=(ref['id'],ref['version'],ref['sha256']): err(409,'Render manifest identity mismatch')
+ if name=='manifest.json': data=manifest_raw
+ elif name=='report.json': data=checked_bytes(out/name,ref['sha256'])
+ else: data=checked_bytes(out/name,m.get({'index.html':'html_sha256','report.md':'markdown_sha256','report.pdf':'pdf_sha256'}[name]))
+ media={'index.html':'text/html','report.json':'application/json','manifest.json':'application/json','report.md':'text/markdown','report.pdf':'application/pdf'}[name]
+ return Response(content=data,media_type=media,headers=artifact_headers())
+@app.get('/artifacts/{job_id}/assets/{asset_path:path}')
+def artifact_asset(job_id:str,asset_path:str):
+ with db() as c:
+  j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
+  if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
+  locked=getrow(c,'SELECT sha256 FROM render_manifests WHERE job_id=?',(job_id,))
+ return package_asset(locked['sha256'],asset_path)
 
 class ReasonInput(BaseModel):
  pillar: Literal['microstructure','onchain','fundamentals','statistical_risk','technical_health']
@@ -217,13 +327,14 @@ def get_reason(input_id:str):
 def honeypot_readiness():
  return {
   'kind':'static_integration_inventory',
-  'checkpoint_case_status':'no_selection_recorded_in_this_checkpoint',
+  'checkpoint_case_status':'no_fresh_milestone_selection_recorded_in_this_checkpoint',
+  'reference_track':'RAY source-curated report imported; diagnostic exception, not gate-qualified; review pending',
   'normal_gate':{'required_distinct_verified_groups':4,'wired_verifiers':0,'qualified_selection_enabled':False},
-  'discovery_newer_work':'G07 and partial G09 exist in an unmerged worktree, not in this worker',
+  'discovery_newer_work':'G07 and partial G09 exist in discovery work; neither is wired to this worker',
   'investigation':'five persisted pillar states; producers are not wired',
-  'research_output':'external bundle import and validation only; no automated end-to-end report',
-  'reader':'bundled earlier reader; newer IRC reader not integrated',
-  'pdf':'draft browser print only; full report PDF not implemented',
+  'research_output':'reference bundle imported and rendered; no automated end-to-end deep research',
+  'reader':'corrected IRC reader integrated for imported bundles; automated research remains unwired',
+  'pdf':'reference draft contains expanded reader and bound full Markdown; thumbnail and text checks passed, detailed accessibility and typography QA pending',
   'review':'local unverified receipts; no authenticated sign-off',
   'publication':'reserved for human teammate; not implemented',
   'paid_model_budget_default':0,

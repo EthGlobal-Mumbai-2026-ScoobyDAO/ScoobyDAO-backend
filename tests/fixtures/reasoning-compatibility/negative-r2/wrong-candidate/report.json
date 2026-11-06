@@ -1,0 +1,390 @@
+{
+  "schema_version": "0.2",
+  "report_id": "synthetic-v2-compatibility",
+  "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z",
+  "candidate_id": "1:0x1111111111111111111111111111111111111111",
+  "identity": {
+    "chain_id": 1,
+    "address": "0x1111111111111111111111111111111111111111",
+    "symbol": "TEST-ONLY"
+  },
+  "mode": "synthetic_demo",
+  "assessment": {
+    "status": "proposed",
+    "label": "SYNTHETIC TEST ONLY",
+    "summary": "SYNTHETIC proposed conclusion. Proposed action: SYNTHETIC TEST ONLY: defer the fictional interaction.",
+    "unknowns": [
+      "SYNTHETIC unknown."
+    ],
+    "supporting_claim_ids": [
+      "onchain-claim"
+    ],
+    "counterevidence_claim_ids": []
+  },
+  "pillars": {
+    "microstructure": {
+      "status": "partial",
+      "summary": "SYNTHETIC microstructure insight",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "measurements": [
+        {
+          "id": "microstructure-metric",
+          "value": 42,
+          "unit": "synthetic units",
+          "method": "fabricated",
+          "quality": "unvalidated",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "window": {
+            "start": null,
+            "end": null,
+            "precision": null
+          },
+          "unknown_reason": null
+        }
+      ],
+      "series": [],
+      "claims": [
+        {
+          "id": "microstructure-claim",
+          "statement": "Synthetic claim.",
+          "kind": "observation",
+          "supporting_evidence_ids": [
+            "test-a"
+          ],
+          "counterevidence_ids": [
+            "test-b"
+          ],
+          "contradiction_claim_ids": [],
+          "uncertainties": [
+            "Fabricated fixture."
+          ]
+        }
+      ],
+      "quality_issues": [
+        "SYNTHETIC TEST DATA ONLY."
+      ],
+      "raw_payload_path": null
+    },
+    "onchain": {
+      "status": "partial",
+      "summary": "SYNTHETIC onchain insight",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "measurements": [
+        {
+          "id": "onchain-metric",
+          "value": 42,
+          "unit": "synthetic units",
+          "method": "fabricated",
+          "quality": "unvalidated",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "window": {
+            "start": null,
+            "end": null,
+            "precision": null
+          },
+          "unknown_reason": null
+        }
+      ],
+      "series": [],
+      "claims": [
+        {
+          "id": "onchain-claim",
+          "statement": "Synthetic claim.",
+          "kind": "observation",
+          "supporting_evidence_ids": [
+            "test-a"
+          ],
+          "counterevidence_ids": [
+            "test-b"
+          ],
+          "contradiction_claim_ids": [],
+          "uncertainties": [
+            "Fabricated fixture."
+          ]
+        }
+      ],
+      "quality_issues": [
+        "SYNTHETIC TEST DATA ONLY."
+      ],
+      "raw_payload_path": null
+    },
+    "fundamentals": {
+      "status": "partial",
+      "summary": "SYNTHETIC fundamentals insight",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "measurements": [
+        {
+          "id": "fundamentals-metric",
+          "value": 42,
+          "unit": "synthetic units",
+          "method": "fabricated",
+          "quality": "unvalidated",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "window": {
+            "start": null,
+            "end": null,
+            "precision": null
+          },
+          "unknown_reason": null
+        }
+      ],
+      "series": [],
+      "claims": [
+        {
+          "id": "fundamentals-claim",
+          "statement": "Synthetic claim.",
+          "kind": "observation",
+          "supporting_evidence_ids": [
+            "test-a"
+          ],
+          "counterevidence_ids": [
+            "test-b"
+          ],
+          "contradiction_claim_ids": [],
+          "uncertainties": [
+            "Fabricated fixture."
+          ]
+        }
+      ],
+      "quality_issues": [
+        "SYNTHETIC TEST DATA ONLY."
+      ],
+      "raw_payload_path": null
+    },
+    "statistical_risk": {
+      "status": "partial",
+      "summary": "SYNTHETIC statistical_risk insight",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "measurements": [
+        {
+          "id": "statistical_risk-metric",
+          "value": 42,
+          "unit": "synthetic units",
+          "method": "fabricated",
+          "quality": "unvalidated",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "window": {
+            "start": null,
+            "end": null,
+            "precision": null
+          },
+          "unknown_reason": null
+        }
+      ],
+      "series": [],
+      "claims": [
+        {
+          "id": "statistical_risk-claim",
+          "statement": "Synthetic claim.",
+          "kind": "observation",
+          "supporting_evidence_ids": [
+            "test-a"
+          ],
+          "counterevidence_ids": [
+            "test-b"
+          ],
+          "contradiction_claim_ids": [],
+          "uncertainties": [
+            "Fabricated fixture."
+          ]
+        }
+      ],
+      "quality_issues": [
+        "SYNTHETIC TEST DATA ONLY."
+      ],
+      "raw_payload_path": null
+    },
+    "technical_health": {
+      "status": "partial",
+      "summary": "SYNTHETIC technical_health insight",
+      "evidence_ids": [
+        "test-a",
+        "test-b"
+      ],
+      "measurements": [
+        {
+          "id": "technical_health-metric",
+          "value": 42,
+          "unit": "synthetic units",
+          "method": "fabricated",
+          "quality": "unvalidated",
+          "evidence_ids": [
+            "test-a"
+          ],
+          "window": {
+            "start": null,
+            "end": null,
+            "precision": null
+          },
+          "unknown_reason": null
+        }
+      ],
+      "series": [],
+      "claims": [
+        {
+          "id": "technical_health-claim",
+          "statement": "Synthetic claim.",
+          "kind": "observation",
+          "supporting_evidence_ids": [
+            "test-a"
+          ],
+          "counterevidence_ids": [
+            "test-b"
+          ],
+          "contradiction_claim_ids": [],
+          "uncertainties": [
+            "Fabricated fixture."
+          ]
+        }
+      ],
+      "quality_issues": [
+        "SYNTHETIC TEST DATA ONLY."
+      ],
+      "raw_payload_path": null
+    }
+  },
+  "evidence": [
+    {
+      "id": "test-a",
+      "path": "evidence/a.json",
+      "sha256": "b233637853d9520da238e461d296dc86ecf980f56ebca55e1fa595a2ef0d450c",
+      "kind": "historical_reference",
+      "observed_at": null,
+      "fetched_at": null,
+      "block_number": null,
+      "window": {
+        "start": null,
+        "end": null,
+        "precision": null
+      },
+      "coverage": "Fabricated offline test data.",
+      "limitations": [
+        "Not a real token or event."
+      ]
+    },
+    {
+      "id": "test-b",
+      "path": "evidence/b.json",
+      "sha256": "6a4605655372dcc538af00ee6c02084b80beee255a0852ef185dc6e77748ba14",
+      "kind": "historical_reference",
+      "observed_at": null,
+      "fetched_at": null,
+      "block_number": null,
+      "window": {
+        "start": null,
+        "end": null,
+        "precision": null
+      },
+      "coverage": "Fabricated offline test data.",
+      "limitations": [
+        "Not a real token or event."
+      ]
+    },
+    {
+      "id": "test-c",
+      "path": "evidence/c.json",
+      "sha256": "217b374d84c999280da79bbb8e2101b7033095841df11eb17797ec77461f9910",
+      "kind": "historical_reference",
+      "observed_at": null,
+      "fetched_at": null,
+      "block_number": null,
+      "window": {
+        "start": null,
+        "end": null,
+        "precision": null
+      },
+      "coverage": "Fabricated offline test data.",
+      "limitations": [
+        "Not a real token or event."
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "kind": "markdown",
+      "media_type": "text/markdown",
+      "availability": "available",
+      "path": "report.md",
+      "sha256": "acb132f5fe3dbc19ee5611e94fdf7b5218df8e28a45cd1235aed43fea0eee7e9",
+      "report_id": "synthetic-v2-compatibility",
+      "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z"
+    },
+    {
+      "kind": "reasoning",
+      "media_type": "application/json",
+      "availability": "available",
+      "path": "reasoning.json",
+      "sha256": "2c6d09ff43e013ea98b57ff9a2aa6a7114667366c46249c356b424fa3494866c",
+      "report_id": "synthetic-v2-compatibility",
+      "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z"
+    },
+    {
+      "kind": "pillar_tldr",
+      "media_type": "application/json",
+      "availability": "available",
+      "path": "pillar-tldr.json",
+      "sha256": "152b72ade7ea1dce3fecdd85ea59fc0a65962930f1f8b70d5eb1370e50b740af",
+      "report_id": "synthetic-v2-compatibility",
+      "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z"
+    },
+    {
+      "kind": "pillar_irc",
+      "media_type": "application/json",
+      "availability": "available",
+      "path": "pillar-irc.json",
+      "sha256": "899d91fcc842c7ac1ef7ca1ca8bacd63547265acd4681da17772dc6ece30ae3c",
+      "report_id": "synthetic-v2-compatibility",
+      "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z"
+    },
+    {
+      "kind": "pdf",
+      "media_type": null,
+      "availability": "unavailable",
+      "path": null,
+      "sha256": null,
+      "report_id": "synthetic-v2-compatibility",
+      "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z"
+    },
+    {
+      "kind": "validation_audit",
+      "media_type": "application/json",
+      "availability": "available",
+      "path": "validation-audit.json",
+      "sha256": "f192c6224be21d592e5c13a259239e2c62129cc9eb469704b90c5120ca127b47",
+      "report_id": "synthetic-v2-compatibility",
+      "report_version": "synthetic-input-1-reasoned-20261106T090455293139Z"
+    }
+  ],
+  "review": {
+    "status": "pending",
+    "reviewer": null,
+    "reviewed_at": null,
+    "reviewed_version": null,
+    "content_sha256": null,
+    "authentication": "none"
+  },
+  "limitations": [
+    "SYNTHETIC DEMO: no real token claim, model call or financial assessment.",
+    "Machine-generated interpretation requires human review; citations are mechanically checked, but factual entailment and mathematical validity are not automatically proven."
+  ]
+}
