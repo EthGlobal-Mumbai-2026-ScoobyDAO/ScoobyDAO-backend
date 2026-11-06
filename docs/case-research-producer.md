@@ -42,3 +42,24 @@ Social search remains a separate transient provider; this producer does not embe
 ## Verification
 
 `python -m pytest -q tests/test_case_research.py` uses synthetic HTTP, authorization references and a mocked VAE runner to test both routes, generated v0.2/reader HTML, source failure isolation, blocked/cancelled behavior, independent retry, original score fixtures, VAE input binding and 50-reconstructions rejection. It also imports each generated bundle into the existing backend's report library and exercises its render worker. Those route tests use diagnostic selections and do not verify real World ID confirmation, case routing or the new backend job integration. The existing captured RAY source/RPC material was replayed with injected transport and rendered into a new historical draft: four pillars partial, statistical risk pending because daily history had gaps; no new provider request was made. This is component integration evidence, not the full case→authorization→job→report-library acceptance journey.
+
+## Token-level The Graph evidence (captured replay)
+
+`run_case(..., graph_capture_dir=<trusted capture>, graph_model_dir=<trusted saved run>, graph_technical_sha256=<optional exact digest>)` accepts the explicitly identified legacy Ethereum V3 `tokenDayDatas` capture as a separate token-level source. It does not perform a Graph request or choose a model horizon. This path preserves and verifies the original response pages, exact query and per-page variables, token identity, subgraph ID, bounded 30-day windows, closed UTC dates, priceUSD, no-fill gaps, normalized-row hash and equality with the original pages. It rejects credential-bearing gateway URLs/authorization material rather than editing source bytes. Caller must choose and authenticate the capture and any source-selection/discovery records; this slice does not claim the subgraph covers a chosen pool, the entire market, or another protocol. The V3 source returns zero rows for the supplied BLISS/RAY windows; that result says nothing about their selected V2 pools or trading elsewhere.
+
+The optional saved Graph model is verified separately against that token-level capture: source manifest, normalized history, return CSV and values recomputed from original priceUSD rows, candidate, original risk output, run manifest, and actual 50 distinct finite reconstruction columns and dates. If `graph_technical_sha256` is provided, the original supplemental technical manifest must bind that exact technical output to the saved reconstruction, precompute code hash and original run manifest. Original pages and model files are copied unchanged as hash-checked evidence; a separately identified derived wrapper maps their existing fields into the frozen v0.2 pillar contract. User-owned legacy math and horizons are unchanged. Hash bindings are not proof of source truth, model calibration, statistical adequacy, execution safety, or faithful independent recomputation of the model. Graph inputs require a Graph model bound to those same inputs; they cannot be passed off as GeckoTerminal selected-pool candles, and Graph model input cannot be combined with the existing model/runner arguments. Empty capture with no other usable source yields blocked, not a risk score. Optional technical results stay absent unless their supplemental provenance is supplied.
+
+Example (paths are backend-owned and access-controlled; no live source/model calls):
+
+```python
+result = run_case(case, out,
+    max_source_requests=0, max_model_calls=0,
+    graph_capture_dir=authorized_capture_dir,
+    graph_model_dir=authorized_graph_vae_dir,
+    graph_technical_sha256=trusted_supplemental_digest,
+)
+```
+
+The report remains a partial pending-review draft. Historical replay retains Graph's capture time and labels it as token-level, not as a fresh pool quote. Four days in the captured SHIB run is a historical test horizon, not an adopted default. `tests/test_graph_history.py` covers native source/model binding, evidence preservation, UTC cutoff, identity and page/query tampering, credentials, duplicate dates, absent data, 50-series/model/supplemental mismatches, and leaves the original GeckoTerminal path covered by the existing suite.
+
+The result includes `graph_capture` with source type, subgraph ID, requested date window, capture time, row and missing-day counts, and a token-level coverage limitation. For a zero-row Graph-only run, the result is blocked but still includes this source-specific status; it does not claim the token or pool is absent. Source-selection and discovery evidence, including the separate RAY V2/V3 indexing discrepancy and on-chain factory cross-check, remain the backend's authoritative selection lineage and are not inferred by this adapter.

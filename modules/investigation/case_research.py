@@ -22,7 +22,7 @@ from urllib.parse import urlencode, urlsplit, parse_qs
 import httpx
 from jsonschema import Draft202012Validator
 
-from . import contract_analysis, contract_validate, history, model_reasoning
+from . import contract_analysis, contract_validate, graph_history, history, model_reasoning
 from .legacy_source_port import producer as legacy_producer
 
 PILLARS = ('microstructure', 'onchain', 'fundamentals', 'statistical_risk', 'technical_health')
@@ -181,7 +181,9 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
              legacy_records: dict | None = None, vae_config: dict | None = None,
              vae_runner=None, captured_snapshot: dict | None = None, cancelled=None,
              max_model_calls: int = 0, model_client=None, max_model_output_tokens: int = 4096,
-             max_model_context_chars: int = 120000, stage_callback=None, reasoning_checkpoint: dict | None = None) -> dict:
+             max_model_context_chars: int = 120000, stage_callback=None, reasoning_checkpoint: dict | None = None,
+             graph_capture_dir: str | Path | None = None, graph_model_dir: str | Path | None = None,
+             graph_technical_sha256: str | None = None) -> dict:
     """Research one backend-authorized case and atomically assemble a report bundle.
 
     `case` contains case_id, run_id, candidate_id, mode and an authorization reference
@@ -217,6 +219,10 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         raise ValueError('captured replay requires zero source budget and no HTTP transport')
     if mode != 'live' and transport is None and max_source_requests:
         raise ValueError('synthetic or historical mode requires injected source transport')
+    if graph_model_dir is not None and (graph_capture_dir is None or legacy_model_dir is not None or vae_config is not None):
+        raise ValueError('Graph model requires Graph capture and cannot be combined with another VAE input')
+    if graph_technical_sha256 is not None and (graph_model_dir is None or not re.fullmatch(r'[0-9a-f]{64}', graph_technical_sha256)):
+        raise ValueError('Graph technical artifact requires its model and exact SHA-256')
     if vae_config is not None:
         if legacy_model_dir is not None or not isinstance(vae_config, dict):
             raise ValueError('choose either legacy model artifacts or an explicit VAE execution configuration')
@@ -314,6 +320,20 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
     if isinstance(sec, dict) and sec: valid['security'] = captured['security']
     if isinstance(source, dict) and str(source.get('address', '')).lower() == address and str(source.get('chainId')) == str(chain):
         valid['source'] = captured['source']
+    graph_capture = None; graph_model = None; graph_summary = None
+    if graph_capture_dir is not None:
+        graph_capture = graph_history.verify_capture(Path(graph_capture_dir), candidate_id)
+        graph_summary = {'source_type': 'graph_token_day', 'subgraph_id': graph_history.SUBGRAPH,
+            'start_inclusive_utc': graph_capture['manifest']['start_inclusive_utc'], 'end_exclusive_utc': graph_capture['manifest']['end_exclusive_utc'],
+            'fetched_at_utc': graph_capture['manifest']['fetched_at_utc'], 'rows': len(graph_capture['rows']),
+            'missing_days': len(graph_capture['missing']), 'status': graph_capture['status'],
+            'limitation': 'Token-level subgraph result; not selected-pool or market-wide coverage.'}
+        if not graph_capture['rows']: stops.append('graph_token_day_zero_rows_for_selected_source_and_window')
+        if graph_model_dir is not None:
+            graph_model = graph_history.verify_model(Path(graph_model_dir), graph_capture, graph_technical_sha256)
+        if not attempts and mode != 'synthetic_demo': mode = 'historical_replay'
+        model_reasoning._emit(stage_callback, {'stage': 'source', 'name': 'graph_token_day',
+                                               'state': 'captured_replay', 'rows': len(graph_capture['rows'])})
     daily_prepared = None; gecko_row = None
     if chosen:
         valid['pools'] = captured['pools']
@@ -343,14 +363,28 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             legacy_inputs = {name: (Path(legacy_capture_root) / record['path']).read_bytes() for name, record in legacy_records.items()}
         except (ValueError, KeyError, TypeError, OSError):
             legacy = None; stops.append('legacy_pillar_capture_rejected')
-    if not valid and analysis is None and not (legacy and any(legacy[k]['status'] == 'partial' for k in ('microstructure', 'onchain'))):
+    if not valid and not (graph_capture and graph_capture['rows']) and analysis is None and not (legacy and any(legacy[k]['status'] == 'partial' for k in ('microstructure', 'onchain'))):
         model_reasoning._emit(stage_callback, {'stage': 'report', 'state': 'blocked', 'reason': 'no_identity_bound_source_evidence'})
         return {'state': 'blocked', 'bundle_path': None, 'case_id': case_id, 'run_id': run_id,
                 'source_attempts': attempts, 'reason': 'no_identity_bound_source_evidence',
-                'replay_sources': 0, 'replay_ignored': replay_ignored, 'limitations': stops}
+                'replay_sources': 0, 'replay_ignored': replay_ignored, 'graph_capture': graph_summary, 'limitations': stops}
 
     model = None
-    if legacy_model_dir is not None:
+    if graph_model is not None:
+        tech = graph_model['technical'] or {'technical_health': {}, 'technical_series': {}}
+        wrapped = {'identity': candidate_id, 'risk_assessment': graph_model['risk'],
+                   'technical_health': tech['technical_health'], 'technical_series': tech['technical_series']}
+        wrapped_raw = _bytes(wrapped)
+        graph_manifest = {'candidate_id': candidate_id, 'source_type': 'graph_token_day',
+            'source_candles_sha256': graph_history.sha(graph_capture['normalized_raw']),
+            'reconstructions': 50, 'return_rows': len(graph_capture['returns']),
+            'metrics_sha256': _sha(wrapped_raw), 'reconstructions_sha256': _sha(graph_model['recon_raw']),
+            'graph_run_manifest_sha256': _sha(graph_model['manifest_raw']),
+            'graph_technical_sha256': graph_technical_sha256,
+            'limitations': ['Token-level Graph priceUSD, not selected-pool candles.',
+                            'Provider history, legacy reconstruction calibration and sample adequacy are not independently established.']}
+        model = (graph_manifest, wrapped, [_bytes(graph_manifest), wrapped_raw, graph_model['recon_raw']])
+    elif legacy_model_dir is not None:
         try:
             model = _legacy_model(Path(legacy_model_dir), candidate_id, valid.get('daily', (None, None, {}))[2].get('sha256'))
         except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError):
@@ -380,6 +414,11 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                 stops.append('legacy_vae_execution_failed')
     report_id = 'case-' + case_id; version = 'run-' + run_id
     symbol = str(pair.get('baseToken', {}).get('symbol') or 'UNKNOWN')[:80] if pair else 'UNKNOWN'
+    if symbol == 'UNKNOWN' and graph_capture and graph_capture['rows']:
+        graph_symbols = {row['token'].get('symbol') for row in graph_capture['rows'] if isinstance(row['token'].get('symbol'), str)}
+        if len(graph_symbols) == 1:
+            graph_symbol = next(iter(graph_symbols))
+            if re.fullmatch(r'[A-Za-z0-9 ._-]{1,40}', graph_symbol): symbol = graph_symbol
     if symbol == 'UNKNOWN' and isinstance(candles, dict) and isinstance(candles.get('meta'), dict):
         for token in candles['meta'].values():
             if isinstance(token, dict) and str(token.get('address', '')).lower() == address and token.get('symbol'):
@@ -398,6 +437,31 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             ledger.append({'id': name, 'url': record.get('url'), 'fetched_at': record.get('fetched_at'),
                            'sha256': _sha(raw), 'origin_snapshot_id': record.get('origin_snapshot_id'),
                            'transport_mode': record.get('transport_mode')})
+        if graph_capture is not None:
+            def graph_evidence(identifier, relative, raw, coverage, kind):
+                target = root / relative; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(raw)
+                evidence.append({'id': identifier, 'path': relative, 'sha256': _sha(raw), 'kind': kind,
+                    'observed_at': None, 'fetched_at': graph_capture['manifest']['fetched_at_utc'] if kind != 'derived' else None, 'block_number': None,
+                    'window': dict(EMPTY_WINDOW), 'coverage': coverage,
+                    'limitations': ['Token-level Graph subgraph data, not a selected-pool candle; source truth and completeness require independent verification.']})
+            graph_kind = 'synthetic' if mode == 'synthetic_demo' else 'historical_observation'
+            graph_evidence('graph_source_manifest', 'evidence/graph/manifest.json', graph_capture['manifest_raw'], 'Graph tokenDayDatas capture and query metadata.', graph_kind)
+            graph_evidence('graph_token_daily', 'evidence/graph/token_daily.json', graph_capture['normalized_raw'], 'Normalized rows from the retained Graph pages.', graph_kind)
+            for index, (name, raw, record) in enumerate(graph_capture['pages']):
+                graph_evidence(f'graph_page_{index+1:04d}', 'evidence/graph/' + name, raw, 'Exact captured GraphQL response page.', graph_kind)
+            ledger.append({'id': 'graph_token_daily', 'url': 'https://gateway.thegraph.com/api/subgraphs/id/' + graph_history.SUBGRAPH,
+                           'fetched_at': graph_capture['manifest']['fetched_at_utc'], 'sha256': _sha(graph_capture['normalized_raw']),
+                           'origin_snapshot_id': None, 'transport_mode': 'captured_replay'})
+            if graph_model is not None:
+                for identifier, relative, raw in (
+                    ('graph_model_manifest', 'evidence/graph_model/run-manifest.json', graph_model['manifest_raw']),
+                    ('graph_model_risk', 'evidence/graph_model/risk-metrics.json', graph_model['risk_raw']),
+                    ('graph_model_returns', 'evidence/graph_model/output/crypto_returns.csv', graph_model['returns_raw']),
+                    ('graph_model_reconstructions', 'evidence/graph_model/output/vae/VAE_TOKEN.csv', graph_model['recon_raw'])):
+                    graph_evidence(identifier, relative, raw, 'Original Graph-backed VAE run artifact.', 'derived')
+                if graph_model['technical'] is not None:
+                    graph_evidence('graph_technical_manifest', 'evidence/graph_model/technical-manifest.json', graph_model['technical_manifest_raw'], 'Supplemental original technical provenance.', 'derived')
+                    graph_evidence('graph_technical_metrics', 'evidence/graph_model/technical-metrics.json', graph_model['technical_raw'], 'Original technical metrics from preserved reconstructions.', 'derived')
         for name, (_, raw, rec) in valid.items():
             kind = {'synthetic_demo': 'synthetic', 'historical_replay': 'historical_observation', 'live': 'live_observation'}[mode]
             add_evidence(name, raw, rec, kind)
@@ -530,8 +594,24 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                         claim(name, 'legacy-control-label', f'Original legacy contract-control label: {score["label"]}.', ref, 'Legacy label is not a safety or honeypot certification.')
                 pillars[name]['evidence_ids'] = sorted(set(pillars[name]['evidence_ids'] + ['legacy_' + name + '_input']))
                 pillars[name]['quality_issues'].extend(payload.get('quality_issues', []))
+        if graph_capture and graph_capture['rows']:
+            p = pillars['technical_health']; p['status'] = 'partial'; p['evidence_ids'] = sorted(set(p['evidence_ids'] + ['graph_token_daily', 'graph_source_manifest']))
+            points = [{'time': dt.datetime.fromtimestamp(row['date'], dt.timezone.utc).date().isoformat(), 'value': float(row['priceUSD'])} for row in graph_capture['rows']]
+            p['series'].append({'id': 'graph_token_daily_price_usd', 'unit': 'USD per token',
+                'method': 'The Graph tokenDayDatas priceUSD; token-level, not selected-pool price', 'quality': 'unvalidated',
+                'evidence_ids': ['graph_token_daily', 'graph_source_manifest'], 'window': {'start': points[0]['time'], 'end': points[-1]['time'], 'precision': 'day'},
+                'points': points, 'unknown_reason': None})
+            claim('technical_health', 'graph-token-history', f'The Graph token-level source returned {len(points)} closed daily price observations.', 'graph_token_daily',
+                  'Token-level subgraph coverage is not a selected-pool price, a history-adequacy judgment or an independently verified market-wide observation.')
+            if graph_capture['returns']:
+                daily_points = [{'time': row['date'], 'value': row['return']} for row in graph_capture['returns']]
+                p['series'].append({'id': 'graph_token_daily_returns', 'unit': 'fraction', 'method': 'Adjacent Graph token-level priceUSD ratios; no filled gaps',
+                    'quality': 'unvalidated', 'evidence_ids': ['graph_token_daily'],
+                    'window': {'start': daily_points[0]['time'], 'end': daily_points[-1]['time'], 'precision': 'day'}, 'points': daily_points, 'unknown_reason': None})
+            p['quality_issues'].append('Graph token-level data is not selected-pool history; source correctness and history adequacy remain open.')
+            if graph_capture['missing']: p['quality_issues'].append('Graph capture has missing days; no values were filled.')
         if daily_prepared and daily_prepared['close_count']:
-            p = pillars['technical_health']; p['status'] = 'partial'; p['evidence_ids'] = ['daily', 'pools']
+            p = pillars['technical_health']; p['status'] = 'partial'; p['evidence_ids'] = sorted(set(p['evidence_ids'] + ['daily', 'pools']))
             rows = candles['data']['attributes']['ohlcv_list']; cutoff = dt.date.fromisoformat(daily_prepared['cutoff_utc_date'])
             closes = sorted([{'time': dt.datetime.fromtimestamp(row[0], dt.timezone.utc).date().isoformat(), 'value': float(row[4])}
                              for row in rows if dt.datetime.fromtimestamp(row[0], dt.timezone.utc).date() < cutoff], key=lambda x: x['time'])
@@ -606,6 +686,11 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             'limitations': ['Bounded source snapshots may be incomplete or taken at different times.',
                             'No paid model interpretation, final report approval or publication was performed.']
                             + (['Replayed captured evidence retains its original timestamps; this is not fresh source collection.'] if captured_snapshot is not None else [])}
+        if graph_capture is not None:
+            report['limitations'].append('Graph tokenDayDatas is token-level subgraph coverage, not selected-pool history; missing rows do not establish absence of trading elsewhere.')
+            report['limitations'].append('Graph page capture times are bundle-level; source correctness, indexed coverage and statistical adequacy are not independently established.')
+        if graph_model is not None:
+            report['limitations'].append(f"The preserved Graph-backed run used a {graph_model['manifest']['days']}-day VaR horizon as historical test scope, not an approved general default.")
         model = model_reasoning.run(report, root, max_model_calls=max_model_calls, client=model_client,
             max_output_tokens=max_model_output_tokens, max_context_chars=max_model_context_chars,
             stage_callback=stage_callback, checkpoint=reasoning_checkpoint, cancelled=cancelled)
@@ -713,6 +798,6 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
             'report_id': report_id, 'report_version': version, 'report_sha256': _sha(raw),
             'pillar_status': {k: v['status'] for k, v in pillars.items()}, 'source_attempts': attempts,
             'model_status': model['status'], 'model_calls': model['calls'],
-            'model_usage': model.get('usage'), 'model_detail': model.get('detail'),
+            'model_usage': model.get('usage'), 'model_detail': model.get('detail'), 'graph_capture': graph_summary,
             'replay_sources': len(valid) if captured_snapshot is not None else 0,
             'replay_ignored': replay_ignored, 'limitations': stops}
