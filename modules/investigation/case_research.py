@@ -320,6 +320,35 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
     sec = security.get('result', {}).get(address) if (isinstance(security, dict) and security.get('code') in (1, '1')
         and isinstance(security.get('result'), dict)) else None
     if isinstance(sec, dict) and sec: valid['security'] = captured['security']
+    honeypot = captured.get('honeypot_is', (None,))[0]
+    if isinstance(honeypot, dict):
+        token_info = honeypot.get('token'); chain_info = honeypot.get('chain'); pair_info = honeypot.get('pair')
+        pair_info = pair_info.get('pair') if isinstance(pair_info, dict) else None
+        scan = honeypot.get('honeypotResult')
+        # If the provider returns pair token details, require them to agree with
+        # the selected GeckoTerminal pool relationship, not just its ID.
+        pair_tokens_match = True
+        if isinstance(pair_info, dict) and ('token0' in pair_info or 'token1' in pair_info):
+            actual = [pair_info.get('token0'), pair_info.get('token1')]
+            pool_row = next((row for row in pools.get('data', []) if isinstance(row, dict)
+                             and isinstance(row.get('attributes'), dict)
+                             and str(row['attributes'].get('address', '')).lower() == chosen['address']), None) if chosen and isinstance(pools, dict) else None
+            rel = pool_row.get('relationships', {}) if isinstance(pool_row, dict) else {}
+            provider_tokens = [rel.get(side, {}).get('data', {}).get('id') for side in ('base_token', 'quote_token')] if isinstance(rel, dict) else []
+            pair_tokens_match = (len(provider_tokens) == 2 and all(isinstance(x, str) and x.startswith(gecko+'_') for x in provider_tokens)
+                                 and all(isinstance(x, str) for x in actual)
+                                 and {x.lower() for x in actual} == {x[len(gecko)+1:].lower() for x in provider_tokens})
+        if (isinstance(token_info, dict) and isinstance(token_info.get('address'), str)
+                and token_info['address'].lower() == address and isinstance(chain_info, dict) and str(chain_info.get('id')) == str(chain)
+                and isinstance(pair_info, dict) and isinstance(pair_info.get('address'), str) and chosen
+                and pair_info['address'].lower() == chosen['address']
+                and ('pairAddress' not in honeypot or str(honeypot['pairAddress']).lower() == chosen['address'])
+                and ('chainId' not in honeypot['pair'] or str(honeypot['pair']['chainId']) == str(chain))
+                and pair_tokens_match and isinstance(scan, dict) and type(scan.get('isHoneypot')) is bool
+                and type(honeypot.get('simulationSuccess')) is bool):
+            valid['honeypot_is'] = captured['honeypot_is']
+        else:
+            honeypot = None; stops.append('honeypot_provider_identity_or_selected_pool_mismatch')
     if isinstance(source, dict) and str(source.get('address', '')).lower() == address and str(source.get('chainId')) == str(chain):
         valid['source'] = captured['source']
     graph_capture = None; graph_model = None; graph_summary = None
@@ -342,24 +371,6 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
         gecko_row = next((p for p in pools.get('data', []) if isinstance(p, dict)
                           and isinstance(p.get('attributes'), dict)
                           and str(p['attributes'].get('address', '')).lower() == chosen['address']), None)
-    # Honeypot.is is an attributed pool-specific observation, accepted only when
-    # its response identifies this token, chain and an independently selected pool.
-    hp = captured.get('honeypot_is', (None,))[0]
-    hp_pool = hp.get('pair', {}) if isinstance(hp, dict) and isinstance(hp.get('pair'), dict) else {}
-    hp_pair = hp_pool.get('pair', {}) if isinstance(hp_pool.get('pair'), dict) else {}
-    selected_pool = chosen['address'] if chosen else (str(pair.get('pairAddress', '')).lower() if pair else '')
-    if isinstance(hp, dict):
-        token = hp.get('token') if isinstance(hp.get('token'), dict) else {}
-        hp_chain = hp.get('chain') if isinstance(hp.get('chain'), dict) else {}
-        pool_address = str(hp_pair.get('address', '')).lower()
-        if (re.fullmatch(r'0x[0-9a-f]{40}', selected_pool) and pool_address == selected_pool
-                and str(hp.get('pairAddress', '')).lower() == selected_pool
-                and str(token.get('address', '')).lower() == address
-                and address in (str(hp_pair.get('token0', '')).lower(), str(hp_pair.get('token1', '')).lower())
-                and str(hp_chain.get('id')) == str(chain) and str(hp_pool.get('chainId')) == str(chain)):
-            valid['honeypot_is'] = captured['honeypot_is']
-        else:
-            stops.append('honeypot_is_identity_or_selected_pool_mismatch')
     if chosen and isinstance(candles, dict):
         try:
             daily_prepared = history.prepare(candles, dt.datetime.now(dt.timezone.utc).date().isoformat())
@@ -579,28 +590,42 @@ def run_case(case: dict, output_dir: str | Path, *, max_source_requests: int = 0
                 if value is not None:
                     claim('onchain', 'goplus-'+key, f'GoPlus reports {key} = {value}.', 'security', 'Provider field is not independent proof of executable sell behavior or fees.')
         if 'honeypot_is' in valid:
-            hp_result = hp.get('honeypotResult') if isinstance(hp.get('honeypotResult'), dict) else {}
-            flag = hp_result.get('isHoneypot')
-            if type(flag) is bool:
-                claim('onchain', 'honeypot-is-flag', f'Honeypot.is reports isHoneypot = {str(flag).lower()} for pool {selected_pool}.', 'honeypot_is', 'Provider flag and simulation are not independent on-chain verification or a safety verdict.')
-                gp_flag = sec.get('is_honeypot') if isinstance(sec, dict) else None
-                if str(gp_flag) in ('0', '1') and (str(gp_flag) == '1') != flag:
-                    hp_claim = pillars['onchain']['claims'][-1]
-                    gp_claim = next(c for c in pillars['onchain']['claims'] if c['id'] == 'provider-is_honeypot')
-                    hp_claim['counterevidence_ids'].append('security'); hp_claim['contradiction_claim_ids'].append(gp_claim['id'])
-                    gp_claim['counterevidence_ids'].append('honeypot_is'); gp_claim['contradiction_claim_ids'].append(hp_claim['id'])
-                    pillars['onchain']['quality_issues'].append('Honeypot.is and GoPlus report conflicting honeypot flags; the discrepancy is unresolved.')
-            simulation = hp.get('simulationSuccess')
-            if type(simulation) is bool:
-                claim('onchain', 'honeypot-is-simulation', f'Honeypot.is reports simulationSuccess = {str(simulation).lower()}.', 'honeypot_is', 'A provider simulation does not establish execution for all holders or routes.')
-            holders = hp.get('holderAnalysis') if isinstance(hp.get('holderAnalysis'), dict) else {}
-            for key in ('successful', 'failed'):
-                value = holders.get(key)
-                if isinstance(value, (str, int)) and not isinstance(value, bool) and re.fullmatch(r'[0-9]{1,12}', str(value)):
-                    measurement('onchain', 'honeypot_is_holders_' + key, int(value), 'provider-reported holder analyses', 'honeypot_is', 'Honeypot.is holder analysis; not independently verified')
-            simulation_result = hp.get('simulationResult') if isinstance(hp.get('simulationResult'), dict) else {}
-            for key in ('buyTax', 'sellTax'):
-                measurement('onchain', 'honeypot_is_' + key, simulation_result.get(key), 'percent', 'honeypot_is', 'Honeypot.is simulated tax; execution may differ')
+            scan = honeypot['honeypotResult']
+            flagged = scan['isHoneypot']
+            claim('onchain', 'honeypot-provider-verdict', f'The Honeypot.is provider reports isHoneypot = {str(flagged).lower()} for the selected pool.',
+                  'honeypot_is', 'A provider verdict is not independent proof of a holder-specific or universal restriction.')
+            claim('onchain', 'honeypot-provider-simulation', f'The Honeypot.is provider reports simulationSuccess = {str(honeypot["simulationSuccess"]).lower()} for its simulated trade.',
+                  'honeypot_is', 'Provider simulation outcome does not establish all holders, sizes, routes or future states.')
+            provider_summary = honeypot.get('summary')
+            flags = provider_summary.get('flags') if isinstance(provider_summary, dict) else None
+            if isinstance(flags, list):
+                for index, item in enumerate(flags[:10]):
+                    flag = item.get('flag') if isinstance(item, dict) else None
+                    if isinstance(flag, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,80}', flag):
+                        claim('onchain', f'honeypot-provider-flag-{index+1}', f'The Honeypot.is provider reports flag {flag} for the selected pool.',
+                              'honeypot_is', 'Provider flag is not independently verified; its underlying conditions and failure causes require review.')
+            holder = honeypot.get('holderAnalysis')
+            if isinstance(holder, dict):
+                def provider_count(value):
+                    if isinstance(value, bool) or not re.fullmatch(r'[0-9]{1,9}', str(value)): return None
+                    return int(value)
+                counts = {key: provider_count(holder.get(key)) for key in ('holders', 'successful', 'failed')}
+                if all(v is not None for v in counts.values()) and counts['successful'] + counts['failed'] == counts['holders']:
+                    for key in ('holders', 'successful', 'failed'):
+                        measurement('onchain', 'honeypot_holder_' + key, counts[key], 'provider-reported holder analyses',
+                                    'honeypot_is', 'Honeypot.is reported count; failure causes and independent reproducibility are not established')
+            simulation = honeypot.get('simulationResult')
+            if isinstance(simulation, dict):
+                for key in ('buyTax', 'sellTax'):
+                    measurement('onchain', 'honeypot_simulation_' + key, simulation.get(key), 'provider-reported percent',
+                                'honeypot_is', 'Honeypot.is reported simulated tax; not a universal execution quote')
+            if isinstance(sec, dict) and str(sec.get('is_honeypot')) in ('0', '1') and (str(sec['is_honeypot']) == '1') != flagged:
+                provider_claim = next(x for x in pillars['onchain']['claims'] if x['id'] == 'honeypot-provider-verdict')
+                goplus_claim = next((x for x in pillars['onchain']['claims'] if x['id'] == 'provider-is_honeypot'), None)
+                if goplus_claim:
+                    provider_claim['counterevidence_ids'].append('security'); goplus_claim['counterevidence_ids'].append('honeypot_is')
+                    provider_claim['contradiction_claim_ids'].append(goplus_claim['id']); goplus_claim['contradiction_claim_ids'].append(provider_claim['id'])
+                pillars['onchain']['quality_issues'].append('Honeypot.is and GoPlus provider verdicts conflict; route-, holder-, size- and state-specific independent investigation is required.')
         if 'source' in valid:
             claim('onchain', 'source-status', f'The source provider reports runtime match status: {source.get("runtimeMatch", "unknown")}.', 'source', 'Provider match does not establish safety, current state or sell behavior.')
             verified_at = source.get('verifiedAt')

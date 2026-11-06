@@ -73,11 +73,11 @@ def case(route, suffix='1'):
 @pytest.mark.parametrize('mismatch', [None, 'pool', 'token', 'chain'])
 def test_captured_honeypot_provider_disagreement_is_identity_and_pool_bound(tmp_path, mismatch):
     payloads = source_payloads()
-    other = '0x' + '78' * 20
+    other = '0x' + '56' * 20
     hp = {'token': {'address': ADDR}, 'chain': {'id': '1'}, 'pairAddress': POOL,
           'pair': {'chainId': '1', 'pair': {'address': POOL, 'token0': ADDR, 'token1': other}},
           'simulationSuccess': True, 'honeypotResult': {'isHoneypot': True},
-          'simulationResult': {'buyTax': 0, 'sellTax': 0}, 'holderAnalysis': {'successful': '524', 'failed': '20'}}
+          'simulationResult': {'buyTax': 0, 'sellTax': 0}, 'holderAnalysis': {'holders': '544', 'successful': '524', 'failed': '20'}}
     if mismatch == 'pool': hp['pairAddress'] = other
     if mismatch == 'token': hp['token']['address'] = other
     if mismatch == 'chain': hp['chain']['id'] = '8453'
@@ -89,13 +89,13 @@ def test_captured_honeypot_provider_disagreement_is_identity_and_pool_bound(tmp_
     pillar = report['pillars']['onchain']
     claims = {c['id']: c for c in pillar['claims']}
     if mismatch:
-        assert 'honeypot-is-flag' not in claims
+        assert 'honeypot-provider-verdict' not in claims
         assert 'honeypot_is' not in {e['id'] for e in report['evidence']}
     else:
-        assert claims['honeypot-is-flag']['contradiction_claim_ids'] == ['provider-is_honeypot']
+        assert claims['honeypot-provider-verdict']['contradiction_claim_ids'] == ['provider-is_honeypot']
         assert claims['provider-is_honeypot']['counterevidence_ids'] == ['honeypot_is']
-        assert any('conflicting' in issue for issue in pillar['quality_issues'])
-        assert {m['id']: m['value'] for m in pillar['measurements']}['honeypot_is_holders_failed'] == 20
+        assert any('conflict' in issue for issue in pillar['quality_issues'])
+        assert {m['id']: m['value'] for m in pillar['measurements']}['honeypot_holder_failed'] == 20
 
 
 @pytest.mark.parametrize('route', ['automatic_policy', 'world_confirmed'])
