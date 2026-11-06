@@ -94,6 +94,20 @@ SCOOBY_REPORT_RELEASE=all
 SCOOBY_PUBLICATION_REQUIRES_REVIEW=true
 ```
 
+## Subject-matter-expert review and approved-only release
+
+Reviewers holding `report_review` are the subject-matter experts (SMEs). With `SCOOBY_REPORT_RELEASE=approved`, the public library (`GET /reports`, `/reports/{id}/{version}/artifacts`, `/artifacts/*` and `/packages/*`) serves only versions whose current target has a World-confirmed approval; every other version answers 404 on all of those routes. SMEs read any installed version, released or not, through the admin API:
+
+| Route | Auth | Result |
+|---|---|---|
+| `GET /web/v1/admin/reviews/{report_id}/{version}/artifacts` | admin, `report_review` | Same listing as the public route, with file URLs under the admin path (`package.url` is null) |
+| `GET /web/v1/admin/reviews/{report_id}/{version}/files/{name}` | admin, `report_review` | `index.html`, `report.json`, `report.md`, `report.pdf` or `manifest.json` of the newest completed render of exactly the installed bytes; same integrity checks and CSP headers as the public files |
+| `GET /web/v1/admin/reviews/{report_id}/{version}/files/assets/{path}` | admin, `report_review` | A hashed evidence or artifact asset of that render |
+
+`reviewDetail.links.artifacts` points at the admin listing (`links.public_artifacts` keeps the public one). The files need the bearer header, so a browser fetches them and shows a blob URL rather than linking directly. With `SCOOBY_PUBLIC_GATE=true`, anonymous callers may `GET` only the public library routes above; the report detail with local review rows (`GET /reports/{id}/{version}`) and every write stay behind the operator token.
+
+**Reviewers on a host without a persistent disk.** `SCOOBY_REVIEWERS` (a JSON list of `{label, iss, sub, scopes, enabled}`) is reapplied at API startup: each listed `(iss, sub)` is upserted with exactly the listed scopes; unlisted reviewers are untouched; invalid JSON loads nobody and logs no subject. Produce an entry from a real World enrollment with `python -m publication.cli export-reviewer --name <label>` and store it as a host secret. Being listed never approves anything; each decision still needs its own World confirmation.
+
 ## Setup and walkthrough
 
 1. Configure World as in [publication-demo.md](publication-demo.md) step 1. Run the API (`python -m uvicorn app:app --host 127.0.0.1 --port 8000`).

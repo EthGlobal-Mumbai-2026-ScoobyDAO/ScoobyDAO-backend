@@ -7,6 +7,7 @@ World authentication alone never grants one.
 """
 from __future__ import annotations
 import argparse
+import json
 import sys
 import time
 import uuid
@@ -185,6 +186,8 @@ def main(argv: list[str] | None = None) -> None:
     pc.add_argument('--target', required=True)
     sp.add_parser('reconcile', help='drive outbox rows in reconcile/queued states with the real chain')
     sp.add_parser('world-check', help='show the configured World environment and check live discovery (no login)')
+    x = sp.add_parser('export-reviewer', help='print a SCOOBY_REVIEWERS value for an enrolled reviewer (treat as a secret)')
+    x.add_argument('--name', required=True)
     a = ap.parse_args(argv)
     if a.cmd == 'enroll':
         enroll(a.name, scopes=tuple(dict.fromkeys(a.scope)), request_acr=not a.no_acr_request, verbose=a.verbose)
@@ -200,6 +203,12 @@ def main(argv: list[str] | None = None) -> None:
         print(f'{a.cmd}ed {a.scope} for {n} reviewer(s)')
     elif a.cmd == 'publish-confirm':
         print(publish_confirm(a.target))
+    elif a.cmd == 'export-reviewer':
+        from .reviewers import export
+        entries = export(a.name)
+        if not entries:
+            sys.exit(f'No enrolled reviewer named {a.name}; run enroll first.')
+        print(json.dumps(entries, separators=(',', ':')))
     elif a.cmd == 'world-check':
         print('\n'.join(world_check()))
     elif a.cmd == 'reconcile':

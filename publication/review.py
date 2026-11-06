@@ -237,7 +237,8 @@ def detail(c, report_id: str, version: str, principal: admin.Principal) -> dict:
     out = {'schema': DETAIL_SCHEMA, 'report_id': report_id, 'report_version': version, 'report_sha256': rep['sha256'],
            'state': 'unavailable', 'target': None, 'target_digest': None, 'integrity': 'ok', 'summary': None,
            'decisions': [], 'pending_attempt': None,
-           'links': {'artifacts': f'/reports/{report_id}/{version}/artifacts'}}
+           'links': {'artifacts': f'/web/v1/admin/reviews/{report_id}/{version}/artifacts',
+                     'public_artifacts': f'/reports/{report_id}/{version}/artifacts'}}
     try:
         target, td, t, receipt = _current(c, report_id, version)
     except service.PubError as e:
