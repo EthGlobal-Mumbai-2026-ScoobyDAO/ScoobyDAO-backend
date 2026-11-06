@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scooby.invalid/schemas/runtime/admin-checkpoints-v1.schema.json",
+  "title": "Scooby admin World ID checkpoints, runtime DTOs v1",
+  "description": "Additive runtime contract for the admin session, checkpoint-2 report sign-off and the consumer-safe review status. Frozen candidate v0.1 and report v0.2 are unchanged. See docs/admin-world-checkpoints.md.",
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "scope": { "enum": ["case_investigation", "report_review", "publication"] },
+    "decision": { "enum": ["approve", "reject", "revise"] },
+    "session": {
+      "description": "scooby.admin-session/1. session_token appears once, in the response that starts the login.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "state"],
+      "properties": {
+        "schema": { "const": "scooby.admin-session/1" },
+        "state": { "enum": ["pending", "active", "denied", "expired", "cancelled", "not_permitted", "failed", "revoked"] },
+        "session_token": { "type": "string", "pattern": "^sas_[A-Za-z0-9_-]{20,}$" },
+        "user_code": { "type": "string" },
+        "verification_uri": { "type": "string" },
+        "interval": { "type": "integer", "minimum": 1 },
+        "expires_at": { "type": "number" },
+        "label": { "type": ["string", "null"] },
+        "scopes": { "type": "array", "items": { "$ref": "#/$defs/scope" } },
+        "detail": { "type": "string" }
+      }
+    },
+    "reviewTarget": {
+      "description": "scooby.report-review-target/1, the canonical record whose SHA-256 (sorted keys, no whitespace, UTF-8) is target_digest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "policyVersion", "reportId", "reportVersion", "reportSha256", "candidateId", "lineage", "evidence", "artifacts"],
+      "properties": {
+        "schema": { "const": "scooby.report-review-target/1" },
+        "policyVersion": { "const": "scooby.report-review-policy/1" },
+        "reportId": { "type": "string" },
+        "reportVersion": { "type": "string" },
+        "reportSha256": { "$ref": "#/$defs/sha256" },
+        "candidateId": { "type": ["string", "null"] },
+        "lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runId", "selectionKind", "caseId", "caseAction"],
+          "properties": {
+            "runId": { "type": "string" },
+            "selectionKind": { "type": ["string", "null"] },
+            "caseId": { "type": ["string", "null"] },
+            "caseAction": { "type": ["string", "null"] }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manifestSha256", "count"],
+          "properties": {
+            "manifestSha256": { "$ref": "#/$defs/sha256" },
+            "count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["renderManifestSha256"],
+          "properties": { "renderManifestSha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] } }
+        }
+      }
+    },
+    "reviewBinding": {
+      "description": "scooby.report-review-binding/1, stored server side per attempt; binding_digest is its SHA-256. initiator is SHA-256 of 'iss|sub'.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "targetDigest", "decision", "reason", "audience", "resource", "scope", "nonce", "issuedAt", "expiresAt", "initiator"],
+      "properties": {
+        "schema": { "const": "scooby.report-review-binding/1" },
+        "targetDigest": { "$ref": "#/$defs/sha256" },
+        "decision": { "$ref": "#/$defs/decision" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "audience": { "type": "string" },
+        "resource": { "type": "string", "pattern": "^report/" },
+        "scope": { "const": "report_review" },
+        "nonce": { "$ref": "#/$defs/sha256" },
+        "issuedAt": { "type": "integer" },
+        "expiresAt": { "type": "integer" },
+        "initiator": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "reviewAttempt": {
+      "description": "scooby.admin-review-attempt/1, visible only to the admin who started it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "id", "report_id", "report_version", "target_digest", "decision", "reason", "status", "expires_at", "binding_digest", "binding"],
+      "properties": {
+        "schema": { "const": "scooby.admin-review-attempt/1" },
+        "id": { "type": "string" },
+        "report_id": { "type": "string" },
+        "report_version": { "type": "string" },
+        "target_digest": { "$ref": "#/$defs/sha256" },
+        "decision": { "$ref": "#/$defs/decision" },
+        "reason": { "type": "string" },
+        "status": { "enum": ["pending", "confirmed", "denied", "expired", "cancelled", "not_permitted", "failed", "superseded"] },
+        "expires_at": { "type": "number" },
+        "binding_digest": { "$ref": "#/$defs/sha256" },
+        "binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["audience", "resource", "scope", "nonce", "issuedAt", "expiresAt"],
+          "properties": {
+            "audience": { "type": "string" },
+            "resource": { "type": "string" },
+            "scope": { "const": "report_review" },
+            "nonce": { "$ref": "#/$defs/sha256" },
+            "issuedAt": { "type": "integer" },
+            "expiresAt": { "type": "integer" }
+          }
+        },
+        "user_code": { "type": "string" },
+        "verification_uri": { "type": "string" },
+        "interval": { "type": "integer" },
+        "detail": { "type": "string" },
+        "receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "decision", "decided_at"],
+          "properties": {
+            "id": { "type": "string" },
+            "decision": { "$ref": "#/$defs/decision" },
+            "decided_at": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "queueItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_id", "report_version", "report_sha256", "created", "target_digest", "candidate_id", "case_id", "state", "decision", "decided_at", "detail"],
+      "properties": {
+        "report_id": { "type": "string" },
+        "report_version": { "type": "string" },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "created": { "type": "integer" },
+        "target_digest": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "candidate_id": { "type": ["string", "null"] },
+        "case_id": { "type": ["string", "null"] },
+        "state": { "enum": ["pending_review", "awaiting_confirmation", "approved", "rejected", "revision_requested", "unavailable"] },
+        "decision": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/decision" }] },
+        "decided_at": { "type": ["integer", "null"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "reviewQueue": {
+      "description": "scooby.admin-review-queue/1: every installed report version, undecided first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "generated_at", "items"],
+      "properties": {
+        "schema": { "const": "scooby.admin-review-queue/1" },
+        "generated_at": { "type": "integer" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/queueItem" } }
+      }
+    },
+    "reviewDetail": {
+      "description": "scooby.admin-review/1: the context shown before a decision is confirmed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "report_id", "report_version", "report_sha256", "state", "target", "target_digest", "integrity", "summary", "decisions", "pending_attempt", "links"],
+      "properties": {
+        "schema": { "const": "scooby.admin-review/1" },
+        "report_id": { "type": "string" },
+        "report_version": { "type": "string" },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "state": { "enum": ["pending_review", "awaiting_confirmation", "approved", "rejected", "revision_requested", "unavailable"] },
+        "target": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reviewTarget" }] },
+        "target_digest": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "integrity": { "type": "string" },
+        "summary": { "type": ["object", "null"] },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["receipt_id", "decision", "reason", "decided_at", "reviewer", "acr", "method", "target_digest", "current_target", "revoked_at", "revoke_reason"],
+            "properties": {
+              "receipt_id": { "type": "string" },
+              "decision": { "$ref": "#/$defs/decision" },
+              "reason": { "type": "string" },
+              "decided_at": { "type": "integer" },
+              "reviewer": { "type": ["string", "null"] },
+              "acr": { "type": "string" },
+              "method": { "enum": ["world_proof", "passkey"] },
+              "target_digest": { "$ref": "#/$defs/sha256" },
+              "current_target": { "type": "boolean" },
+              "revoked_at": { "type": ["number", "null"] },
+              "revoke_reason": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "pending_attempt": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reviewAttempt" }] },
+        "links": { "type": "object" }
+      }
+    },
+    "reviewStatus": {
+      "description": "scooby.report-review-status/1: the only review data consumers receive. No reviewer identity, reason, attempt or proof material.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "state", "method", "decided_at", "target_digest", "covers"],
+      "properties": {
+        "schema": { "const": "scooby.report-review-status/1" },
+        "state": { "enum": ["pending_review", "approved", "rejected", "revision_requested", "unavailable"] },
+        "method": { "enum": ["world_id_admin_signoff", null] },
+        "decided_at": { "type": ["integer", "null"] },
+        "target_digest": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "covers": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["report_sha256", "evidence_manifest_sha256", "render_manifest_sha256"],
+              "properties": {
+                "report_sha256": { "$ref": "#/$defs/sha256" },
+                "evidence_manifest_sha256": { "$ref": "#/$defs/sha256" },
+                "render_manifest_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] }
+              }
+            }
+          ]
+        },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

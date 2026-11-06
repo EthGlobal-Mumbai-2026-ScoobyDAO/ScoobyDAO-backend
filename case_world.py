@@ -12,6 +12,13 @@ _codes={}; _lock=threading.Lock()
 
 def fail(status,message): raise HTTPException(status,message)
 def admin_ready(world):return world is not None and callable(getattr(world,'authorize_case_admin',None))
+def require_owner(c,challenge_id,principal):
+ from publication.admin import session_active, permitted, subject_hash
+ owner=c.execute('SELECT * FROM case_challenge_admin WHERE challenge_id=?',(challenge_id,)).fetchone()
+ if (not principal or not owner or owner['session_id']!=principal.session_id
+     or owner['subject_hash']!=subject_hash(principal.iss,principal.sub)
+     or not session_active(c,principal.session_id,principal.iss,principal.sub)
+     or not permitted(c,principal.iss,principal.sub,'case_investigation')):fail(403,'Case authorization belongs to another or inactive admin session')
 def public(c,a):
  ch=c.execute('SELECT * FROM case_challenges WHERE id=?',(a['challenge_id'],)).fetchone();case=c.execute('SELECT * FROM cases WHERE id=?',(ch['case_id'],)).fetchone()
  return {'attempt_id':a['id'],'challenge_id':ch['id'],'case_id':ch['case_id'],'candidate_id':case['candidate_id'],'snapshot_digest':ch['snapshot_id'],'policy_digest':ch['policy_digest'],'action':ch['action'],'nonce':ch['nonce'],'state':a['state'],'expires_at':a['expires'],'user_code':a['user_code'],'verification_uri':a['verification_uri'],'verification_uri_complete':a['verification_uri_complete'],'interval_seconds':a['interval'],'run_id':(c.execute("SELECT run_id FROM case_decisions WHERE case_id=? AND snapshot_id=? AND action='human_research'",(ch['case_id'],ch['snapshot_id'])).fetchone() or {'run_id':None})['run_id']}
@@ -27,9 +34,10 @@ def valid_binding(c,ch):
  if expected!=snap['id']:fail(409,'Case snapshot integrity failure')
  return case,snap
 
-def start(challenge_id,world):
+def start(challenge_id,world,principal=None):
  if not admin_ready(world):fail(503,'Case administrator authorization is not configured')
  with db() as c:
+  require_owner(c,challenge_id,principal)
   ch=c.execute('SELECT * FROM case_challenges WHERE id=?',(challenge_id,)).fetchone()
   if not ch:fail(404,'Challenge not found')
   old=c.execute('SELECT * FROM case_world_attempts WHERE challenge_id=?',(challenge_id,)).fetchone()
@@ -39,7 +47,7 @@ def start(challenge_id,world):
  try: dev=world.start_device(world.config.accepted_acr)
  except WorldError:fail(503,'World ID confirmation is unavailable')
  with db() as c:
-  c.execute('BEGIN IMMEDIATE');ch=c.execute('SELECT * FROM case_challenges WHERE id=?',(challenge_id,)).fetchone();case,_=valid_binding(c,ch)
+  c.execute('BEGIN IMMEDIATE');require_owner(c,challenge_id,principal);ch=c.execute('SELECT * FROM case_challenges WHERE id=?',(challenge_id,)).fetchone();case,_=valid_binding(c,ch)
   old=c.execute('SELECT * FROM case_world_attempts WHERE challenge_id=?',(challenge_id,)).fetchone()
   if old:return public(c,old)
   aid=ident();expiration=min(ch['expires'],started+dev.expires_in)
@@ -47,10 +55,11 @@ def start(challenge_id,world):
   with _lock:_codes[aid]=dev.device_code
   return public(c,c.execute('SELECT * FROM case_world_attempts WHERE id=?',(aid,)).fetchone())
 
-def poll(attempt_id,world):
+def poll(attempt_id,world,principal=None):
  with db() as c:
   c.execute('BEGIN IMMEDIATE');a=c.execute('SELECT * FROM case_world_attempts WHERE id=?',(attempt_id,)).fetchone()
   if not a:fail(404,'Attempt not found')
+  require_owner(c,a['challenge_id'],principal)
   if a['state']!='pending':return public(c,a)
   if a['expires']<=now():c.execute("UPDATE case_world_attempts SET state='expired' WHERE id=?",(attempt_id,));return public(c,c.execute('SELECT * FROM case_world_attempts WHERE id=?',(attempt_id,)).fetchone())
   with _lock:code=_codes.get(attempt_id)
@@ -65,6 +74,7 @@ def poll(attempt_id,world):
   except (WorldError,TokenInvalid):result=Error('token_rejected',terminal=True)
  with db() as c:
   c.execute('BEGIN IMMEDIATE');a=c.execute('SELECT * FROM case_world_attempts WHERE id=?',(attempt_id,)).fetchone()
+  require_owner(c,a['challenge_id'],principal)
   if a['state']!='pending':return public(c,a)
   if a['expires']<=now():c.execute("UPDATE case_world_attempts SET state='expired' WHERE id=?",(attempt_id,))
   elif identity:
@@ -74,7 +84,7 @@ def poll(attempt_id,world):
     if a['binding_hash']!=binding_hash(case,ch):fail(409,'Case authorization binding changed')
    except HTTPException:c.execute("UPDATE case_world_attempts SET state='superseded' WHERE id=?",(attempt_id,))
    else:
-    try:admin_allowed=admin_ready(world) and world.authorize_case_admin(identity,{'case_id':case['id'],'candidate_id':case['candidate_id'],'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'action':ch['action']}) is True
+    try:admin_allowed=(identity.iss,identity.sub)==(principal.iss,principal.sub) and admin_ready(world) and world.authorize_case_admin(identity,{'case_id':case['id'],'candidate_id':case['candidate_id'],'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'action':ch['action']}) is True
     except Exception:admin_allowed=False
     existing=c.execute("SELECT id FROM investigations WHERE candidate_id=? AND status!='reference_only' LIMIT 1",(case['candidate_id'],)).fetchone()
     if not admin_allowed:c.execute("UPDATE case_world_attempts SET state='denied' WHERE id=?",(attempt_id,))
@@ -98,10 +108,11 @@ def poll(attempt_id,world):
   return public(c,current)
 
 
-def cancel(attempt_id):
+def cancel(attempt_id,principal=None):
  with db() as c:
   c.execute('BEGIN IMMEDIATE');a=c.execute('SELECT * FROM case_world_attempts WHERE id=?',(attempt_id,)).fetchone()
   if not a:fail(404,'Attempt not found')
+  require_owner(c,a['challenge_id'],principal)
   if a['state']=='pending':
    c.execute("UPDATE case_world_attempts SET state='cancelled' WHERE id=?",(attempt_id,));c.execute("UPDATE case_challenges SET state='cancelled' WHERE id=? AND state='pending'",(a['challenge_id'],))
    with _lock:_codes.pop(attempt_id,None)

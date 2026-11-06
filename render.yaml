@@ -46,6 +46,14 @@ services:
         value: https://world.org/oidc/acr/orb,https://world.org/oidc/acr/orb-face
       - key: WORLD_ASSERTION_AUD
         value: endpoint
+      # Public library lists only World-confirmed approved reports; SMEs review via /web/v1/admin.
+      - key: SCOOBY_REPORT_RELEASE
+        value: approved
+      - key: SCOOBY_ADMIN_AUDIENCE
+        value: https://scoobydao-backend.onrender.com
+      # Output of `python -m publication.cli export-reviewer --name <label>`; set in the dashboard.
+      - key: SCOOBY_REVIEWERS
+        sync: false
       # Set when the frontend is deployed (step 4); exact origin, no trailing slash.
       - key: SCOOBY_WEB_ORIGIN
         sync: false

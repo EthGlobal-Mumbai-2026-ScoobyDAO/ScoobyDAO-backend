@@ -1,0 +1,11 @@
+{
+  "algorithm": "sha256",
+  "scope": "catalog artifacts; manifest excludes itself; source webpages not archived",
+  "files": {
+    "catalog.json": "88d8792d57affd8f049e1c1dd72d86b3b767c712dfb564d22ecf6436cefa2ed3",
+    "claim-ledger.json": "a371308ab0021ec602a7832ce2709d78c7f8010d0d74308a509dc9c17dba56d3",
+    "CLAIM-LEDGER.md": "fa75a0cfe2bf8f3e9d26db0d024604dbc4d1fb01b81d479865b8777b4e6896a5",
+    "README.md": "84dbca15de58ce0bd4456f9e054bce92150d8f099c0c1d50b6ad51a340ee150c",
+    "test_catalog.py": "af804aa6908077750e4d9f8e9be4c391bb598d10c41ba82398637b79ed424f18"
+  }
+}

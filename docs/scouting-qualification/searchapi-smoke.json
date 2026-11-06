@@ -1,0 +1,37 @@
+{
+  "provider": "searchapi.io",
+  "engine": "reddit_search",
+  "started_at": "2026-11-06T11:02:48.357898+00:00",
+  "request_count": 1,
+  "query": "honeypot",
+  "subreddit": "CryptoScams",
+  "sort_by": "new",
+  "time_period": "last_month",
+  "http_status": 200,
+  "provider_status": "Success",
+  "result_count": 7,
+  "subreddit_match_count": 7,
+  "outside_conservative_31_day_window": 7,
+  "fresh_leads_accepted": 0,
+  "access_and_shape_passed": true,
+  "date_filter_semantics_passed": false,
+  "required_control": "Apply exact local observation window; stale source allegations cannot become fresh token findings.",
+  "secret_or_social_content_included": false,
+  "scope": "Authorized one-request smoke; not a gate-qualified case or sentiment assessment.",
+  "subsequent_user_policy": {
+    "accept_older_social_context": true,
+    "temporary_lookback_days": 365,
+    "post_age_days": [
+      41,
+      169,
+      231,
+      264,
+      279,
+      318,
+      356
+    ],
+    "context_rows_within_window": 7,
+    "onchain_freshness_and_gate": "unchanged",
+    "note": "Preserves the original failed month-filter observation; broader context use is now explicitly allowed."
+  }
+}

@@ -1,5 +1,7 @@
 # Scooby DAO backend — ACTIVE STATE
 
+Current build charter: [two admin World ID checkpoints](docs/scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md) cover human-required scout investigation and generated-report sign-off. These are admin functions, separate from consumer report reading and from explicit publication. Older runtime checkpoint notes below describe their recorded baseline. The backend runtime for both checkpoints (admin sessions, report sign-off, the case-bridge hook) is in [docs/admin-world-checkpoints.md](docs/admin-world-checkpoints.md); it is synthetic-tested only, with no live World run yet.
+
 Checkpoint: **6 November 2026 IST — completed workstream PRs merged into main.** The FastAPI/Huey runtime, immutable native packages, offline discovery/investigation modules and portable PDF adapter are merged. Python checks and Linux Compose API/worker smoke passed. See [LIVE-STATE.md](LIVE-STATE.md) for the merge ledger, verification and exact remaining work; [DEPLOYMENT.md](DEPLOYMENT.md) for private staging; and [report storage/transfer](docs/report-assets.md) to carry the local RAY assets to a new target.
 
 The source is ready for **private single-host staging**. No server has been deployed. Continuous discovery and automated five-pillar research are not connected; sign-off is not authenticated. The teammate separately merged the World ID/publication prototype in PR #6 during this checkpoint; live verification remains deferred by user instruction. Public exposure requires a reviewed access boundary.
@@ -58,6 +60,14 @@ The operator may render a **pending-review draft** before sign-off. The generate
 
 See [HANDOFF.md](HANDOFF.md) for exact next steps and current limitations. The publication module has optional transaction code, disabled by default.
 
+
+## Admin World ID checkpoints
+
+Both human checkpoints are admin functions ([charter](docs/scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md), [implementation](docs/admin-world-checkpoints.md)). An admin is an enrolled reviewer holding a server-side scope (`case_investigation`, `report_review`, `publication`). Admins sign in with World and get a short bearer session; every checkpoint then needs its own fresh World confirmation by that same admin, bound to the exact action.
+
+- **Checkpoint 1 (Go for investigation):** the case bridge (backend PR #12) starts a run only through `authorize_case_admin`, and its case-checkpoint routes need a `case_investigation` session.
+- **Checkpoint 2 (report sign-off):** `/web/v1/admin/reviews` lists every installed report version. Approve, reject or revise binds the exact report, evidence and render digests, and changed bytes or a new version need a fresh sign-off. Consumers see only `admin_review` on `GET /reports`; `SCOOBY_REPORT_RELEASE=approved` lists only approved versions.
+- **Not publication:** a report approval starts no research and publishes nothing. It is only a precondition for the separate publication sign-off and explicit publish request below.
 
 ## Publication and World ID Agent Pass
 

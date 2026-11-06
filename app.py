@@ -217,18 +217,32 @@ def unavailable_report_metadata(c,r):
  return {'metadata_status':'unavailable','integrity':'unavailable','reason':'report_integrity_unavailable','report_id':r['id'],'report_version':r['version'],'run_id':r['run_id'],'run_status':run['status'] if run else None,'candidate_id':run['candidate_id'] if run else None,'case_id':decision['case_id'] if decision else None,'report_sha256':r['sha256'],'identity':None,'mode':None,'provenance':'unavailable','observation_times':[],'fetch_times':[],'pillars':None,'graph_source':None,'selection':None,'review':{'status':'unknown','authentication':'unavailable'},'release':{'status':'unavailable','consumer_visible':None,'reason':'Stored report cannot be verified.'},'created':r['created']}
 @app.get('/reports')
 def list_reports():
+ # Public listings expose only separately approved and released reports.
  with db() as c:
   items=[]
   for r in c.execute('SELECT * FROM reports ORDER BY created DESC,id ASC,version ASC').fetchall():
-   try:items.append(report_metadata(c,r))
-   except (HTTPException,OSError,ValueError,KeyError,TypeError,UnicodeError):items.append(unavailable_report_metadata(c,r))
+   if not report_review.consumer_visible(c,r['id'],r['version']): continue
+   try: items.append(dict(report_metadata(c,r),admin_review=report_review.public_status(c,r['id'],r['version'])))
+   except HTTPException: raise
+   except (OSError,ValueError,KeyError,TypeError,UnicodeError): err(409,'Stored report integrity failure')
   return items
 @app.get('/reports/{report_id}/{version}/artifacts')
 def report_artifacts(report_id:str,version:str):
  with db() as c:
-  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version)); result=report_metadata(c,r)
+  getrow(c,'SELECT id FROM reports WHERE id=? AND version=?',(report_id,version))
+  if not report_review.consumer_visible(c,report_id,version): err(404,'Not found')
+ return artifact_listing(report_id,version,lambda job_id,name:f'/artifacts/{job_id}/{name}',lambda sha:'/packages/'+sha)
+def latest_render(c,report_id,version,sha256):
+ jobs=c.execute("SELECT * FROM jobs WHERE kind='render' AND state='done' ORDER BY created DESC").fetchall()
+ return next((j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':sha256}),None)
+def artifact_listing(report_id,version,file_url,package_url):
+ with db() as c:
+  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version))
+  result=report_metadata(c,r); result['admin_review']=report_review.public_status(c,report_id,version)
   jobs=c.execute("SELECT * FROM jobs WHERE kind='render' ORDER BY created DESC").fetchall()
-  matching=[j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}];match=next((j for j in matching if j['state']=='done'),None);latest=matching[0] if matching else None
+  matching=[j for j in jobs if json.loads(j['ref'])=={'id':report_id,'version':version,'sha256':r['sha256']}]
+  match=next((j for j in matching if j['state']=='done'),None);latest=matching[0] if matching else None
+
  if not match:
   result['artifacts']={k:{'availability':'unavailable','sha256':None,'url':None} for k in ('html','markdown','pdf')}; result['render_status']=({'queued':'queued','running':'rendering','failed':'failed','cancelled':'cancelled'}.get(latest['state'],'not_rendered') if latest else 'not_rendered'); result['package']={'availability':'unavailable','package_sha256':None,'url':None}; return result
  out=DATA/'artifacts'/match['id']; manifest_path=out/'manifest.json'
@@ -240,11 +254,11 @@ def report_artifacts(report_id:str,version:str):
  m=json.loads(manifest_raw)
  if (m.get('report_id'),m.get('report_version'),m.get('report_sha256'))!=(report_id,version,r['sha256']): err(409,'Render manifest identity mismatch')
  result['render_status']='pending_review_draft'; result['artifacts']={}
- result['package']={'availability':'available','package_sha256':locked['sha256'],'url':'/packages/'+locked['sha256']}
+ result['package']={'availability':'available','package_sha256':locked['sha256'],'url':package_url(locked['sha256'])}
  for kind,name,keyname in [('html','index.html','html_sha256'),('markdown','report.md','markdown_sha256'),('pdf','report.pdf','pdf_sha256')]:
   expected=m.get(keyname); f=out/name
   if expected and (not f.is_file() or digest(f.read_bytes())!=expected): err(409,'Render artifact integrity failure')
-  result['artifacts'][kind]={'availability':'available' if expected else 'unavailable','sha256':expected,'url':f'/artifacts/{match["id"]}/{name}' if expected else None,'report_sha256':r['sha256']}
+  result['artifacts'][kind]={'availability':'available' if expected else 'unavailable','sha256':expected,'url':file_url(match['id'],name) if expected else None,'report_sha256':r['sha256']}
  return result
 @app.get('/reports/{report_id}/{version}')
 def report(report_id:str,version:str):
@@ -289,13 +303,18 @@ def report_assets(doc):
   if name in allowed and allowed[name]!=sha: err(409,'Conflicting asset hashes')
   allowed[name]=sha
  return allowed
-def package_context(package_sha256):
+def visible_or_404(report_id,version,what):
+ with db() as c:
+  if not report_review.consumer_visible(c,report_id,version): err(404,what+' not found')
+def package_context(package_sha256,public=True):
  import re
  if not re.fullmatch('[0-9a-f]{64}',package_sha256): err(404,'Package not found')
  with db() as c:
   j=c.execute("SELECT jobs.* FROM jobs JOIN render_manifests ON jobs.id=render_manifests.job_id WHERE render_manifests.sha256=? AND jobs.state='done' AND jobs.kind='render' LIMIT 1",(package_sha256,)).fetchone()
   if not j: err(404,'Package not found')
- out=DATA/'artifacts'/j['id']; ref=json.loads(j['ref']); manifest=json.loads(checked_bytes(out/'manifest.json',package_sha256))
+ out=DATA/'artifacts'/j['id']; ref=json.loads(j['ref'])
+ if public: visible_or_404(ref['id'],ref['version'],'Package')
+ manifest=json.loads(checked_bytes(out/'manifest.json',package_sha256))
  if (manifest.get('report_id'),manifest.get('report_version'),manifest.get('report_sha256'))!=(ref['id'],ref['version'],ref['sha256']): err(409,'Package identity mismatch')
  raw=checked_bytes(out/'report.json',ref['sha256']); doc=json.loads(raw)
  if (doc['report_id'],doc['report_version'])!=(ref['id'],ref['version']): err(409,'Report identity mismatch')
@@ -319,7 +338,9 @@ def package_report(package_sha256:str):
  return Response(content=raw,media_type='application/json',headers=artifact_headers())
 @app.get('/packages/{package_sha256}/assets/{asset_path:path}')
 def package_asset(package_sha256:str,asset_path:str):
- out,ref,m,raw,doc=package_context(package_sha256); allowed=report_assets(doc)
+ return package_asset_bytes(package_sha256,asset_path,public=True)
+def package_asset_bytes(package_sha256,asset_path,public):
+ out,ref,m,raw,doc=package_context(package_sha256,public); allowed=report_assets(doc)
  path=safe_asset(out/'assets',asset_path)
  if asset_path not in allowed: err(404,'Asset not found')
  data=checked_bytes(path,allowed[asset_path])
@@ -327,12 +348,16 @@ def package_asset(package_sha256:str,asset_path:str):
  return Response(content=data,media_type=media or 'application/octet-stream',headers=artifact_headers())
 @app.get('/artifacts/{job_id}/{name}')
 def artifact(job_id:str,name:str):
+ return artifact_bytes(job_id,name,public=True)
+def artifact_bytes(job_id,name,public):
  if name not in ('index.html','report.json','report.md','report.pdf','manifest.json'): err(404,'Artifact unavailable')
  with db() as c:
   j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
   if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
   locked=getrow(c,'SELECT sha256 FROM render_manifests WHERE job_id=?',(job_id,))
- out=DATA/'artifacts'/job_id; ref=json.loads(j['ref']); manifest_raw=checked_bytes(out/'manifest.json',locked['sha256']); m=json.loads(manifest_raw)
+ out=DATA/'artifacts'/job_id; ref=json.loads(j['ref'])
+ if public: visible_or_404(ref['id'],ref['version'],'Artifact')
+ manifest_raw=checked_bytes(out/'manifest.json',locked['sha256']); m=json.loads(manifest_raw)
  if (m.get('report_id'),m.get('report_version'),m.get('report_sha256'))!=(ref['id'],ref['version'],ref['sha256']): err(409,'Render manifest identity mismatch')
  if name=='manifest.json': data=manifest_raw
  elif name=='report.json': data=checked_bytes(out/name,ref['sha256'])
@@ -345,7 +370,7 @@ def artifact_asset(job_id:str,asset_path:str):
   j=getrow(c,'SELECT * FROM jobs WHERE id=?',(job_id,))
   if j['kind']!='render' or j['state']!='done': err(409,'Artifact not ready')
   locked=getrow(c,'SELECT sha256 FROM render_manifests WHERE job_id=?',(job_id,))
- return package_asset(locked['sha256'],asset_path)
+ return package_asset_bytes(locked['sha256'],asset_path,public=True)
 
 class ReasonInput(BaseModel):
  pillar: Literal['microstructure','onchain','fundamentals','statistical_risk','technical_health']
@@ -398,9 +423,48 @@ from publication import routes as publication_routes, web_adapter as publication
 app.include_router(publication_routes.router)
 app.include_router(publication_web.router)
 
+# Admin boundary for the two World ID checkpoints (docs/admin-world-checkpoints.md): the /web/v1/admin API, the
+# path guard on case-checkpoint routes, and CORS that lets the admin web send its session bearer token.
+from publication import admin as publication_admin, admin_routes as publication_admin_routes, review as report_review
+app.include_router(publication_admin_routes.router)
+app.add_middleware(publication_admin.AdminRouteGuard)
+
+# Subject-matter-expert view of the full rendered report before release (any installed version). Needs an admin
+# session with report_review. Bytes come only from the newest completed render of exactly the installed report bytes.
+from publication.deps import require_admin as _require_admin
+SME_FILES=('index.html','report.json','report.md','report.pdf','manifest.json')
+def sme_render_job(report_id,version):
+ with db() as c:
+  r=getrow(c,'SELECT * FROM reports WHERE id=? AND version=?',(report_id,version))
+  j=latest_render(c,report_id,version,r['sha256'])
+  if not j: err(404,'Report not rendered')
+  locked=getrow(c,'SELECT sha256 FROM render_manifests WHERE job_id=?',(j['id'],))
+ return j['id'],locked['sha256']
+@app.get('/web/v1/admin/reviews/{report_id}/{version}/artifacts',tags=['admin'])
+def sme_artifacts(report_id:str,version:str,principal=Depends(_require_admin('report_review'))):
+ base=f'/web/v1/admin/reviews/{quote(report_id,safe="")}/{quote(version,safe="")}/files/'
+ return artifact_listing(report_id,version,lambda job_id,name:base+name,lambda sha:None)
+@app.get('/web/v1/admin/reviews/{report_id}/{version}/files/assets/{asset_path:path}',tags=['admin'])
+def sme_asset(report_id:str,version:str,asset_path:str,principal=Depends(_require_admin('report_review'))):
+ job_id,package_sha=sme_render_job(report_id,version)
+ return package_asset_bytes(package_sha,asset_path,public=False)
+@app.get('/web/v1/admin/reviews/{report_id}/{version}/files/{name}',tags=['admin'])
+def sme_file(report_id:str,version:str,name:str,principal=Depends(_require_admin('report_review'))):
+ if name not in SME_FILES: err(404,'Artifact unavailable')
+ job_id,package_sha=sme_render_job(report_id,version)
+ return artifact_bytes(job_id,name,public=False)
+
+# Reviewers (subject-matter experts) and their scopes from SCOOBY_REVIEWERS, so a host without a persistent
+# disk still knows who they are. Invalid configuration loads nobody.
+from publication import reviewers as publication_reviewers
+publication_reviewers.load_from_env()
+if web_origin:
+ app.add_middleware(publication_admin_routes.AdminWebCORS, allow_origins=[web_origin], allow_credentials=False,
+                    allow_methods=['GET','POST','DELETE'], allow_headers=['Content-Type','Authorization','Idempotency-Key'])
+
 class PublicationWebCORS(CORSMiddleware):
  async def __call__(self, scope, receive, send):
-  if scope['type'] == 'http' and scope['path'].startswith('/web/v1/'):
+  if scope['type'] == 'http' and scope['path'].startswith('/web/v1/') and not publication_admin_routes.cors_path(scope['path']):
    await super().__call__(scope, receive, send)
   else:
    await self.app(scope, receive, send)
@@ -464,7 +528,7 @@ def case_view(c,case,policy=None):
  expected=digest(dumps({'record':record,'evidence':captured,'policy':snap['policy_digest'],'assessment':ass}).encode())
  if expected!=snap['id']: err(409,'Case snapshot integrity failure')
  if (snap['expires']<=now() or policy!=snap['policy_digest']) and state!='investigating': state='unavailable'
- lane={'monitoring':'monitoring','awaiting_human':'human_review_required','auto_queued':'auto_qualified','investigating':'research_running','research_partial':'research_partial','research_complete':'research_complete','unavailable':'unavailable'}[state]
+ lane={'monitoring':'human_review_required','awaiting_human':'human_review_required','auto_queued':'auto_qualified','investigating':'research_running','research_partial':'research_partial','research_complete':'research_complete','unavailable':'unavailable'}[state]
  def latest(key):
   values=[e.get(key) for e in record.get('evidence',[]) if e.get(key)]
   try:return max(values,key=lambda x:dt.datetime.fromisoformat(x.replace('Z','+00:00'))) if values else None
@@ -506,13 +570,14 @@ def scouting_cases():
 def scouting_case(case_id:str):
  with db() as c:return case_view(c,getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,)))
 @app.post('/scouting/cases/{case_id}/challenge')
-def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None)):
+def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None),principal=Depends(_require_admin('case_investigation'))):
  import secrets
  k=key(idempotency_key)
  with db() as c:
   c.execute('BEGIN IMMEDIATE');case=getrow(c,'SELECT * FROM cases WHERE id=?',(case_id,));snap=getrow(c,'SELECT * FROM case_snapshots WHERE id=?',(case['current_snapshot'],))
   old=c.execute('SELECT * FROM case_challenges WHERE idem=?',(k,)).fetchone()
   if old:
+   __import__('case_world').require_owner(c,old['id'],principal)
    if (old['case_id'],old['snapshot_id'],old['action'])!=(case_id,x.expected_revision,x.action):err(409,'Idempotency key conflict')
    old_state=old['state']
    if old_state=='pending' and old['expires']<=now():old_state='expired'
@@ -522,47 +587,49 @@ def challenge(case_id:str,x:ChallengeRequest,idempotency_key:str=Header(None)):
   if case['state'] not in ('awaiting_human','monitoring'):err(409,'Case is not awaiting an exception')
   i=ident();nonce=secrets.token_hex(32);expires=min(snap['expires'],now()+900)
   c.execute('INSERT INTO case_challenges VALUES(?,?,?,?,?,?,?,?,?,?)',(i,case_id,snap['id'],snap['policy_digest'],x.action,nonce,'pending',expires,now(),k))
+  c.execute('INSERT INTO case_challenge_admin VALUES(?,?,?)',(i,principal.session_id,publication_admin.subject_hash(principal.iss,principal.sub)))
   c.execute("UPDATE cases SET state='awaiting_human',updated=? WHERE id=?",(now(),case_id))
   return {'challenge_id':i,'case_id':case_id,'candidate_id':case['candidate_id'],'snapshot_digest':snap['id'],'policy_digest':snap['policy_digest'],'action':x.action,'nonce':nonce,'state':'pending','expires_at':expires,'verification':'configured' if __import__('case_world').admin_ready(get_world_optional()) else 'unavailable'}
 @app.post('/scouting/challenges/{challenge_id}/continue')
-def continue_challenge(challenge_id:str):
+def continue_challenge(challenge_id:str,principal=Depends(_require_admin('case_investigation'))):
  # Fail closed until the separately owned verifier checks action, identity, nonce, expiry and revocation.
  with db() as c:
   challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,))
+  __import__('case_world').require_owner(c,challenge_id,principal)
   if challenge['state']!='pending' or challenge['expires']<=now():err(409,'Challenge is expired or superseded')
   case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],))
   if case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']:err(409,'Challenge is stale or superseded')
  err(503,'Authenticated human verification adapter is not configured')
 
 @app.get('/scouting/challenges/{challenge_id}')
-def challenge_status(challenge_id:str):
+def challenge_status(challenge_id:str,principal=Depends(_require_admin('case_investigation'))):
  with db() as c:
-  challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],));state=challenge['state']
+  challenge=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));__import__('case_world').require_owner(c,challenge_id,principal);case=getrow(c,'SELECT * FROM cases WHERE id=?',(challenge['case_id'],));state=challenge['state']
   if state=='pending' and challenge['expires']<=now():state='expired'
   if state=='pending' and (case['current_snapshot']!=challenge['snapshot_id'] or case_policy_digest()!=challenge['policy_digest']):state='superseded'
   return {'challenge_id':challenge_id,'candidate_id':case['candidate_id'],'snapshot_digest':challenge['snapshot_id'],'policy_digest':challenge['policy_digest'],'action':challenge['action'],'nonce':challenge['nonce'],'expires_at':challenge['expires'],'state':state,'verification':'configured' if __import__('case_world').admin_ready(get_world_optional()) else 'unavailable'}
 @app.post('/scouting/challenges/{challenge_id}/world-attempt')
-def case_world_start(challenge_id:str,world=Depends(get_world_optional)):
+def case_world_start(challenge_id:str,world=Depends(get_world_optional),principal=Depends(_require_admin('case_investigation'))):
  import case_world
- return case_world.start(challenge_id,world)
+ return case_world.start(challenge_id,world,principal)
 @app.get('/scouting/world-attempts/{attempt_id}')
-def case_world_poll(attempt_id:str,world=Depends(get_world_optional)):
+def case_world_poll(attempt_id:str,world=Depends(get_world_optional),principal=Depends(_require_admin('case_investigation'))):
  import case_world
- result=case_world.poll(attempt_id,world)
+ result=case_world.poll(attempt_id,world,principal)
  if result['state']=='approved':signal()
  return result
 
 @app.post('/scouting/world-attempts/{attempt_id}/cancel')
-def case_world_cancel(attempt_id:str):
+def case_world_cancel(attempt_id:str,principal=Depends(_require_admin('case_investigation'))):
  import case_world
- return case_world.cancel(attempt_id)
+ return case_world.cancel(attempt_id,principal)
 
 @app.post('/scouting/challenges/{challenge_id}/{human_action}')
-def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke','revise']):
+def human_challenge_action(challenge_id:str,human_action:Literal['deny','revoke','revise'],principal=Depends(_require_admin('case_investigation'))):
  if human_action=='revise':err(503,'Revision requires a new discovery snapshot')
  import case_world
  with db() as c:
-  c.execute('BEGIN IMMEDIATE');ch=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,))
+  c.execute('BEGIN IMMEDIATE');ch=getrow(c,'SELECT * FROM case_challenges WHERE id=?',(challenge_id,));case_world.require_owner(c,challenge_id,principal)
   if ch['state']=='pending':
    c.execute("UPDATE case_challenges SET state=? WHERE id=?",('denied' if human_action=='deny' else 'revoked',challenge_id))
    attempts=c.execute("SELECT id FROM case_world_attempts WHERE challenge_id=? AND state='pending'",(challenge_id,)).fetchall()
@@ -640,7 +707,12 @@ def scouting_schema():
 # Without a configured token those routes are closed. This is a stopgap, not the reviewed gateway in DEPLOYMENT.md.
 PUBLIC_EXACT=frozenset({'/health'})
 PUBLIC_PREFIXES=('/web/v1/','/publication/v1/')
-def _public_path(path): return path in PUBLIC_EXACT or path.startswith(PUBLIC_PREFIXES)
+# Public report library, GET/HEAD only: list, per-version artifacts, packages and rendered files.
+import re as _re
+PUBLIC_LIBRARY=_re.compile(r'^/(reports|reports/[^/]+/[^/]+/artifacts|packages/[0-9a-f]{64}(/.+)?|artifacts/[^/]+/.+)$')
+def _public_path(path,method='GET'):
+ if path in PUBLIC_EXACT or path.startswith(PUBLIC_PREFIXES): return True
+ return method in ('GET','HEAD') and bool(PUBLIC_LIBRARY.match(path))
 class PublicGate:
  def __init__(self, app): self.app=app
  async def __call__(self, scope, receive, send):
@@ -649,7 +721,7 @@ class PublicGate:
   path=scope['path']
   # Public paths must be plain (no encoded or traversal segments) so prefix matching cannot be bypassed.
   plain=not ('..' in path or '//' in path or '\\' in path or b'%' in (scope.get('raw_path') or b''))
-  if plain and _public_path(path): return await self.app(scope, receive, send)
+  if plain and _public_path(path,scope.get('method','GET')): return await self.app(scope, receive, send)
   token=os.getenv('SCOOBY_OPERATOR_TOKEN') or ''
   supplied=dict(scope.get('headers') or []).get(b'authorization',b'').decode('latin-1').removeprefix('Bearer ').strip()
   if token and supplied and hmac.compare_digest(supplied.encode(), token.encode()):
