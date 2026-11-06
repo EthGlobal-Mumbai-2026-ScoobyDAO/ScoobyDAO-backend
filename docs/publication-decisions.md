@@ -1,0 +1,38 @@
+# Publication and World ID Agent Pass: decisions
+
+Sources checked on 2026-11-06: the live discovery document at `https://auth.world.org/.well-known/openid-configuration` and the World docs (overview, guides `oidc`, `step-up`, `app-registration`, `id-token`, `testing`), `../SmartContracts/src/ReportRegistry.sol` and `Utils.sol`, and `../ScoobyDAO-web/src/lib/types.ts`. Where the publication prompt and these sources disagree, the official docs and the contract source win; each difference is listed here.
+
+## Decisions from the brief (implemented, configurable)
+
+| Decision | Implementation | Config |
+|---|---|---|
+| OIDC Device Authorization Grant (RFC 8628); backend starts it, reviewer completes it in World App | `world.WorldClient.start_device` / `poll`; `/approve/[id]` shows `user_code` + verification URI | `WORLD_ISSUER`, `WORLD_CLIENT_ID` |
+| Client auth `private_key_jwt`, RS256 (RFC 7523) | `client_assertion`: iss=sub=client_id, unique `jti`, `iat`, `exp = iat + 60`, `kid` header | `WORLD_CLIENT_KEY_PATH`, `WORLD_CLIENT_KEY_ID`, `WORLD_ASSERTION_AUD` |
+| Assurance via `claims={"id_token":{"acr":{"essential":true,"values":[…]}}}`, and validate `acr` ourselves | Sent on every device request; `validate_id_token` rejects any other `acr` | `WORLD_ACCEPTED_ACR` (default orb, orb-face) |
+| Attestor EOA signs `approvalDigest`; it is `report.reviewer` | `chain.sign_approval`, only inside `request_publication` | `SCOOBY_ATTESTOR_KEY` |
+| Publisher key must equal `ReportRegistry.publisher()` | `Web3Sender.preflight()` (RPC read + chain id) gates publishing; attestor ≠ publisher is enforced | `SCOOBY_PUBLISHER_KEY`, `SCOOBY_RPC_URL`, `SCOOBY_CHAIN_ID` |
+| Reviewer identity = allowlisted `(iss, sub)`; enrollment by CLI device login | `python -m publication.cli enroll --name …` | — |
+| Both backend keys are trusted for the hackathon | Stated in README; production path is a hardware or multisig attestor and a reviewer-held key | — |
+
+## Differences from the brief, and choices for undocumented points
+
+1. **Client-assertion `aud`.** World: "The single `aud` is `https://auth.world.org` or the exact endpoint being called." A token-endpoint `aud` on the *device authorization* call would be rejected. `WORLD_ASSERTION_AUD=endpoint` (the default; `token_endpoint` is accepted as an alias) means "the endpoint being called"; `issuer` uses the issuer for both calls.
+2. **Fresh assertion per request.** World: assertions are single-use across endpoints, including every poll. A new `jti` is minted per HTTP call; the fake issuer enforces jti uniqueness.
+3. **No action binding inside World.** World: "`binding_message` or action terms: Unsupported. They are not displayed on the approval page or signed into the ID token." The binding is therefore application-owned, as the step-up guide prescribes ("Save the exact action, version, destination, owning account, and expiry, bound to the authentication attempt"): each attempt row binds to one immutable `target_digest`, the receipt copies it, and `/approve/[id]` shows the exact claim before the reviewer opens World App. This is why a successful login alone authorises nothing.
+4. **Freshness.** World: device authentication is always fresh; `nonce`, `prompt` and `max_age` don't apply, and "Device tokens omit `nonce`". We don't send a nonce; freshness is enforced by `auth_time ∈ [attempt.started_at − 30 s, now + 30 s]` plus single-use device codes.
+5. **Required claims.** World says to validate signature, issuer, audience, expiry and required `auth_time`, `acr` and `amr`; `amr` must be a non-empty string list. `azp` is checked only when `aud` is multi-valued.
+6. **Polling outcomes.** Following the oidc guide: `authorization_pending` → keep waiting; `slow_down` → +5 s; `access_denied` / `expired_token` → stop (denied / expired); `invalid_grant` and other OAuth errors → stop (error). HTTP 5xx → stop (error), because "temporary unavailability, never approval". A timeout or connection error backs off (doubling, ≤ 60 s) and stays pending. HTTP 429 on start → 503 to the caller.
+7. **Device code storage.** Held only in process memory, keyed by attempt id; the database stores `sha256(device_code)`. A restart turns the attempt into `expired` ("device code lost"). We chose this over AES-GCM at rest so no decryptable code ever exists on disk.
+8. **`acr` values.** Discovery advertises orb and orb-face; the id-token guide also lists `selfie` and `selfie-face`. Defaults stay orb + orb-face as briefed; selfie values are rejected unless added to `WORLD_ACCEPTED_ACR`.
+9. **Claim manifest shape and hash.** `scooby.claim-manifest/1` is a superset of the web `Manifest` type so `/web/v1` returns it unchanged. Report claims become `{type: 'REPORT_CLAIM', params: {statement, kind, pillar, reportClaimId}}`, because report v0.2 has no `SELL_REVERTS`-style claim types and none are invented. **Conflict:** the brief says `claim_hash = sha256(canonical)`, while INTERFACES.md §3 and the web "Recompute hash" use keccak256. Default: `sha256` as briefed. Set `SCOOBY_CLAIM_HASH_ALG=keccak256` to make the web's ✓ check pass; the target records which algorithm it used. The team should pick one before the demo.
+10. **`reportHash` onchain** = SHA-256 of the exact `report.json` bytes (`/web/v1/reports/{id}/raw` serves them); `claimHash` = the claim manifest digest. The full target (timing, authorities, registry, chain) is bound by the signed `Report` struct and by `target_digest` off chain.
+11. **Signing.** `Account.sign_message(encode_defunct(primitive=inner_keccak))`, which is identical to `Sig.ethSigned(inner)` with a low-s signature and v ∈ {27, 28}. This is proven against the deployed contract in `tests/test_publication_anvil.py` (`approvalDigest` equality, real publish, replay → `APPROVAL_EXPIRED_OR_USED`, wrong signer → `REVIEWER`, wrong sender → `PUBLISHER`).
+12. **Timing margin.** `lock_time > now + SCOOBY_LOCK_MARGIN` (default 3600 s), so a target can't be signed too close to its lock. Approval expiry is now + 15 min; the publisher refuses to broadcast within 60 s of expiry.
+13. **Live confirmation.** The publisher process requires the operator to type `publish to <chain_id> <registry>` at startup on any chain other than anvil (31337/1337). `publish-confirm` additionally requires typing the first 12 characters of the target digest.
+14. **Web adapter scope.** `/web/v1` covers `health`, `reports`, `reports/{id}`, `reports/{id}/raw`, `reports/{id}/approve` and `approvals/{id}`. The web app also calls `/claims/:id`, `/deployments` and `/demo/scan`; those belong to the market/contracts workstreams and are not implemented here. Report status `approved` has no web equivalent, so an approved-but-unpublished report shows `awaiting_approval`, with `publicationState` carrying the exact state.
+15. **Demo autopublish.** `SCOOBY_DEMO_AUTOPUBLISH=true` (default false), and only with publishing enabled: the first `/web/v1/approvals/{id}` read after an approve receipt calls `request_publication` once (idempotency key = receipt id). All publish checks still apply. The operator API never auto-publishes.
+16. **Revocation limits.** Before broadcast, revoke stops the outbox, and the publisher re-checks revocation in a transaction right before sending. After broadcast or confirmation it is recorded and the status shows `revoked`, but the onchain record cannot be removed.
+
+## Future work (not in this task)
+
+IDKit proofs and REP badges, AgentKit/AgentBook, a reviewer-held signing key instead of the backend attestor, encrypted-at-rest device codes for multi-process APIs, and a `GET /stats` and `/claims` read model for the web.

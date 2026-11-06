@@ -12,3 +12,5 @@ coverage.xml
 .coverage
 build/
 dist/
+secrets/
+*.pem

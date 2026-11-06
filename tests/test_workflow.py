@@ -2,7 +2,7 @@ import json, os, tempfile
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
-os.environ['SCOOBY_DATA']=tempfile.mkdtemp(prefix='scooby-test-')
+os.environ.setdefault('SCOOBY_DATA', tempfile.mkdtemp(prefix='scooby-test-'))
 os.environ['SCOOBY_WEB_ORIGIN']='http://localhost:5173'
 os.environ['SCOOBY_FRONTEND_DIR']=str(Path(__file__).resolve().parent.parent/'vendor'/'reader')
 from fastapi.testclient import TestClient
@@ -128,10 +128,17 @@ def test_honeypot_readiness_is_honest():
  assert data['kind']=='static_integration_inventory'
  assert data['normal_gate']=={'required_distinct_verified_groups':4,'wired_verifiers':0,'qualified_selection_enabled':False}
  assert data['paid_model_budget_default']==0 and data['checkpoint_case_status']=='no_fresh_milestone_selection_recorded_in_this_checkpoint'
- assert 'not implemented' in data['publication']
+ assert 'disabled by default' in data['publication'] and 'not live-verified' in data['publication']
 
 def test_cors_restricts_origin():
  good=client.get('/reports',headers={'Origin':'http://localhost:5173'})
  bad=client.get('/reports',headers={'Origin':'http://untrusted.invalid'})
  assert good.headers.get('access-control-allow-origin')=='http://localhost:5173'
  assert 'access-control-allow-origin' not in bad.headers
+
+
+def test_publication_cors_does_not_widen_operator_routes():
+ headers={'Origin':'http://localhost:5173','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'}
+ assert client.options('/web/v1/reports/example/approve',headers=headers).status_code == 200
+ assert client.options('/publication/v1/targets',headers=headers).status_code == 400
+ assert client.options('/investigations',headers=headers).status_code == 400
