@@ -1,6 +1,8 @@
 {
   "profile": "scooby.activity-30d/1-proposal",
   "status": "pass",
+  "decision_scope": "selected_pool_only",
+  "token_activity_status": "threshold_reported_by_selected_pool",
   "reason": "selected_pool_meets_threshold",
   "evaluated_at_utc": "2026-11-07T12:34:00+00:00",
   "window_start_utc": "2026-10-08T12:00:00+00:00",
@@ -47,7 +49,9 @@
   "context": {
     "liquidity_usd": "12345",
     "annualized_hourly_log_volatility": "0.0",
-    "volatility_return_count": 719
+    "volatility_return_count": 719,
+    "volatility_method": "sample_stddev_hourly_log_returns_times_sqrt_8760",
+    "volatility_unit": "annualized_fraction"
   },
   "limitations": [
     "Selected pool only; not token-wide or all-exchange volume.",

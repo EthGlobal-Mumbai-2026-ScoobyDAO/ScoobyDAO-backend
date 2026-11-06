@@ -2,7 +2,7 @@ import datetime as dt,hashlib,json,unittest
 from decimal import Decimal
 import activity_30d as a
 from pathlib import Path
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 class ActivityTests(unittest.TestCase):
  def setUp(self):
@@ -21,8 +21,8 @@ class ActivityTests(unittest.TestCase):
  def test_threshold_above_equal_below(self):
   rows=[r[:] for r in self.rows];rows[0][5]=99281
   self.assertEqual(self.run_case(rows)['volume_inr'],'10000000');self.assertEqual(self.run_case(rows)['status'],'pass')
-  rows[0][5]=99280;self.assertEqual(self.run_case(rows)['status'],'excluded')
-  rows[0][5]=99282;self.assertEqual(self.run_case(rows)['status'],'pass')
+  rows[0][5]=99280;below=self.run_case(rows);self.assertEqual(below['status'],'excluded');self.assertEqual(below['token_activity_status'],'unknown')
+  rows[0][5]=99282;above=self.run_case(rows);self.assertEqual(above['status'],'pass');self.assertEqual(above['token_activity_status'],'threshold_reported_by_selected_pool')
  def test_gap_duplicate_and_units_unknown(self):
   self.assertEqual(self.run_case(self.rows[:-1])['reason'],'incomplete_hourly_coverage')
   self.assertEqual(self.run_case(self.rows+[self.rows[0]])['reason'],'duplicate_hour')
@@ -41,7 +41,16 @@ class ActivityTests(unittest.TestCase):
  def test_explicit_zero_bucket_is_not_missing(self):
   rows=[r[:] for r in self.rows];rows[0][5]=0;v=self.run_case(rows);self.assertEqual(v['coverage']['observed_hours'],720);self.assertEqual(v['volume_usd'],'719');self.assertEqual(v['status'],'excluded')
  def test_contract_accepts_complete_and_unknown_results(self):
-  validator=Draft202012Validator(json.loads(Path(__file__).with_name('activity-30d.schema.json').read_text()))
+  validator=Draft202012Validator(json.loads(Path(__file__).with_name('activity-30d.schema.json').read_text()),format_checker=FormatChecker())
   for v in (self.run_case(),self.run_case(self.rows[:-1])):validator.validate(v)
+  v=self.run_case();self.assertEqual(v['fx']['evidence_id'],v['evidence']['fx_rate']['evidence_id']);self.assertEqual(v['decision_scope'],'selected_pool_only')
+ def test_future_capture_and_wrong_canonical_identity_unknown(self):
+  c=self.cap(self.pool_url,self.pools);c['fetched_at']=(self.now+dt.timedelta(seconds=1)).isoformat()
+  self.assertEqual(a.evaluate(self.candidate,self.pool,c,None,None,self.now)['reason'],'stale_or_future_capture')
+  self.assertEqual(a.evaluate('01:'+self.token,self.pool,None,None,None,self.now)['reason'],'identity_invalid')
+ def test_provider_unavailable_never_qualifies(self):
+  v=a.evaluate(self.candidate,self.pool,None,None,None,self.now);self.assertEqual(v['status'],'unknown');self.assertIsNone(v['volume_inr'])
+ def test_secret_query_is_rejected_and_not_returned(self):
+  v=self.run_case(url=self.ohlc_url+'&api_key=synthetic-secret');self.assertEqual(v['status'],'unknown');self.assertNotIn('synthetic-secret',json.dumps(v))
 
 if __name__=='__main__':unittest.main()

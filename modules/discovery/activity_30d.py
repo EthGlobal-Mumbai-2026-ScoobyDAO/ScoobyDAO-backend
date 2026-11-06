@@ -45,18 +45,18 @@ def evaluate(candidate_id,pool_id,pools_capture,ohlcv_capture,fx_capture,as_of):
  """Evaluate one explicitly selected pool using three immutable raw captures."""
  if not isinstance(as_of,dt.datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:raise ValueError('as_of must be timezone aware')
  now=as_of.astimezone(dt.timezone.utc);end=now.replace(minute=0,second=0,microsecond=0);start=end-dt.timedelta(hours=HOURS)
- result={'profile':PROFILE,'status':'unknown','reason':'not_evaluated','evaluated_at_utc':now.isoformat(),'window_start_utc':start.isoformat(),'window_end_utc':end.isoformat(),'threshold_inr':str(THRESHOLD),'volume_usd':None,'volume_inr':None,'scope':None,'fx':None,'evidence':{},'coverage':{'expected_hours':HOURS,'observed_hours':0},'context':{'liquidity_usd':None,'annualized_hourly_log_volatility':None,'volatility_return_count':0},'limitations':LIMITATIONS[:]}
+ result={'profile':PROFILE,'status':'unknown','decision_scope':'selected_pool_only','token_activity_status':'unknown','reason':'not_evaluated','evaluated_at_utc':now.isoformat(),'window_start_utc':start.isoformat(),'window_end_utc':end.isoformat(),'threshold_inr':str(THRESHOLD),'volume_usd':None,'volume_inr':None,'scope':None,'fx':None,'evidence':{},'coverage':{'expected_hours':HOURS,'observed_hours':0},'context':{'liquidity_usd':None,'annualized_hourly_log_volatility':None,'volatility_return_count':0,'volatility_method':'sample_stddev_hourly_log_returns_times_sqrt_8760','volatility_unit':'annualized_fraction'},'limitations':LIMITATIONS[:]}
  verified={}
  try:
   chain,address=candidate_id.split(':');chain=int(chain)
-  if chain not in NET or not re.fullmatch(r'0x[0-9a-f]{40}',address) or not re.fullmatch(r'0x(?:[0-9a-f]{40}|[0-9a-f]{64})',pool_id):raise ValueError('identity_invalid')
+  if chain not in NET or candidate_id!=str(chain)+':'+address or not re.fullmatch(r'0x[0-9a-f]{40}',address) or not re.fullmatch(r'0x(?:[0-9a-f]{40}|[0-9a-f]{64})',pool_id):raise ValueError('identity_invalid')
   net=NET[chain];result['scope']={'chain_id':chain,'token_address':address,'pool_id':pool_id,'coverage':'selected_pool_only'}
   _url(pools_capture['url'],'api.geckoterminal.com',f'/api/v2/networks/{net}/tokens/{address}/pools',{'page':['1']})
   pools=_read(pools_capture,now);verified['pool_identity']=pools_capture;rows=pools['data'];matches=[x for x in rows if x.get('attributes',{}).get('address','').lower()==pool_id]
   if len(matches)!=1:raise ValueError('pool_identity_ambiguous')
   try:
    reserve=Decimal(str(matches[0]['attributes']['reserve_in_usd']))
-   if reserve.is_finite() and reserve>=0:result['context']['liquidity_usd']=str(reserve)
+   if reserve.is_finite() and reserve>=0:result['context']['liquidity_usd']=str(reserve if reserve else Decimal(0))
   except (InvalidOperation,ValueError,TypeError,KeyError):pass
   rel=matches[0]['relationships'];sides=[s for s in ('base','quote') if rel[s+'_token']['data']['id'].lower()==net+'_'+address]
   if len(sides)!=1:raise ValueError('token_side_ambiguous')
@@ -95,7 +95,7 @@ def evaluate(candidate_id,pool_id,pools_capture,ohlcv_capture,fx_capture,as_of):
   with localcontext() as ctx:
    ctx.prec=100;total=sum(hours.values(),Decimal(0));inr=total*rate
   result['fx']={'provider':'ECB via Frankfurter','inr_per_usd':str(rate),'rate_date':rate_date.isoformat(),'captured_at_utc':fx_capture['fetched_at'],'evidence_id':fx_capture['sha256'],'method':'single_reference_rate_for_full_window'}
-  result['volume_usd']=str(total);result['volume_inr']=str(inr);result['status']='pass' if inr>=THRESHOLD else 'excluded';result['reason']='selected_pool_meets_threshold' if result['status']=='pass' else 'selected_pool_below_threshold'
+  result['volume_usd']=str(total);result['volume_inr']=str(inr);result['status']='pass' if inr>=THRESHOLD else 'excluded';result['reason']='selected_pool_meets_threshold' if result['status']=='pass' else 'selected_pool_below_threshold';result['token_activity_status']='threshold_reported_by_selected_pool' if result['status']=='pass' else 'unknown'
  except (ValueError,TypeError,KeyError,IndexError,AttributeError,InvalidOperation,OverflowError,json.JSONDecodeError) as exc:
   reason=str(exc);result['reason']=reason if re.fullmatch(r'[a-z_]{1,64}',reason) else 'invalid_or_missing_evidence'
  for label,capture in verified.items():
