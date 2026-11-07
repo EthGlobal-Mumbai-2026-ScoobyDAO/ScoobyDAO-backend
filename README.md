@@ -6,6 +6,10 @@ A candidate is automatically queued only after four distinct, fresh, independent
 
 The worker invokes the shared case producer with immutable decision budgets. It replays bound evidence, preserves missing and contradictory sources, and can generate a partial report with at most one explicitly authorized Terra call. Source and model budgets default to zero; no paid call follows simply from starting the service. Historical diagnostics and reference reports are not policy-qualified cases, World confirmations, final approval or publication. Local operator previews are not a public security boundary.
 
+## World ID Agent Pass
+
+A verified human confirms each consequential agent action in World App: opening a draft report, recording a decision on it, and publishing it onchain. See [WORLD_ID_QUALIFICATION.md](WORLD_ID_QUALIFICATION.md) for how each prize requirement is met, with code links, and [WORLD_FEEDBACK.md](WORLD_FEEDBACK.md) for the integration debrief.
+
 ## Run and configure
 
 Use Python 3.11, install `requirements.txt`, then start the API and a separate worker on the **same persistent** `SCOOBY_DATA` directory:
