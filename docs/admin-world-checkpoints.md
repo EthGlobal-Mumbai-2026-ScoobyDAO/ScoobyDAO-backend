@@ -1,6 +1,6 @@
 # Admin World ID checkpoints: implementation and handoff
 
-This implements the backend side of [the two-checkpoint charter](scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md) on the PR #10 branch (`docs/scouting-world-agent-charter`). It is tested with synthetic identities against the fake World issuer (`tests/fake_world.py`). **No live World login, deployment, chain transaction or publication was performed.** A live run must be recorded separately (see [WORLD_FEEDBACK.md](../WORLD_FEEDBACK.md)).
+This implements the backend side of [the two-checkpoint charter](scouting-qualification/WORLD-AGENT-BUILD-CHARTER.md) on the PR #10 branch (`docs/scouting-world-agent-charter`). It is tested with synthetic identities against the fake World issuer (`tests/fake_world.py`). Since then, the team has run World login and per-report review live from the deployed web app against production `auth.world.org` (see [WORLD_ID_QUALIFICATION.md](../WORLD_ID_QUALIFICATION.md) and [WORLD_FEEDBACK.md](../WORLD_FEEDBACK.md)). Checkpoint 1 and onchain publication have no live evidence yet.
 
 ## What is delivered
 
@@ -184,4 +184,4 @@ Evidence from a scratch tree (`main` + PR #12 + this branch + step 3): **209 pas
 
 ## Not done here
 
-A live World run and the timing debrief; the web admin UI; merging `main` and PR #12; exact initiator binding for case attempts; production admin access (gateway, browser OIDC with PKCE, reviewer-held keys).
+A live checkpoint-1 run and onchain publication; merging `main` and PR #12; exact initiator binding for case attempts; production admin access (gateway, browser OIDC with PKCE, reviewer-held keys).

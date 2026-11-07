@@ -16,11 +16,12 @@ Code is pinned to `ScoobyDAO-backend@53d97ee` and `ScoobyDAO-web@1dc90fc`.
 
 ## Live evidence
 
-Not yet recorded. Each item below is marked TODO until the team supplies it.
+The team runs the journey end to end from the deployed app against production `auth.world.org`. Items without evidence yet are marked TODO.
 
 | Evidence | Value | Source |
 |---|---|---|
-| First live World App confirmation | TODO(live) | earliest `active` row in `admin_sessions` on the deployed disk |
+| App registered in the World developer portal | `ScoobyDAO`, status Active, 1 redirect URI; creation time TODO | TODO: save the portal screenshot as `docs/evidence/world-portal-app.png` with the account email cropped |
+| Live World confirmation | approved 7 Nov 2026, 10:05 IST, on `auth.world.org` | [docs/evidence/world-live-approval.jpeg](docs/evidence/world-live-approval.jpeg) |
 | Denied attempt, live | TODO(live) | `rev_attempts` rows with status `denied`; demo video |
 | Approved decision recorded | TODO(live) | earliest `rev_receipts.verified_at` |
 | `acr` / `amr` on event proofs | TODO(live) | `rev_receipts.acr`, `rev_receipts.amr_json` |

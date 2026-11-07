@@ -1,12 +1,12 @@
 # World ID Agent Pass — integration debrief (ScoobyDAO)
 
-> **Status:** times below come from git history. Items marked **TODO(live)** wait on the live-run record (the `admin_sessions` / `rev_receipts` rows on the deployed disk) and the team's portal and World App details.
+> **Status:** build times come from git history; the live confirmation time comes from a screenshot. Items marked **TODO(live)** wait on the team's records.
 
 ## What we built
 AI agents investigate suspicious tokens. A verified human must confirm in World App before a draft report is opened, before a decision (approve, reject or revise) is recorded on that exact report version, and before a report is published onchain. Each confirmation uses the OIDC device grant with `private_key_jwt` and is validated in our FastAPI backend; denied, expired and cancelled attempts do nothing.
 
 ## Time to first success
-All times IST (UTC+5:30) on 6 November 2026.
+All times IST (UTC+5:30), 6 November 2026 unless dated.
 
 | Milestone | Time | Evidence |
 |---|---|---|
@@ -14,20 +14,20 @@ All times IST (UTC+5:30) on 6 November 2026.
 | Synthetic tests for the admin checkpoints added | 19:55 | commit `4c0ca07` |
 | Issuer error diagnostics added; sandbox discovery compared with production | 20:03 | commit `8481748`, `docs/publication-demo.md` |
 | Private key accepted from `WORLD_CLIENT_KEY`, with clear load errors | 22:13 | commit `4867e65` |
-| App registered in the World developer portal | TODO(live) | portal app page |
-| First validated live ID token | TODO(live) | earliest `active` row in `admin_sessions` |
-| First protected action (report decision recorded) | TODO(live) | earliest `rev_receipts.verified_at` |
+| App `ScoobyDAO` registered in the World developer portal (status Active) | TODO(live): creation time not shown in the portal list | portal screenshot |
+| Live World confirmation approved on production `auth.world.org` | 7 Nov, 10:05 | [screenshot](docs/evidence/world-live-approval.jpeg) |
+| Earliest live validated ID token and protected action | TODO(live) | earliest `admin_sessions` / `rev_receipts` rows |
 
 - First code → issuer diagnostics: **5 h 4 min**. First code → host key loading fixed: **7 h 14 min**.
 - Portal registration → first validated ID token: **TODO(live)**. Registration → first protected action: **TODO(live)**.
 
 ## Friction we hit
-- **World App shows only the requesting app and a code, not what the person is approving.** For each of our four protected actions we bound the approval to the exact target on our server (target and binding digests, re-checked on confirmation) and showed the action in our own UI before the code.
+- **The approval screen doesn't say what the person is approving.** On the live run, World's page showed only "Connection approved" and a reference. For each of our four protected actions we bound the approval to the exact target on our server (target and binding digests, re-checked on confirmation) and showed the action in our own UI before the code.
 - **Failed logins were hard to diagnose.** We added the issuer's `error_description` and the rejected `acr` value to our errors, plus a mode that omits the `claims` request to isolate assurance-level problems (`8481748`).
 - **Supplying the client private key on the host.** A mounted PEM file was awkward on our host, so we accept the key from an environment variable and say exactly why a key fails to load (`4867e65`).
 - **Device-grant ID tokens carry no `nonce`.** We tie a token to its attempt through our own device-code record and an `auth_time` window.
 
-TODO(live): add any friction from the live run.
+TODO(live): add any other friction from the live run.
 
 ## Missing capability or documentation
 - **Requiring a fresh face check.** A passkey satisfies the baseline Orb `acr` (`amr` `["pop","user","mfa"]`), and it isn't documented whether the `claims` request is honoured on the device endpoint. We validate `acr` ourselves and use `orb-face` when a fresh proof is required.
